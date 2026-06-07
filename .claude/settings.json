@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/guard.js"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.js\""
           }
         ]
       }
