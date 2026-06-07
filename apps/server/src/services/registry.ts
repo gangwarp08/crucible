@@ -5,6 +5,17 @@ export interface PtySocket {
   close(code?: number, data?: string): void;
 }
 
+/** A single buffered telemetry event waiting to be flushed to Supabase. */
+export interface EventRecord {
+  id: string;
+  session_id: string;
+  seq: number;
+  type: string;
+  actor: string;
+  ts: string; // ISO 8601
+  payload: Record<string, unknown>;
+}
+
 export interface SessionEntry {
   sandbox: Sandbox;
   sandboxId: string;
@@ -15,10 +26,15 @@ export interface SessionEntry {
   status: "active" | "completed";
   expiryTimer: ReturnType<typeof setTimeout>;
   ptySockets: Set<PtySocket>;
+
+  // Telemetry
+  nextSeq: number;                              // monotonic event sequence counter
+  eventBuffer: EventRecord[];                   // events pending flush to Supabase
+  flushTimer: ReturnType<typeof setTimeout> | null; // batched-flush debounce handle
 }
 
 // In-memory session store keyed by sessionId.
 // Entries are never deleted — completed sessions remain with status='completed'
 // so route guards can reject new requests cleanly.
-// TODO: persist to Supabase + add TTL-based eviction (later slice)
+// TODO: add TTL-based eviction for old completed entries (later slice)
 export const sessionRegistry = new Map<string, SessionEntry>();

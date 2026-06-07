@@ -1,19 +1,38 @@
 import { sessionRegistry } from "./registry.js";
 import { revokeSessionKey } from "./litellm.js";
+import { finalizeSession } from "./db.js";
+import { logEvent, flushTelemetry } from "./telemetry.js";
+
+export type EndReason = "timeout" | "manual" | "budget";
 
 /**
- * Tear down a session: close PTY sockets, kill the sandbox, revoke the LiteLLM key,
- * and mark the session completed. Idempotent — safe to call multiple times.
+ * Tear down a session: finalize Supabase row, emit session.ended, flush telemetry,
+ * close PTY sockets, revoke the LiteLLM key, and kill the sandbox.
+ * Idempotent — safe to call multiple times (no-op after first completion).
  *
- * Called by: the orchestrator timer (automatic expiry) AND the manual DELETE path.
- * Never call sandbox.kill / revokeSessionKey directly outside of this function.
+ * Called by: the orchestrator timer (endReason='timeout'),
+ *            DELETE /sessions/:id via destroySandbox (endReason='manual'),
+ *            budget-exceeded path (endReason='budget').
  */
-export async function expireSession(sessionId: string): Promise<void> {
+export async function expireSession(
+  sessionId: string,
+  endReason: EndReason = "timeout",
+): Promise<void> {
   const entry = sessionRegistry.get(sessionId);
   if (!entry || entry.status === "completed") return;
 
   // Mark completed first so concurrent requests are rejected immediately.
   entry.status = "completed";
+
+  // Emit the session.ended event and flush the full buffer to Supabase BEFORE
+  // we start destroying infra — ensures telemetry arrives even if kill() throws.
+  logEvent(sessionId, "session.ended", "system", {
+    endReason,
+    spendUsd: entry.spendTally,
+    durationMs: Date.now() - entry.createdAt.getTime(),
+  });
+  await flushTelemetry(sessionId);      // drains buffer synchronously
+  await finalizeSession(sessionId, endReason); // writes final row state
 
   // Close all active PTY WebSocket connections (tells the browser the session is over).
   for (const socket of entry.ptySockets) {

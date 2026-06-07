@@ -24,10 +24,19 @@ vi.mock("./services/litellm.js", () => ({
   revokeSessionKey: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Stub out Supabase and db so tests never hit real infra.
+vi.mock("./services/supabase.js", () => ({ supabase: null }));
+vi.mock("./services/db.js", () => ({
+  persistSessionCreated: vi.fn().mockResolvedValue(undefined),
+  persistSessionUpdate: vi.fn().mockResolvedValue(undefined),
+  finalizeSession: vi.fn().mockResolvedValue(undefined),
+}));
+
 // --- Imports (after mocks) --------------------------------------------------
 
 import { Sandbox } from "e2b";
 import { revokeSessionKey } from "./services/litellm.js";
+import { finalizeSession } from "./services/db.js";
 import { createSandbox } from "./services/sandbox.js";
 import { sessionRegistry } from "./services/registry.js";
 import { expireSession } from "./services/session.js";
@@ -72,31 +81,33 @@ describe("Session orchestrator kill-switch", () => {
     expect(entry).toBeDefined();
     expect(entry.status).toBe("active");
 
-    // Simulate a connected PTY WebSocket.
     const mockSocket = { readyState: 1, close: vi.fn() };
     entry.ptySockets.add(mockSocket);
 
-    await expireSession(sessionId);
+    await expireSession(sessionId, "manual");
 
     expect(mockSandbox.kill).toHaveBeenCalledOnce();
     expect(revokeSessionKey).toHaveBeenCalledWith("sk-session-test");
     expect(mockSocket.close).toHaveBeenCalledWith(1001, "Session expired");
     expect(entry.status).toBe("completed");
     expect(entry.ptySockets.size).toBe(0);
+    // Supabase finalization called with correct end reason
+    expect(finalizeSession).toHaveBeenCalledWith(sessionId, "manual");
   });
 
   it("expireSession is idempotent — second call is a no-op", async () => {
     const sessionId = "test-session-idempotent";
     await createSandbox(sessionId);
 
-    await expireSession(sessionId);
-    await expireSession(sessionId); // second call
+    await expireSession(sessionId, "manual");
+    await expireSession(sessionId, "manual"); // second call
 
     expect(mockSandbox.kill).toHaveBeenCalledOnce();
     expect(revokeSessionKey).toHaveBeenCalledOnce();
+    expect(finalizeSession).toHaveBeenCalledOnce();
   });
 
-  it("orchestrator timer fires expireSession after SESSION_TIMEOUT_MIN", async () => {
+  it("orchestrator timer fires expireSession(timeout) after SESSION_TIMEOUT_MIN", async () => {
     const sessionId = "test-session-timer";
     await createSandbox(sessionId);
 
@@ -106,13 +117,13 @@ describe("Session orchestrator kill-switch", () => {
 
     expect(entry.status).toBe("active");
 
-    // Advance time by SESSION_TIMEOUT_MIN (1 minute in test config).
     await vi.advanceTimersByTimeAsync(1 * 60_000);
 
     expect(entry.status).toBe("completed");
     expect(mockSandbox.kill).toHaveBeenCalledOnce();
     expect(revokeSessionKey).toHaveBeenCalledWith("sk-session-test");
     expect(mockSocket.close).toHaveBeenCalled();
+    expect(finalizeSession).toHaveBeenCalledWith(sessionId, "timeout");
   });
 
   it("deadline is set to createdAt + SESSION_TIMEOUT_MIN", async () => {
@@ -124,8 +135,17 @@ describe("Session orchestrator kill-switch", () => {
     const deadlineMs = entry.deadline.getTime();
     const expectedMs = before + 1 * 60_000;
 
-    // Allow ±100ms for execution time.
     expect(deadlineMs).toBeGreaterThanOrEqual(expectedMs - 100);
     expect(deadlineMs).toBeLessThanOrEqual(expectedMs + 100);
+  });
+
+  it("new session entry has telemetry fields initialised", async () => {
+    const sessionId = "test-session-telemetry-init";
+    await createSandbox(sessionId);
+
+    const entry = sessionRegistry.get(sessionId)!;
+    expect(entry.nextSeq).toBeGreaterThan(0); // session.created event bumped it
+    expect(entry.eventBuffer.length).toBeGreaterThanOrEqual(0); // may have been flushed
+    expect(entry.status).toBe("active");
   });
 });

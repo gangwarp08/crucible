@@ -6,8 +6,8 @@ const EnvSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
 
   // Supabase — service-role key is server-only (never NEXT_PUBLIC_)
-  // optional until Supabase slice is wired (Week 1.3+)
-  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_URL: z.string().url().optional(),           // or derive from SUPABASE_PROJECT_REF
+  SUPABASE_PROJECT_REF: z.string().min(1).optional(), // used to derive URL when not set directly
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
   // LiteLLM gateway — provider keys live there, not here

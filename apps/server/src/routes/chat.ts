@@ -6,6 +6,7 @@ import {
   BudgetExceededError,
 } from "../services/litellm.js";
 import { destroySandbox } from "../services/sandbox.js";
+import { persistSessionUpdate } from "../services/db.js";
 import { env } from "../env.js";
 
 const ChatBodySchema = z.object({
@@ -52,6 +53,9 @@ export async function chatRoutes(server: FastifyInstance) {
       // Accumulate per-call cost from x-litellm-response-cost header (synchronous).
       if (responseCost !== null) entry.spendTally += responseCost;
 
+      // Persist updated spend to Supabase (fire-and-forget — never blocks the reply).
+      void persistSessionUpdate(sessionId, { spend_usd: entry.spendTally });
+
       server.log.debug({ sessionId, spendTally: entry.spendTally }, "chat ok");
       return reply.send({
         reply: text,
@@ -61,7 +65,7 @@ export async function chatRoutes(server: FastifyInstance) {
     } catch (err) {
       if (err instanceof BudgetExceededError) {
         // Gateway enforced its own budget cap — run shared teardown.
-        await destroySandbox(sessionId).catch(() => {});
+        await destroySandbox(sessionId, "budget").catch(() => {});
         return reply.status(402).send({
           error: "budget_exhausted",
           message: "Session budget exceeded at the gateway.",
