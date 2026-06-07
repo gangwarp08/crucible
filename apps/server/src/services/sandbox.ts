@@ -43,10 +43,19 @@ export async function createSandbox(sessionId: string): Promise<string> {
     nextSeq: 0,
     eventBuffer: [],
     flushTimer: null,
+    ptyOutputBuffer: [],
+    ptyInputBuffer: [],
+    ptyOutputFlushTimer: null,
+    ptyInputFlushTimer: null,
+    lastFileHashes: new Map(),
+    systemPromptWritten: false,
+    nextTranscriptSeq: 0,
   });
 
-  // Persist to Supabase and emit telemetry (both fire-and-forget).
-  void persistSessionCreated(sessionId);
+  // Persist the sessions row synchronously so FK constraints on telemetry tables
+  // are satisfied before any subsequent writes (events, file_snapshots, etc.) land.
+  await persistSessionCreated(sessionId);
+
   logEvent(sessionId, "session.created", "system", {
     sandboxId: sandbox.sandboxId,
     template: "crucible-dev",

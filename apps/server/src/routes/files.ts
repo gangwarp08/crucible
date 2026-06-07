@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
+import { recordFileSnapshot } from "../services/telemetry.js";
 
 const SessionQuerySchema = z.object({
   sessionId: z.string().min(1),
@@ -70,6 +71,7 @@ export async function fileRoutes(server: FastifyInstance) {
     if (!entry) return;
 
     await entry.sandbox.files.write(path, content);
+    void recordFileSnapshot(sessionId, path, content); // best-effort, never blocks
     return reply.send({ ok: true });
   });
 }

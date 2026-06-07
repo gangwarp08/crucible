@@ -1,12 +1,18 @@
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import {
   chatCompletion,
   BudgetExceededError,
+  SYSTEM_PROMPT,
 } from "../services/litellm.js";
 import { destroySandbox } from "../services/sandbox.js";
 import { persistSessionUpdate } from "../services/db.js";
+import {
+  recordTranscriptTurn,
+  recordCost,
+} from "../services/telemetry.js";
 import { env } from "../env.js";
 
 const ChatBodySchema = z.object({
@@ -27,7 +33,6 @@ export async function chatRoutes(server: FastifyInstance) {
       return reply.status(404).send({ error: "Session not found" });
     }
 
-    // Reject requests for sessions that have already ended (timeout or manual end).
     if (entry.status === "completed") {
       return reply.status(402).send({
         error: "session_ended",
@@ -37,7 +42,6 @@ export async function chatRoutes(server: FastifyInstance) {
       });
     }
 
-    // Layer 2 local stop — fires before the gateway is ever hit.
     if (entry.spendTally >= env.SESSION_BUDGET_USD) {
       return reply.status(402).send({
         error: "budget_exhausted",
@@ -47,16 +51,54 @@ export async function chatRoutes(server: FastifyInstance) {
       });
     }
 
-    try {
-      const { text, responseCost } = await chatCompletion(entry.litellmKey, prompt);
+    // Write the system prompt row exactly once per session (fire-and-forget).
+    if (!entry.systemPromptWritten) {
+      entry.systemPromptWritten = true;
+      void recordTranscriptTurn(sessionId, "system", SYSTEM_PROMPT);
+    }
 
-      // Accumulate per-call cost from x-litellm-response-cost header (synchronous).
+    // Record the user turn (fire-and-forget).
+    void recordTranscriptTurn(sessionId, "user", prompt);
+
+    const t0 = Date.now();
+
+    try {
+      const { text, responseCost, callId, finishReason, usage } =
+        await chatCompletion(entry.litellmKey, prompt);
+
+      const latencyMs = Date.now() - t0;
+
       if (responseCost !== null) entry.spendTally += responseCost;
 
-      // Persist updated spend to Supabase (fire-and-forget — never blocks the reply).
+      // Pre-generate the assistant transcript ID so cost_ledger can reference
+      // it without waiting for the transcript INSERT to complete.
+      const assistantId = randomUUID();
+      void recordTranscriptTurn(sessionId, "assistant", text, {
+        transcriptId: assistantId,
+        model: "gemini-flash",
+        latencyMs,
+        ...(usage && {
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          totalTokens: usage.totalTokens,
+        }),
+        ...(responseCost !== null && { costUsd: responseCost }),
+        ...(finishReason && { finishReason }),
+        ...(callId && { litellmCallId: callId }),
+      });
+      void recordCost(sessionId, {
+        model: "gemini-flash",
+        promptTokens: usage?.promptTokens ?? 0,
+        completionTokens: usage?.completionTokens ?? 0,
+        costUsd: responseCost ?? 0,
+        cumulativeSpendUsd: entry.spendTally,
+        ...(callId && { litellmCallId: callId }),
+        transcriptId: assistantId,
+      });
+
       void persistSessionUpdate(sessionId, { spend_usd: entry.spendTally });
 
-      server.log.debug({ sessionId, spendTally: entry.spendTally }, "chat ok");
+      server.log.debug({ sessionId, spendTally: entry.spendTally, latencyMs }, "chat ok");
       return reply.send({
         reply: text,
         spend: entry.spendTally,
@@ -64,7 +106,6 @@ export async function chatRoutes(server: FastifyInstance) {
       });
     } catch (err) {
       if (err instanceof BudgetExceededError) {
-        // Gateway enforced its own budget cap — run shared teardown.
         await destroySandbox(sessionId, "budget").catch(() => {});
         return reply.status(402).send({
           error: "budget_exhausted",

@@ -74,10 +74,18 @@ export async function getKeySpend(key: string): Promise<number | null> {
  * which lags by one request due to async DB writes in the gateway.
  * Throws BudgetExceededError when the gateway rejects with budget_exceeded.
  */
+export interface ChatCompletionResult {
+  text: string;
+  responseCost: number | null;
+  callId: string | null;
+  finishReason: string | null;
+  usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
+}
+
 export async function chatCompletion(
   sessionKey: string,
   prompt: string,
-): Promise<{ text: string; responseCost: number | null }> {
+): Promise<ChatCompletionResult> {
   const res = await fetch(`${env.LITELLM_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
@@ -106,10 +114,22 @@ export async function chatCompletion(
   // x-litellm-key-spend is cumulative but lags by ~1 request (async DB write).
   const costHeader = res.headers.get("x-litellm-response-cost");
   const responseCost = costHeader !== null ? parseFloat(costHeader) : null;
+  const callId = res.headers.get("x-litellm-call-id");
 
   const data = (await res.json()) as {
-    choices: Array<{ message: { content: string } }>;
+    choices: Array<{ message: { content: string }; finish_reason?: string }>;
+    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   };
+
   const text = data.choices[0]?.message?.content ?? "";
-  return { text, responseCost };
+  const finishReason = data.choices[0]?.finish_reason ?? null;
+  const usage = data.usage
+    ? {
+        promptTokens: data.usage.prompt_tokens,
+        completionTokens: data.usage.completion_tokens,
+        totalTokens: data.usage.total_tokens,
+      }
+    : null;
+
+  return { text, responseCost, callId, finishReason, usage };
 }

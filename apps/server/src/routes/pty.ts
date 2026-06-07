@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandHandle } from "e2b";
 import { sessionRegistry } from "../services/registry.js";
+import { appendPtyData, flushAllPtyBuffers } from "../services/telemetry.js";
 import { env } from "../env.js";
 
 export async function ptyRoutes(server: FastifyInstance) {
@@ -32,9 +33,9 @@ export async function ptyRoutes(server: FastifyInstance) {
           cwd: "/workspace",
           timeoutMs: env.SESSION_TIMEOUT_MIN * 60_000,
           onData: (data: Uint8Array) => {
-            if (socket.readyState === 1 /* OPEN */) {
-              socket.send(Buffer.from(data));
-            }
+            const buf = Buffer.from(data);
+            if (socket.readyState === 1 /* OPEN */) socket.send(buf);
+            appendPtyData(sessionId, "output", buf);
           },
         });
       } catch (err) {
@@ -45,6 +46,7 @@ export async function ptyRoutes(server: FastifyInstance) {
       }
 
       socket.on("message", (msg: Buffer) => {
+        appendPtyData(sessionId, "input", msg);
         if (ptyHandle !== undefined) {
           entry.sandbox.pty
             .sendInput(ptyHandle.pid, new Uint8Array(msg))
@@ -54,6 +56,7 @@ export async function ptyRoutes(server: FastifyInstance) {
 
       socket.on("close", () => {
         entry.ptySockets.delete(socket);
+        flushAllPtyBuffers(sessionId); // drain remaining bytes before the session may end
         if (ptyHandle !== undefined) {
           entry.sandbox.pty.kill(ptyHandle.pid).catch(() => {});
         }
