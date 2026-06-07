@@ -15,8 +15,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Seed the broken sample app
+# Seed the broken sample app; chown so the sandbox user (uid 1000) can write
 COPY workspace/ /workspace/
-RUN cd /workspace && npm install
+RUN cd /workspace && npm install && chown -R 1000:1000 /workspace
 
 WORKDIR /workspace
