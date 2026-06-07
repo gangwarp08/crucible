@@ -1,0 +1,16 @@
+# This is a config for E2B sandbox template.
+# You can use template ID (nprohqztzvs9r4sbsej5) or template name (crucible-dev) to create a sandbox:
+
+# Python SDK
+# from e2b import Sandbox, AsyncSandbox
+# sandbox = Sandbox.create("crucible-dev") # Sync sandbox
+# sandbox = await AsyncSandbox.create("crucible-dev") # Async sandbox
+
+# JS SDK
+# import { Sandbox } from 'e2b'
+# const sandbox = await Sandbox.create('crucible-dev')
+
+team_id = "8ea4a7c1-806e-4372-9fe7-dbd3fad1d709"
+dockerfile = "e2b.Dockerfile"
+template_name = "crucible-dev"
+template_id = "nprohqztzvs9r4sbsej5"
