@@ -1,30 +1,54 @@
 import { Sandbox } from "e2b";
 import { env } from "../env.js";
 import { sessionRegistry } from "./registry.js";
+import { mintSessionKey } from "./litellm.js";
+import { expireSession } from "./session.js";
 
-/** Provision a new E2B microVM, register it under sessionId, return its sandboxId. */
+/** Provision a new E2B microVM, mint a per-session LiteLLM key, and register both.
+ *  Starts the orchestrator kill-switch timer that calls expireSession at deadline. */
 export async function createSandbox(sessionId: string): Promise<string> {
+  const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
+  const deadline = new Date(Date.now() + timeoutMs);
+
   const sandbox = await Sandbox.create("crucible-dev", {
-    timeoutMs: env.SESSION_TIMEOUT_MIN * 60_000,
+    timeoutMs,
     metadata: { sessionId },
   });
-  // TODO: persist session to Supabase
+
+  let litellmKey: string;
+  try {
+    litellmKey = await mintSessionKey(sessionId);
+  } catch (err) {
+    // Key mint failed — kill the sandbox to avoid a leaked microVM.
+    await sandbox.kill().catch(() => {});
+    throw err;
+  }
+
+  // Orchestrator timer: fires expireSession at SESSION_TIMEOUT_MIN regardless of activity.
+  const expiryTimer = setTimeout(() => {
+    void expireSession(sessionId);
+  }, timeoutMs);
+
   sessionRegistry.set(sessionId, {
     sandbox,
     sandboxId: sandbox.sandboxId,
     createdAt: new Date(),
+    deadline,
+    litellmKey,
+    spendTally: 0,
+    status: "active",
+    expiryTimer,
+    ptySockets: new Set(),
   });
+
   return sandbox.sandboxId;
 }
 
-/** Terminate an E2B microVM and remove it from the registry. Safe to call if already gone. */
+/** Cancel the orchestrator timer and run expireSession (the shared teardown path).
+ *  Called by the manual DELETE /sessions/:id endpoint. */
 export async function destroySandbox(sessionId: string): Promise<void> {
   const entry = sessionRegistry.get(sessionId);
   if (!entry) return;
-  sessionRegistry.delete(sessionId);
-  try {
-    await entry.sandbox.kill();
-  } catch {
-    // already dead — ignore
-  }
+  clearTimeout(entry.expiryTimer);
+  await expireSession(sessionId);
 }

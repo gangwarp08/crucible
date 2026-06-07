@@ -39,6 +39,7 @@ export async function fileRoutes(server: FastifyInstance) {
         name: e.name,
         path: e.path,
         type: e.type ?? "file",
+        isDir: e.type === "dir",
         size: e.size,
       })),
     });

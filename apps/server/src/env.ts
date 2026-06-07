@@ -11,9 +11,8 @@ const EnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
   // LiteLLM gateway — provider keys live there, not here
-  // optional until LiteLLM slice is wired
-  LITELLM_BASE_URL: z.string().url().optional(),
-  LITELLM_MASTER_KEY: z.string().min(1).optional(),
+  LITELLM_BASE_URL: z.string().url(),
+  LITELLM_MASTER_KEY: z.string().min(1),
 
   // E2B sandbox
   E2B_API_KEY: z.string().min(1),

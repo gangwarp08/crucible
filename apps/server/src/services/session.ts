@@ -1,45 +1,37 @@
-import type { CreateSessionRequest } from "@crucible/shared";
-import type { Session } from "@crucible/shared";
-import { env } from "../env.js";
+import { sessionRegistry } from "./registry.js";
+import { revokeSessionKey } from "./litellm.js";
 
-// TODO: wire up Supabase client (slice: persistence)
-// TODO: wire up Redis client (slice: rate-limit / session cache)
-// TODO: wire up E2B sandbox lifecycle (slice: sandbox)
-// TODO: mint per-session LiteLLM key via LITELLM_MASTER_KEY (slice: llm-gateway)
+/**
+ * Tear down a session: close PTY sockets, kill the sandbox, revoke the LiteLLM key,
+ * and mark the session completed. Idempotent — safe to call multiple times.
+ *
+ * Called by: the orchestrator timer (automatic expiry) AND the manual DELETE path.
+ * Never call sandbox.kill / revokeSessionKey directly outside of this function.
+ */
+export async function expireSession(sessionId: string): Promise<void> {
+  const entry = sessionRegistry.get(sessionId);
+  if (!entry || entry.status === "completed") return;
 
-export async function createSession(req: CreateSessionRequest): Promise<Omit<Session, "sandboxId">> {
-  // TODO: validate assessmentId and candidateId exist in Supabase
-  // TODO: provision E2B sandbox, store sandboxId server-side only
-  // TODO: mint short-lived LiteLLM key scoped to this session
-  // TODO: persist session row to Supabase
-  // TODO: start budget + timeout watchdog
+  // Mark completed first so concurrent requests are rejected immediately.
+  entry.status = "completed";
 
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + env.SESSION_TIMEOUT_MIN * 60 * 1000);
+  // Close all active PTY WebSocket connections (tells the browser the session is over).
+  for (const socket of entry.ptySockets) {
+    try {
+      if (socket.readyState === 1 /* OPEN */) socket.close(1001, "Session expired");
+    } catch {
+      // socket may already be closing — ignore
+    }
+  }
+  entry.ptySockets.clear();
 
-  const stub: Omit<Session, "sandboxId"> = {
-    id: crypto.randomUUID(),
-    assessmentId: req.assessmentId,
-    candidateId: req.candidateId,
-    status: "pending",
-    budgetUsd: env.SESSION_BUDGET_USD,
-    expiresAt: expiresAt.toISOString(),
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  };
+  // Revoke the per-session LiteLLM key (best-effort).
+  await revokeSessionKey(entry.litellmKey).catch(() => {});
 
-  return stub;
-}
-
-export async function getSession(id: string): Promise<Omit<Session, "sandboxId"> | null> {
-  // TODO: fetch from Supabase by id; return null if not found
-  void id;
-  return null;
-}
-
-export async function endSession(id: string): Promise<void> {
-  // TODO: terminate E2B sandbox
-  // TODO: revoke per-session LiteLLM key
-  // TODO: update session status to "completed" in Supabase
-  void id;
+  // Kill the E2B microVM (best-effort — may already be dead).
+  try {
+    await entry.sandbox.kill();
+  } catch {
+    // already dead or network error — ignore
+  }
 }

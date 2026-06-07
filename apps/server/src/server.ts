@@ -9,6 +9,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import { healthRoutes } from "./routes/health.js";
 import { ptyRoutes } from "./routes/pty.js";
 import { fileRoutes } from "./routes/files.js";
+import { chatRoutes } from "./routes/chat.js";
 
 export async function buildServer() {
   const server = Fastify({
@@ -19,8 +20,7 @@ export async function buildServer() {
 
   await server.register(fastifyHelmet);
   await server.register(fastifyCors, {
-    // TODO: tighten to production domain before launch
-    origin: env.NODE_ENV === "production" ? false : true,
+    origin: env.NODE_ENV === "production" ? false : ["http://localhost:3000"],
   });
   await server.register(fastifyRateLimit, {
     max: 100,
@@ -36,6 +36,7 @@ export async function buildServer() {
   await server.register(sessionRoutes, { prefix: "/sessions" });
   await server.register(ptyRoutes);
   await server.register(fileRoutes);
+  await server.register(chatRoutes, { prefix: "/api" });
 
   return server;
 }

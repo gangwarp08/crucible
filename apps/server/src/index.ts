@@ -3,11 +3,14 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-// Load repo-root .env regardless of CWD (src/ is 3 levels below the repo root)
+// Must run before any other module import, because static imports are hoisted in ESM.
+// env.ts calls loadEnv() at module evaluation time, so it must see process.env
+// after dotenv has populated it.
 config({ path: resolve(__dir, "../../../.env") });
 
-import { buildServer } from "./server.js";
-import { env } from "./env.js";
+// Dynamic imports execute in order (not hoisted), so dotenv is already applied.
+const { buildServer } = await import("./server.js");
+const { env } = await import("./env.js");
 
 const server = await buildServer();
 

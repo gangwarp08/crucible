@@ -1,0 +1,22 @@
+# --- secrets (must be excluded from commit #1) ---
+.env
+.env.*
+!.env.example
+
+# --- node / build ---
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# --- logs / os / editor ---
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

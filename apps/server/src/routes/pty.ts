@@ -15,6 +15,13 @@ export async function ptyRoutes(server: FastifyInstance) {
         socket.close(1008, "Session not found");
         return;
       }
+      if (entry.status === "completed") {
+        socket.close(1008, "Session has ended");
+        return;
+      }
+
+      // Register so expireSession can close this socket on timeout.
+      entry.ptySockets.add(socket);
 
       let ptyHandle: CommandHandle | undefined;
 
@@ -32,6 +39,7 @@ export async function ptyRoutes(server: FastifyInstance) {
         });
       } catch (err) {
         server.log.error({ err, sessionId }, "PTY creation failed");
+        entry.ptySockets.delete(socket);
         socket.close(1011, "PTY creation failed");
         return;
       }
@@ -44,12 +52,12 @@ export async function ptyRoutes(server: FastifyInstance) {
         }
       });
 
-      // On close: kill the PTY only; leave the sandbox running for reconnect
       socket.on("close", () => {
+        entry.ptySockets.delete(socket);
         if (ptyHandle !== undefined) {
           entry.sandbox.pty.kill(ptyHandle.pid).catch(() => {});
         }
       });
-    }
+    },
   );
 }
