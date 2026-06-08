@@ -87,3 +87,24 @@ export async function writeFile(
     body: JSON.stringify({ sessionId, path, content }),
   });
 }
+
+// ── Recruiter review ────────────────────────────────────────────────────────
+
+export interface ReviewSession {
+  id: string;
+  status: string;
+  end_reason: string | null;
+  model: string | null;
+  created_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  spend_usd: number | string;
+  event_count: number;
+  messages: number;
+  file_saves: number;
+}
+
+export async function listReviewSessions(): Promise<ReviewSession[]> {
+  const data = await apiFetch<{ sessions: ReviewSession[] }>("/api/review/sessions");
+  return data.sessions;
+}
