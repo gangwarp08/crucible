@@ -1,0 +1,44 @@
+{
+  "reference_date": "2026-05-31T23:59:59Z",
+  "reporting_window": [
+    "2026-03",
+    "2026-04",
+    "2026-05"
+  ],
+  "bug_months": [
+    "2026-04",
+    "2026-05"
+  ],
+  "naive_monthly_cents": {
+    "2026-03": 133454612,
+    "2026-04": 149051260,
+    "2026-05": 137697299
+  },
+  "corrected_monthly_cents": {
+    "2026-03": 133454612,
+    "2026-04": 135753086,
+    "2026-05": 124996154
+  },
+  "overstatement_cents": 25999319,
+  "overstatement_by_month_cents": {
+    "2026-03": 0,
+    "2026-04": 13298174,
+    "2026-05": 12701145
+  },
+  "duplicate_count_by_month": {
+    "2026-04": 26,
+    "2026-05": 26
+  },
+  "succeeded_count_by_month": {
+    "2026-03": 303,
+    "2026-04": 356,
+    "2026-05": 360
+  },
+  "totals": {
+    "payments": 3630,
+    "customers": 400,
+    "subscriptions": 500,
+    "base_payments": 3578,
+    "duplicate_payments": 52
+  }
+}

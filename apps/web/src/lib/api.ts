@@ -88,6 +88,35 @@ export async function writeFile(
   });
 }
 
+// ── Data Explorer (in-sandbox SQLite query) ─────────────────────────────────
+
+export type QueryOk = {
+  status: "ok";
+  columns: string[];
+  rows: unknown[][];
+  rowCount: number;
+  durationMs: number;
+  truncated: boolean;
+};
+
+export type QueryError = {
+  status: "error";
+  error: string;
+  durationMs: number;
+};
+
+export type QueryResult = QueryOk | QueryError;
+
+export async function runQuery(
+  sessionId: string,
+  sql: string,
+): Promise<QueryResult> {
+  return apiFetch<QueryResult>(`/api/sessions/${sessionId}/query`, {
+    method: "POST",
+    body: JSON.stringify({ sql }),
+  });
+}
+
 // ── Recruiter review ────────────────────────────────────────────────────────
 
 export interface ReviewSession {

@@ -9,6 +9,9 @@ import { useSessionStore } from "@/stores/sessionStore";
 const Editor = dynamic(() => import("./Editor"), { ssr: false });
 const Terminal = dynamic(() => import("./Terminal"), { ssr: false });
 const ChatHUD = dynamic(() => import("./ChatHUD"), { ssr: false });
+const DataExplorer = dynamic(() => import("./DataExplorer"), { ssr: false });
+
+type RightTab = "terminal" | "data";
 
 interface Props {
   sessionId: string;
@@ -17,6 +20,7 @@ interface Props {
 export default function Workspace({ sessionId }: Props) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
+  const [rightTab, setRightTab] = useState<RightTab>("terminal");
 
   const { init, setStatus, status } = useSessionStore();
 
@@ -101,12 +105,71 @@ export default function Workspace({ sessionId }: Props) {
         {/* Budget readout + countdown */}
         <SessionStatus />
 
-        {/* Terminal — takes remaining space above chat */}
-        <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
-          <Terminal
-            sessionId={sessionId}
-            onSessionEnd={handleSessionEnd}
-          />
+        {/* Tabbed pane (terminal | data explorer). Both children stay mounted
+            so the PTY WebSocket isn't torn down on tab switch — toggle via
+            display:none instead of conditional render. */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              background: "#2d2d2d",
+              borderBottom: "1px solid #404040",
+              flexShrink: 0,
+              userSelect: "none",
+            }}
+          >
+            {(["terminal", "data"] as const).map((tab) => {
+              const active = rightTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setRightTab(tab)}
+                  style={{
+                    padding: "6px 14px",
+                    background: "transparent",
+                    border: "none",
+                    borderBottom: active ? "2px solid #3794ff" : "2px solid transparent",
+                    color: active ? "#cccccc" : "#858585",
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                  }}
+                >
+                  {tab === "terminal" ? "Terminal" : "Data Explorer"}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: rightTab === "terminal" ? "block" : "none",
+              }}
+            >
+              <Terminal sessionId={sessionId} onSessionEnd={handleSessionEnd} />
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: rightTab === "data" ? "block" : "none",
+              }}
+            >
+              <DataExplorer sessionId={sessionId} />
+            </div>
+          </div>
         </div>
 
         {/* Chat HUD — fixed height at the bottom */}

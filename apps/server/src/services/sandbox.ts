@@ -5,13 +5,36 @@ import { mintSessionKey } from "./litellm.js";
 import { expireSession } from "./session.js";
 import { persistSessionCreated } from "./db.js";
 import { logEvent } from "./telemetry.js";
+import { loadScenarioById, type Scenario } from "./scenarios.js";
+import { seedScenarioDataset } from "./dataset-seed.js";
 
 /** Provision a new E2B microVM, mint a per-session LiteLLM key, and register both.
  *  Starts the orchestrator kill-switch timer that calls expireSession at deadline.
- *  Persists the session row to Supabase and emits a session.created event. */
-export async function createSandbox(sessionId: string): Promise<string> {
+ *  Persists the session row to Supabase and emits a session.created event.
+ *  When scenarioId is provided, the session is tied to that FDE simulation and
+ *  scenario_state is initialized from the scenario's game-mechanic constraints. */
+export async function createSandbox(
+  sessionId: string,
+  scenarioId?: string,
+): Promise<string> {
   const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
+
+  // Resolve the scenario (if any) BEFORE booting the sandbox so a bad scenarioId
+  // fails fast without burning E2B/LiteLLM resources.
+  let scenario: Scenario | null = null;
+  let scenarioState: Record<string, unknown> = {};
+  if (scenarioId) {
+    scenario = await loadScenarioById(scenarioId);
+    if (scenario) {
+      // Seed the live game-mechanic ledger from the scenario's constraints.
+      scenarioState = { ...scenario.constraints };
+    } else {
+      console.warn(
+        `[sandbox] scenarioId=${scenarioId} did not resolve — proceeding with empty scenario_state`,
+      );
+    }
+  }
 
   const sandbox = await Sandbox.create("crucible-dev", {
     timeoutMs,
@@ -24,6 +47,19 @@ export async function createSandbox(sessionId: string): Promise<string> {
   } catch (err) {
     await sandbox.kill().catch(() => {});
     throw err;
+  }
+
+  // Seed the per-session SQLite DB when the scenario carries a dataset_ref.
+  // Sessions without one (e.g. ad-hoc dev sessions) skip this entirely. A seed
+  // failure tears down the sandbox so the caller sees a hard failure rather
+  // than a half-provisioned session.
+  if (scenario?.dataset_ref) {
+    try {
+      await seedScenarioDataset(sandbox, scenario.dataset_ref);
+    } catch (err) {
+      await sandbox.kill().catch(() => {});
+      throw err;
+    }
   }
 
   const expiryTimer = setTimeout(() => {
@@ -50,6 +86,8 @@ export async function createSandbox(sessionId: string): Promise<string> {
     lastFileHashes: new Map(),
     systemPromptWritten: false,
     nextTranscriptSeq: 0,
+    scenarioId: scenarioId ?? null,
+    scenarioState,
   });
 
   // Persist the sessions row synchronously so FK constraints on telemetry tables
@@ -63,6 +101,7 @@ export async function createSandbox(sessionId: string): Promise<string> {
     budgetUsd: env.SESSION_BUDGET_USD,
     timeoutMin: env.SESSION_TIMEOUT_MIN,
     deadline: deadline.toISOString(),
+    scenarioId: scenarioId ?? null,
   });
 
   return sandbox.sandboxId;

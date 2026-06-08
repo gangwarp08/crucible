@@ -11,6 +11,7 @@ import { ptyRoutes } from "./routes/pty.js";
 import { fileRoutes } from "./routes/files.js";
 import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
+import { queryRoutes } from "./routes/query.js";
 
 export async function buildServer() {
   const server = Fastify({
@@ -38,6 +39,7 @@ export async function buildServer() {
   await server.register(ptyRoutes);
   await server.register(fileRoutes);
   await server.register(chatRoutes, { prefix: "/api" });
+  await server.register(queryRoutes, { prefix: "/api" });
   await server.register(reviewRoutes, { prefix: "/api/review" });
 
   return server;

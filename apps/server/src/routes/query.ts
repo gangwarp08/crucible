@@ -1,0 +1,79 @@
+// POST /api/sessions/:id/query — run candidate SQL against the per-session
+// SQLite DB inside their E2B sandbox, read-only, with a 500-row cap.
+//
+// SQL errors are returned as 200 OK with { status: "error", error } so the
+// candidate sees their own mistakes inline; only infrastructure failures hit
+// the 4xx/5xx paths. Every call emits a db.query telemetry event (this is the
+// data_fluency rubric signal — capture every query, ok or not).
+
+import { z } from "zod";
+import type { FastifyInstance } from "fastify";
+import { sessionRegistry } from "../services/registry.js";
+import { runSqliteQuery } from "../services/query-runner.js";
+import { logEvent } from "../services/telemetry.js";
+
+const QueryBodySchema = z.object({
+  sql: z.string().min(1).max(10_000),
+});
+
+const SQL_PREVIEW_MAX = 4_000; // payload bound for the persisted telemetry event
+
+export async function queryRoutes(server: FastifyInstance) {
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/query",
+    {
+      // First per-route rate-limit override in the codebase. Roomy enough for
+      // a candidate sustaining ~2 queries/sec; tight enough to catch a
+      // runaway client loop.
+      config: { rateLimit: { max: 120, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      const sessionId = request.params.id;
+
+      const parsed = QueryBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.flatten() });
+      }
+      const { sql } = parsed.data;
+
+      const entry = sessionRegistry.get(sessionId);
+      if (!entry) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (entry.status === "completed") {
+        return reply.status(410).send({
+          error: "session_ended",
+          message: "This session has ended.",
+        });
+      }
+
+      try {
+        const result = await runSqliteQuery(entry.sandbox, sql);
+
+        // Telemetry: snake_case payload keys per the codebase convention. SQL
+        // text is truncated to keep the events row size bounded.
+        logEvent(sessionId, "db.query", "candidate", {
+          sql: sql.length > SQL_PREVIEW_MAX ? sql.slice(0, SQL_PREVIEW_MAX) + "…[truncated]" : sql,
+          status: result.status,
+          duration_ms: result.durationMs,
+          ...(result.status === "ok"
+            ? { row_count: result.rowCount, truncated: result.truncated }
+            : { error: result.error }),
+        });
+
+        return reply.send(result);
+      } catch (err) {
+        // Reached only on infra failure (sandbox unreachable, runner missing).
+        // SQL errors don't get here — they're returned as data by runSqliteQuery.
+        server.log.error({ err, sessionId }, "db.query infra failure");
+        logEvent(sessionId, "db.query", "candidate", {
+          sql: sql.length > SQL_PREVIEW_MAX ? sql.slice(0, SQL_PREVIEW_MAX) + "…[truncated]" : sql,
+          status: "error",
+          duration_ms: 0,
+          error: `infra: ${(err as Error).message}`,
+        });
+        return reply.status(500).send({ error: "query infrastructure failure" });
+      }
+    },
+  );
+}
