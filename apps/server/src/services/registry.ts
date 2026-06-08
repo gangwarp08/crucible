@@ -44,6 +44,12 @@ export interface SessionEntry {
   // Telemetry — transcript
   systemPromptWritten: boolean;                  // only one system row per session
   nextTranscriptSeq: number;                     // monotonic seq within transcript table
+
+  // FDE simulation — null when this session isn't tied to a scenario.
+  // scenarioState is the live game-mechanic ledger; initialized from the
+  // scenario's constraints at session start and mutated as the simulation runs.
+  scenarioId: string | null;
+  scenarioState: Record<string, unknown>;
 }
 
 // In-memory session store keyed by sessionId.

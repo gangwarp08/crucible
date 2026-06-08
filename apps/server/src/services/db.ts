@@ -25,6 +25,8 @@ export async function persistSessionCreated(sessionId: string): Promise<void> {
       created_at: entry.createdAt.toISOString(),
       started_at: entry.createdAt.toISOString(),
       updated_at: entry.createdAt.toISOString(),
+      scenario_id: entry.scenarioId,
+      scenario_state: entry.scenarioState,
     });
 
     if (error) console.error("[db] persistSessionCreated failed", error.message);

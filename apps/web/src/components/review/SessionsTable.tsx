@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { listReviewSessions, type ReviewSession } from "@/lib/api";
+import StatusBadge from "./StatusBadge";
 
 type SortKey = "created_at" | "spend_usd" | "duration_ms";
 type SortDir = "asc" | "desc";
@@ -37,43 +38,6 @@ function formatDate(iso: string | null): string {
     minute: "2-digit",
     hour12: false,
   });
-}
-
-const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  completed: { bg: "#1e3a2e", fg: "#4ec9b0" },
-  timed_out: { bg: "#3a2e1e", fg: "#dcb67a" },
-  active:    { bg: "#0e2a44", fg: "#3794ff" },
-  error:     { bg: "#3a1e1e", fg: "#f48771" },
-  aborted:   { bg: "#2a2a2a", fg: "#858585" },
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  completed: "Completed",
-  timed_out: "Expired",
-  active:    "Active",
-  error:     "Error",
-  aborted:   "Aborted",
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const colors = STATUS_COLORS[status] ?? { bg: "#2a2a2a", fg: "#cccccc" };
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 10,
-        fontSize: 11,
-        fontWeight: 500,
-        background: colors.bg,
-        color: colors.fg,
-        letterSpacing: "0.02em",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {STATUS_LABEL[status] ?? status}
-    </span>
-  );
 }
 
 // ── header cell with sort indicator ──────────────────────────────────────────
