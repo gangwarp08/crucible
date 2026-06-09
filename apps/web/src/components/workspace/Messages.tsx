@@ -47,8 +47,17 @@ export default function Messages({ sessionId }: Props) {
     client: "",
     team: "",
   });
+  const [unread, setUnread] = useState<Record<Channel, number>>({
+    client: 0,
+    team: 0,
+  });
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+
+  // Refs so the WS message handler (registered once per sessionId) can read
+  // the latest active channel without re-subscribing on every tab switch.
+  const activeRef = useRef<Channel>(active);
+  useEffect(() => { activeRef.current = active; }, [active]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const clientBottom = useRef<HTMLDivElement>(null);
@@ -96,6 +105,14 @@ export default function Messages({ sessionId }: Props) {
         ],
       }));
       setAwaiting((prev) => ({ ...prev, [parsed.channel]: false }));
+      // Unread badge: bump the counter only when the message lands on a
+      // channel the user is not currently viewing. Reset happens in setActive.
+      if (parsed.channel !== activeRef.current) {
+        setUnread((prev) => ({
+          ...prev,
+          [parsed.channel]: prev[parsed.channel] + 1,
+        }));
+      }
     });
 
     ws.addEventListener("close", () => {
@@ -155,10 +172,17 @@ export default function Messages({ sessionId }: Props) {
         {(["client", "team"] as const).map((c) => {
           const isActive = active === c;
           const isAwaiting = awaiting[c];
+          const unreadCount = unread[c];
           return (
             <button
               key={c}
-              onClick={() => setActive(c)}
+              onClick={() => {
+                setActive(c);
+                // Clear the unread badge when the user opens this tab.
+                if (unread[c] > 0) {
+                  setUnread((prev) => ({ ...prev, [c]: 0 }));
+                }
+              }}
               style={{
                 padding: "6px 14px",
                 background: "transparent",
@@ -176,7 +200,26 @@ export default function Messages({ sessionId }: Props) {
               }}
             >
               {CHANNEL_META[c].label}
-              {isAwaiting && (
+              {/* Unread badge only renders on the inactive tab. On the active
+                  tab the typing-dots indicator takes priority. */}
+              {!isActive && unreadCount > 0 && (
+                <span
+                  style={{
+                    background: "#3794ff",
+                    color: "#fff",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: "1px 6px",
+                    borderRadius: 9,
+                    minWidth: 16,
+                    textAlign: "center",
+                    lineHeight: "14px",
+                  }}
+                >
+                  {unreadCount}
+                </span>
+              )}
+              {isActive && isAwaiting && (
                 <span style={{ color: "#3794ff", fontSize: 10 }}>···</span>
               )}
             </button>

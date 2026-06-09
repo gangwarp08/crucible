@@ -33,6 +33,28 @@ function getChains(sessionId: string): ChannelChains {
   return c;
 }
 
+/** Fan out one message to every open WS for the given session. Used by the
+ *  proactive-beat scheduler (no candidate-callback to route through). Best-
+ *  effort: dead sockets are skipped silently and the persisted event in the
+ *  database is the durable record. */
+export function broadcastToSession(sessionId: string, msg: OutboundMessage): void {
+  const entry = sessionRegistry.get(sessionId);
+  if (!entry) return;
+  const payload = JSON.stringify(msg);
+  for (const socket of entry.messagingSockets) {
+    if (socket.readyState !== 1 /* OPEN */) continue;
+    try {
+      // SessionEntry types this as the minimal {readyState, close} shape; the
+      // actual instance is a Fastify-websocket WebSocket which also exposes
+      // .send(). Narrow with a runtime check; no `as any` lies.
+      const sendable = socket as unknown as { send?: (data: string) => void };
+      if (typeof sendable.send === "function") sendable.send(payload);
+    } catch (err) {
+      console.warn("[messaging] broadcast send failed", err);
+    }
+  }
+}
+
 export type OutboundMessage =
   | {
       type?: undefined;

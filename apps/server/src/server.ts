@@ -13,6 +13,7 @@ import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
 import { queryRoutes } from "./routes/query.js";
 import { messageRoutes } from "./routes/messages.js";
+import { startBeatScheduler } from "./services/scheduler.js";
 
 export async function buildServer() {
   const server = Fastify({
@@ -43,6 +44,11 @@ export async function buildServer() {
   await server.register(queryRoutes, { prefix: "/api" });
   await server.register(messageRoutes);
   await server.register(reviewRoutes, { prefix: "/api/review" });
+
+  // Start the proactive-beat scheduler. The sweep loop iterates the live
+  // sessionRegistry — initially empty after a fresh boot, populated as
+  // POST /sessions calls land.
+  startBeatScheduler();
 
   return server;
 }

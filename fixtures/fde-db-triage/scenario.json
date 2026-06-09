@@ -111,7 +111,7 @@
       "id": "misleading_teammate_hint",
       "trigger": {
         "kind": "time_or_event",
-        "time_offset_minutes": 3,
+        "time_offset_minutes": 0.5,
         "event": "session_start"
       },
       "payload": {

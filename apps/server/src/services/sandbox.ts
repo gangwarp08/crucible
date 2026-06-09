@@ -7,6 +7,52 @@ import { persistSessionCreated } from "./db.js";
 import { logEvent } from "./telemetry.js";
 import { loadScenarioById, type Scenario } from "./scenarios.js";
 import { seedScenarioDataset } from "./dataset-seed.js";
+import type { ScheduledBeat } from "./registry.js";
+
+/** Map a scenario curveball id to the reveal flag it sets when fired. New
+ *  curveballs need a row here AND a matching personaState flag. */
+const BEAT_FOR_CURVEBALL: Record<string, ScheduledBeat["beat"]> = {
+  misleading_teammate_hint: "refund_hint",
+  requirement_change:       "requirement_change",
+};
+
+interface CurveballJson {
+  id?: string;
+  trigger?: { time_offset_minutes?: number };
+  payload?: { channel?: string };
+}
+
+/** Compute the proactive-beat schedule from scenario.curveballs at session
+ *  start. Per-beat overrides (dev/test) take precedence over the JSON value.
+ *  Curveballs without a recognised id or a non-numeric offset are skipped. */
+function computeScheduledBeats(
+  scenario: Scenario,
+  baseMs: number,
+  overridesMs: Record<string, number> | undefined,
+): ScheduledBeat[] {
+  const out: ScheduledBeat[] = [];
+  for (const raw of (scenario.curveballs ?? []) as CurveballJson[]) {
+    if (!raw?.id) continue;
+    const beat = BEAT_FOR_CURVEBALL[raw.id];
+    if (!beat) continue;
+    const channel = raw.payload?.channel;
+    if (channel !== "client" && channel !== "team") continue;
+
+    const offsetMs =
+      overridesMs?.[raw.id] !== undefined
+        ? overridesMs[raw.id]!
+        : Math.round((raw.trigger?.time_offset_minutes ?? 0) * 60_000);
+
+    out.push({
+      id: raw.id,
+      channel,
+      beat,
+      due_ts: new Date(baseMs + offsetMs).toISOString(),
+      fired: false,
+    });
+  }
+  return out;
+}
 
 /** Provision a new E2B microVM, mint a per-session LiteLLM key, and register both.
  *  Starts the orchestrator kill-switch timer that calls expireSession at deadline.
@@ -16,9 +62,11 @@ import { seedScenarioDataset } from "./dataset-seed.js";
 export async function createSandbox(
   sessionId: string,
   scenarioId?: string,
+  beatTimingOverridesMs?: Record<string, number>,
 ): Promise<string> {
   const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
+  const createdAtMs = Date.now();
 
   // Resolve the scenario (if any) BEFORE booting the sandbox so a bad scenarioId
   // fails fast without burning E2B/LiteLLM resources.
@@ -31,12 +79,18 @@ export async function createSandbox(
       // plus a per-persona beat-tracking sub-state for the messaging channels.
       // All reveal flags start false — they flip when the persona-agent fires
       // a beat reveal (see services/persona-agent.ts).
+      const scheduledBeats = computeScheduledBeats(
+        scenario,
+        createdAtMs,
+        beatTimingOverridesMs,
+      );
       scenarioState = {
         ...scenario.constraints,
         personas: {
-          client: { revealed_specifics: false },
+          client: { revealed_specifics: false, requirement_changed: false },
           team:   { gave_refund_hint: false, gave_webhook_clue: false },
         },
+        scheduled_beats: scheduledBeats,
       };
     } else {
       console.warn(
@@ -100,7 +154,7 @@ export async function createSandbox(
     messagingSockets: new Set(),
     channelHistory: { client: [], team: [] },
     personaState: {
-      client: { revealed_specifics: false },
+      client: { revealed_specifics: false, requirement_changed: false },
       team:   { gave_refund_hint: false, gave_webhook_clue: false },
     },
   });

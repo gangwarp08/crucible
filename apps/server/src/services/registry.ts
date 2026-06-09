@@ -20,8 +20,19 @@ export interface PersonaTurn {
 /** Per-channel beat-tracking flags. Mirrored into scenarioState.personas so
  *  recruiter review + future analysis can see when each reveal fired. */
 export interface PersonaState {
-  client: { revealed_specifics: boolean };
+  client: { revealed_specifics: boolean; requirement_changed: boolean };
   team:   { gave_refund_hint: boolean; gave_webhook_clue: boolean };
+}
+
+/** One scheduled proactive beat. Lives inside scenarioState.scheduled_beats
+ *  (jsonb on the sessions row) — that's the durability point: the schedule
+ *  survives a server restart even if the in-memory registry does not. */
+export interface ScheduledBeat {
+  id: string;                                       // curveball id from scenario.json
+  channel: "client" | "team";
+  beat: "refund_hint" | "requirement_change";       // which reveal flag this beat sets
+  due_ts: string;                                   // ISO 8601 absolute
+  fired: boolean;
 }
 
 /** A single buffered telemetry event waiting to be flushed to Supabase. */

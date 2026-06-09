@@ -8,8 +8,17 @@ import { env } from "../env.js";
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
 // session boots in the legacy generic mode. When scenarioId is present the
 // session is tied to that FDE simulation.
+//
+// `beatTimingOverridesMs` is a dev/test knob — maps a scenario curveball id
+// to an absolute offset-in-ms from session start, replacing the value computed
+// from `scenario.curveballs[*].trigger.time_offset_minutes`. Production
+// callers (the web app) omit it. Verifier scripts use it to compress the
+// 25-minute requirement-change beat into a 15-second wait.
 const PostSessionBody = z
-  .object({ scenarioId: z.string().uuid().optional() })
+  .object({
+    scenarioId: z.string().uuid().optional(),
+    beatTimingOverridesMs: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  })
   .optional();
 
 export async function sessionRoutes(server: FastifyInstance) {
@@ -23,8 +32,9 @@ export async function sessionRoutes(server: FastifyInstance) {
       });
     }
     const scenarioId = parsed.data?.scenarioId;
+    const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;
     const sessionId = randomUUID();
-    await createSandbox(sessionId, scenarioId);
+    await createSandbox(sessionId, scenarioId, beatTimingOverridesMs);
     const entry = sessionRegistry.get(sessionId)!;
     return reply.status(201).send({
       sessionId,

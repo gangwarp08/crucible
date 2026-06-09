@@ -21,3 +21,19 @@ try {
   server.log.error(err);
   process.exit(1);
 }
+
+// Graceful shutdown — stops the beat scheduler's interval so `tsx watch`
+// rebuilds and `pnpm dev` Ctrl-Cs don't leak timers between restarts.
+const { stopBeatScheduler } = await import("./services/scheduler.js");
+async function shutdown(signal: string): Promise<void> {
+  console.log(`Received ${signal} — shutting down`);
+  stopBeatScheduler();
+  try {
+    await server.close();
+  } catch (err) {
+    console.error("server.close failed:", err);
+  }
+  process.exit(0);
+}
+process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
+process.once("SIGINT",  () => { void shutdown("SIGINT");  });
