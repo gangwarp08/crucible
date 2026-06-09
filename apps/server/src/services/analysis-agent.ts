@@ -67,7 +67,11 @@ export interface EvaluationResult {
 }
 
 const MODEL = "gemini-flash";
-const MAX_OUTPUT_TOKENS = 4_000;
+// 8k headroom: 8 items × (rationale ~120 tok + 4 evidence × ~30 tok) +
+// overall_summary ~250 tok ≈ 2k of actual content, plus the JSON scaffolding.
+// 4k was too tight for dense sessions (15+ queries + 2 long AI prompts) — the
+// gradient-check PROFILE C eval returned truncated mid-JSON at the prior cap.
+const MAX_OUTPUT_TOKENS = 8_000;
 const MAX_EVIDENCE_PER_ITEM = 4;
 
 // ─── Judge system prompt ───────────────────────────────────────────────────
