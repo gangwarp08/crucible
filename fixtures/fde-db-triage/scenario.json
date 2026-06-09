@@ -4,6 +4,18 @@
   "role": "fde",
   "difficulty": "mid",
   "dataset_ref": "fixtures/fde-db-triage",
+  "docs": [
+    {
+      "id": "data-dictionary",
+      "title": "Meridian Data Dictionary",
+      "body": "## customers\n\nOne row per Meridian customer (a B2B company on the platform).\n\n- `id` — opaque customer identifier\n- `name` — company name\n- `plan` — the plan the customer signed up on\n- `created_at` — when the customer record was created, in UTC\n\n## subscriptions\n\nOne row per active or historical subscription. A customer can have multiple subscriptions over time.\n\n- `id` — subscription identifier\n- `customer_id` — references `customers.id`\n- `plan` — the subscription's plan tier (starter, pro, scale, enterprise)\n- `mrr` — monthly recurring revenue in cents\n- `started_at` — when the subscription began, in UTC\n- `status` — one of `active`, `churned`, or `paused`\n\n## payments\n\nOne row per payment record received from the payment processor (Stripe).\n\n- `id` — opaque local payment identifier\n- `external_payment_id` — the payment processor's unique id for the payment\n- `subscription_id` — references `subscriptions.id`\n- `amount_cents` — the payment amount in cents\n- `currency` — three-letter currency code (USD)\n- `status` — one of `succeeded`, `refunded`, or `failed`\n- `created_at` — when the payment was recorded, in UTC\n"
+    },
+    {
+      "id": "revenue-dashboard-definition",
+      "title": "Revenue Dashboard Definition",
+      "body": "## Method\n\nThe monthly recognized revenue tile on the finance dashboard computes revenue as:\n\n> `SUM(amount_cents)` for all rows in `payments` where `status = 'succeeded'`, bucketed by `created_at` (UTC) into calendar months.\n\n## Source\n\nThe tile reads directly from the `payments` table on the read replica. No materialized view or pre-aggregation.\n\n## Display\n\nValues are shown in dollars with two decimal places. The \"last 3 months\" view returns the three most recent complete calendar months relative to today.\n\n## Refresh\n\nThe tile refreshes every 15 minutes against the read replica.\n"
+    }
+  ],
   "brief": "You're the forward-deployed engineer assigned to Meridian, a B2B SaaS company. Their finance team has flagged that the monthly revenue dashboard looks materially too high for recent months, and leadership wants answers before a board meeting. You have read access to a copy of Meridian's production database and an internal channel with your teammate. Figure out what's going on, fix it, and give finance something they can trust. Your client (Dana, VP Finance) is in the client channel.",
   "constraints": {
     "time_minutes": 90,

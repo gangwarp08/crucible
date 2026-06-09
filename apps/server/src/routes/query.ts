@@ -11,6 +11,11 @@ import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { runSqliteQuery } from "../services/query-runner.js";
 import { logEvent } from "../services/telemetry.js";
+import { deductComputeMinutes } from "../services/compute-tracker.js";
+
+// Per-query compute-minutes deduction. Hard-coded for now; future slice can
+// read `scenario.constraints.compute_cost_per_query` here.
+const COMPUTE_COST_PER_QUERY = 0.25;
 
 const QueryBodySchema = z.object({
   sql: z.string().min(1).max(10_000),
@@ -61,7 +66,15 @@ export async function queryRoutes(server: FastifyInstance) {
             : { error: result.error }),
         });
 
-        return reply.send(result);
+        // Soft compute-minutes deduction — counts attempts (SQL errors still
+        // run the runner). Emits its own constraint.spend event.
+        const scenarioComputeRemaining = deductComputeMinutes(
+          sessionId,
+          COMPUTE_COST_PER_QUERY,
+          "db_query",
+        );
+
+        return reply.send({ ...result, scenarioComputeRemaining });
       } catch (err) {
         // Reached only on infra failure (sandbox unreachable, runner missing).
         // SQL errors don't get here — they're returned as data by runSqliteQuery.

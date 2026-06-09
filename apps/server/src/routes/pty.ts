@@ -2,7 +2,16 @@ import type { FastifyInstance } from "fastify";
 import type { CommandHandle } from "e2b";
 import { sessionRegistry } from "../services/registry.js";
 import { appendPtyData, flushAllPtyBuffers } from "../services/telemetry.js";
+import { deductComputeMinutes } from "../services/compute-tracker.js";
 import { env } from "../env.js";
+
+// xterm sends `\r` (0x0d, carriage return) on Enter — we treat every \r in a
+// PTY input chunk as one "command" attempt for the compute mechanic. Edge
+// cases: pasted multi-line text is charged per line (correct — N commands);
+// holding Enter at an empty prompt is charged per press (correct — N empty
+// runs); backspaces / arrow keys / Ctrl-C do not contain \r and are free.
+const CR_BYTE = 0x0d;
+const COMPUTE_COST_PER_COMMAND = 0.5;
 
 export async function ptyRoutes(server: FastifyInstance) {
   server.get<{ Params: { sessionId: string } }>(
@@ -47,6 +56,17 @@ export async function ptyRoutes(server: FastifyInstance) {
 
       socket.on("message", (msg: Buffer) => {
         appendPtyData(sessionId, "input", msg);
+
+        // Compute mechanic: deduct one command's worth per carriage-return
+        // in this input chunk. Soft — does not block when depleted.
+        let commands = 0;
+        for (let i = 0; i < msg.length; i++) {
+          if (msg[i] === CR_BYTE) commands++;
+        }
+        for (let i = 0; i < commands; i++) {
+          deductComputeMinutes(sessionId, COMPUTE_COST_PER_COMMAND, "sandbox_command");
+        }
+
         if (ptyHandle !== undefined) {
           entry.sandbox.pty
             .sendInput(ptyHandle.pid, new Uint8Array(msg))

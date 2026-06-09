@@ -51,6 +51,9 @@ export async function sessionRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
     const entry = sessionRegistry.get(request.params.id);
     if (!entry) return reply.status(404).send({ error: "Session not found" });
+    const hasScenario = entry.scenarioId !== null;
+    const initial = (entry.scenarioState["budget_initial"] ??
+      {}) as Record<string, unknown>;
     return {
       sessionId: request.params.id,
       sandboxId: entry.sandboxId,
@@ -61,10 +64,30 @@ export async function sessionRoutes(server: FastifyInstance) {
       status: entry.status,
       // null when this session has no scenario (legacy mode); otherwise the
       // live game-mechanic token balance the AI assistant draws from.
-      scenarioTokensRemaining:
-        entry.scenarioId !== null
-          ? ((entry.scenarioState["tokens"] as number | undefined) ?? null)
-          : null,
+      scenarioTokensRemaining: hasScenario
+        ? ((entry.scenarioState["tokens"] as number | undefined) ?? null)
+        : null,
+      // Static constraint snapshot — what the candidate started with. The HUD
+      // uses these as the denominator in "X / Y" displays.
+      scenarioConstraints: hasScenario
+        ? {
+            time_minutes:    (initial["time_minutes"]    as number | undefined) ?? null,
+            tokens:          (initial["tokens"]          as number | undefined) ?? null,
+            compute_minutes: (initial["compute_minutes"] as number | undefined) ?? null,
+            money_usd:       (initial["money_usd"]       as number | undefined) ?? null,
+            memory_mb:       (initial["memory_mb"]       as number | undefined) ?? null,
+          }
+        : null,
+      // Live values for the hard-resource HUD indicators.
+      scenarioBalances: hasScenario
+        ? {
+            tokens:          (entry.scenarioState["tokens"]          as number | undefined) ?? null,
+            compute_minutes: (entry.scenarioState["compute_minutes"] as number | undefined) ?? null,
+          }
+        : null,
+      // Latest deliverable mirrored from scenario_state.deliverable. The
+      // POST /api/sessions/:id/deliverable route owns writes.
+      deliverable: (entry.scenarioState["deliverable"] ?? null) as Record<string, unknown> | null,
     };
   });
 

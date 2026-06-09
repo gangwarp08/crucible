@@ -17,6 +17,34 @@ export async function createSession(): Promise<{ sessionId: string; deadline: st
   return apiFetch("/sessions", { method: "POST" });
 }
 
+export interface ScenarioConstraints {
+  time_minutes: number | null;
+  tokens: number | null;
+  compute_minutes: number | null;
+  money_usd: number | null;
+  memory_mb: number | null;
+}
+
+export interface ScenarioBalances {
+  tokens: number | null;
+  compute_minutes: number | null;
+}
+
+export type DeliverableStatus = "draft" | "submitted";
+
+export interface DeliverableData {
+  corrected_monthly_revenue: string;
+  root_cause_finding: string;
+  client_facing_summary: string;
+  decisions_and_tradeoffs: string;
+}
+
+export interface Deliverable {
+  status: DeliverableStatus;
+  data: DeliverableData;
+  updated_at: string;
+}
+
 export interface SessionInfo {
   sessionId: string;
   deadline: string;
@@ -26,6 +54,12 @@ export interface SessionInfo {
   // null when this session has no scenario (legacy generic mode); otherwise
   // the live game-mechanic token balance the AI assistant draws from.
   scenarioTokensRemaining: number | null;
+  // Static snapshot of the starting constraint values; HUD denominators.
+  scenarioConstraints: ScenarioConstraints | null;
+  // Live values for the hard-resource HUD indicators (tokens, compute).
+  scenarioBalances: ScenarioBalances | null;
+  // Latest deliverable mirrored from scenario_state.deliverable.
+  deliverable: Deliverable | null;
 }
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {
@@ -105,12 +139,16 @@ export type QueryOk = {
   rowCount: number;
   durationMs: number;
   truncated: boolean;
+  // Live compute-minutes balance after this query's deduction; null when no
+  // scenario is bound. Lets the HUD update without a separate poll.
+  scenarioComputeRemaining: number | null;
 };
 
 export type QueryError = {
   status: "error";
   error: string;
   durationMs: number;
+  scenarioComputeRemaining: number | null;
 };
 
 export type QueryResult = QueryOk | QueryError;
@@ -123,6 +161,48 @@ export async function runQuery(
     method: "POST",
     body: JSON.stringify({ sql }),
   });
+}
+
+// ── Scenario docs ───────────────────────────────────────────────────────────
+
+export interface ScenarioDoc {
+  id: string;
+  title: string;
+  body: string;
+}
+
+export async function listScenarioDocs(sessionId: string): Promise<ScenarioDoc[]> {
+  const data = await apiFetch<{ docs: ScenarioDoc[] }>(
+    `/api/sessions/${sessionId}/docs`,
+  );
+  return data.docs;
+}
+
+export async function recordDocView(sessionId: string, docId: string): Promise<void> {
+  await apiFetch(`/api/sessions/${sessionId}/docs/${encodeURIComponent(docId)}/view`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+// ── Deliverable ─────────────────────────────────────────────────────────────
+
+export async function getDeliverable(sessionId: string): Promise<Deliverable | null> {
+  const data = await apiFetch<{ deliverable: Deliverable | null }>(
+    `/api/sessions/${sessionId}/deliverable`,
+  );
+  return data.deliverable;
+}
+
+export async function saveDeliverable(
+  sessionId: string,
+  body: { status: DeliverableStatus; data: DeliverableData },
+): Promise<Deliverable> {
+  const res = await apiFetch<{ deliverable: Deliverable }>(
+    `/api/sessions/${sessionId}/deliverable`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+  return res.deliverable;
 }
 
 // ── Recruiter review ────────────────────────────────────────────────────────

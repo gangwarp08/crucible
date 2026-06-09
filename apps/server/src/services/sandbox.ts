@@ -92,12 +92,26 @@ export async function createSandbox(
           team:   { gave_refund_hint: false, gave_webhook_clue: false },
         },
         scheduled_beats: scheduledBeats,
+        // Frozen snapshot of the starting constraint values, so the HUD can
+        // show "X / Y" (live / original) without losing the original to the
+        // in-place mutations that the token/compute deductions perform on
+        // scenarioState.{tokens,compute_minutes,…}.
+        budget_initial: { ...scenario.constraints },
       };
       // Dev/test knob: override the scenario's full tokens budget with a
       // tiny value so the assistant can be force-exhausted in a few calls.
       // Production callers omit this; only the verifier script sets it.
+      // The override applies to BOTH the live tokens balance AND the initial
+      // snapshot — otherwise the HUD would show "500 / 200,000".
       if (tokenBudgetOverride !== undefined) {
-        scenarioState = { ...scenarioState, tokens: tokenBudgetOverride };
+        scenarioState = {
+          ...scenarioState,
+          tokens: tokenBudgetOverride,
+          budget_initial: {
+            ...(scenarioState["budget_initial"] as Record<string, unknown>),
+            tokens: tokenBudgetOverride,
+          },
+        };
       }
     } else {
       console.warn(

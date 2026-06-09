@@ -13,6 +13,8 @@ import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
 import { queryRoutes } from "./routes/query.js";
 import { messageRoutes } from "./routes/messages.js";
+import { docsRoutes } from "./routes/docs.js";
+import { deliverableRoutes } from "./routes/deliverable.js";
 import { startBeatScheduler } from "./services/scheduler.js";
 
 export async function buildServer() {
@@ -43,6 +45,8 @@ export async function buildServer() {
   await server.register(chatRoutes, { prefix: "/api" });
   await server.register(queryRoutes, { prefix: "/api" });
   await server.register(messageRoutes);
+  await server.register(docsRoutes, { prefix: "/api" });
+  await server.register(deliverableRoutes, { prefix: "/api" });
   await server.register(reviewRoutes, { prefix: "/api/review" });
 
   // Start the proactive-beat scheduler. The sweep loop iterates the live

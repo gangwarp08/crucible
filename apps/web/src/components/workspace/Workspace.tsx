@@ -2,7 +2,7 @@
 import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import FileTree from "./FileTree";
-import SessionStatus from "./SessionStatus";
+import ConstraintHUD from "./ConstraintHUD";
 import { readFile, getSession } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
 
@@ -11,13 +11,18 @@ const Terminal = dynamic(() => import("./Terminal"), { ssr: false });
 const ChatHUD = dynamic(() => import("./ChatHUD"), { ssr: false });
 const DataExplorer = dynamic(() => import("./DataExplorer"), { ssr: false });
 const Messages = dynamic(() => import("./Messages"), { ssr: false });
+const DocsViewer = dynamic(() => import("./DocsViewer"), { ssr: false });
+const DeliverablePanel = dynamic(() => import("./DeliverablePanel"), { ssr: false });
 
-type RightTab = "terminal" | "data" | "messages";
+type RightTab = "terminal" | "data" | "messages" | "assistant" | "docs" | "deliverable";
 
 const TAB_LABEL: Record<RightTab, string> = {
-  terminal: "Terminal",
-  data: "Data Explorer",
-  messages: "Messages",
+  terminal:    "Terminal",
+  data:        "Data",
+  messages:    "Messages",
+  assistant:   "Assistant",
+  docs:        "Docs",
+  deliverable: "Deliverable",
 };
 
 interface Props {
@@ -31,12 +36,19 @@ export default function Workspace({ sessionId }: Props) {
 
   const { init, setStatus, status } = useSessionStore();
 
-  // On mount: fetch session metadata to initialize the store (deadline,
-  // budget, spend, scenario AI-token balance).
+  // On mount: fetch session metadata to initialize the store.
   useEffect(() => {
     getSession(sessionId)
       .then((s) => {
-        init(sessionId, s.deadline, s.budget, s.spend, s.scenarioTokensRemaining);
+        init(
+          sessionId,
+          s.deadline,
+          s.budget,
+          s.spend,
+          s.scenarioTokensRemaining,
+          s.scenarioBalances?.compute_minutes ?? null,
+          s.scenarioConstraints,
+        );
         if (s.status === "completed") setStatus("ended");
         // A page reload after the token budget was already drained shouldn't
         // re-enable the input — flip status immediately if the server says
@@ -69,6 +81,7 @@ export default function Workspace({ sessionId }: Props) {
     <div
       style={{
         display: "flex",
+        flexDirection: "column",
         height: "100vh",
         overflow: "hidden",
         background: "#1e1e1e",
@@ -76,61 +89,54 @@ export default function Workspace({ sessionId }: Props) {
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
     >
-      {/* File tree */}
-      <div
-        style={{
-          width: 240,
-          minWidth: 240,
-          background: "#252526",
-          borderRight: "1px solid #404040",
-          overflowY: "auto",
-          flexShrink: 0,
-        }}
-      >
-        <FileTree
-          sessionId={sessionId}
-          onFileSelect={(path) => { void handleFileSelect(path); }}
-          selectedPath={selectedPath}
-        />
-      </div>
+      {/* Top constraint HUD — always visible, full width. */}
+      <ConstraintHUD />
 
-      {/* Editor */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <Editor
-          sessionId={sessionId}
-          path={selectedPath}
-          content={content}
-          onChange={setContent}
-        />
-      </div>
-
-      {/* Right column: status bar + terminal + chat HUD */}
-      <div
-        style={{
-          width: 380,
-          minWidth: 380,
-          display: "flex",
-          flexDirection: "column",
-          borderLeft: "1px solid #404040",
-          flexShrink: 0,
-          overflow: "hidden",
-        }}
-      >
-        {/* Budget readout + countdown */}
-        <SessionStatus />
-
-        {/* Tabbed pane (terminal | data explorer). Both children stay mounted
-            so the PTY WebSocket isn't torn down on tab switch — toggle via
-            display:none instead of conditional render. */}
+      {/* Main 3-column row */}
+      <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {/* File tree */}
         <div
           style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            minHeight: 0,
+            width: 240,
+            minWidth: 240,
+            background: "#252526",
+            borderRight: "1px solid #404040",
+            overflowY: "auto",
+            flexShrink: 0,
           }}
         >
+          <FileTree
+            sessionId={sessionId}
+            onFileSelect={(path) => { void handleFileSelect(path); }}
+            selectedPath={selectedPath}
+          />
+        </div>
+
+        {/* Editor */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          <Editor
+            sessionId={sessionId}
+            path={selectedPath}
+            content={content}
+            onChange={setContent}
+          />
+        </div>
+
+        {/* Right column: 6-tab strip + always-mounted panes (display:none toggle
+            so the PTY WebSocket, messaging WS, and the chat HUD state survive
+            tab switches). */}
+        <div
+          style={{
+            width: 440,
+            minWidth: 440,
+            display: "flex",
+            flexDirection: "column",
+            borderLeft: "1px solid #404040",
+            flexShrink: 0,
+            overflow: "hidden",
+          }}
+        >
+          {/* Tab strip */}
           <div
             style={{
               display: "flex",
@@ -138,25 +144,28 @@ export default function Workspace({ sessionId }: Props) {
               borderBottom: "1px solid #404040",
               flexShrink: 0,
               userSelect: "none",
+              overflowX: "auto",
             }}
           >
-            {(["terminal", "data", "messages"] as const).map((tab) => {
+            {(["terminal", "data", "messages", "assistant", "docs", "deliverable"] as const).map((tab) => {
               const active = rightTab === tab;
               return (
                 <button
                   key={tab}
                   onClick={() => setRightTab(tab)}
                   style={{
-                    padding: "6px 14px",
+                    padding: "6px 12px",
                     background: "transparent",
                     border: "none",
                     borderBottom: active ? "2px solid #3794ff" : "2px solid transparent",
                     color: active ? "#cccccc" : "#858585",
-                    fontSize: 12,
+                    fontSize: 11,
                     fontFamily: "inherit",
                     letterSpacing: "0.04em",
                     textTransform: "uppercase",
                     cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                 >
                   {TAB_LABEL[tab]}
@@ -164,40 +173,28 @@ export default function Workspace({ sessionId }: Props) {
               );
             })}
           </div>
+
+          {/* Content area — all panes mounted, only the active one visible. */}
           <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: rightTab === "terminal" ? "block" : "none",
-              }}
-            >
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "terminal" ? "block" : "none" }}>
               <Terminal sessionId={sessionId} onSessionEnd={handleSessionEnd} />
             </div>
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: rightTab === "data" ? "block" : "none",
-              }}
-            >
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "data" ? "block" : "none" }}>
               <DataExplorer sessionId={sessionId} />
             </div>
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: rightTab === "messages" ? "block" : "none",
-              }}
-            >
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "messages" ? "block" : "none" }}>
               <Messages sessionId={sessionId} />
             </div>
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "assistant" ? "block" : "none" }}>
+              <ChatHUD />
+            </div>
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "docs" ? "block" : "none" }}>
+              <DocsViewer sessionId={sessionId} />
+            </div>
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "deliverable" ? "block" : "none" }}>
+              <DeliverablePanel sessionId={sessionId} />
+            </div>
           </div>
-        </div>
-
-        {/* Chat HUD — fixed height at the bottom */}
-        <div style={{ height: 300, flexShrink: 0 }}>
-          <ChatHUD />
         </div>
       </div>
     </div>

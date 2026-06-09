@@ -42,6 +42,7 @@ interface ScenarioDoc {
   difficulty: string;
   dataset_ref: string;
   brief: string;
+  docs: Array<{ id: string; title: string; body: string }>;
   client_persona: Record<string, unknown>;
   team_persona: Record<string, unknown>;
   constraints: Record<string, number>;
@@ -74,7 +75,7 @@ interface ScenarioDoc {
   const { data: before, error: beforeErr } = await supabase
     .from("scenarios")
     .select(
-      "slug, difficulty, dataset_ref, brief, client_persona, team_persona, " +
+      "slug, difficulty, dataset_ref, brief, docs, client_persona, team_persona, " +
         "constraints, curveballs, deliverable_spec, rubric, success_criteria",
     )
     .eq("slug", "fde-db-triage")
@@ -96,6 +97,7 @@ interface ScenarioDoc {
       difficulty: doc.difficulty,
       brief: doc.brief,
       dataset_ref: doc.dataset_ref,
+      docs: doc.docs,
       client_persona: doc.client_persona,
       team_persona: doc.team_persona,
       constraints: doc.constraints,
@@ -116,7 +118,7 @@ interface ScenarioDoc {
   const { data: after, error: afterErr } = await supabase
     .from("scenarios")
     .select(
-      "slug, difficulty, dataset_ref, brief, client_persona, team_persona, " +
+      "slug, difficulty, dataset_ref, brief, docs, client_persona, team_persona, " +
         "constraints, curveballs, deliverable_spec, rubric, success_criteria",
     )
     .eq("slug", "fde-db-triage")
@@ -133,6 +135,7 @@ interface ScenarioDoc {
 function printSummary(row: Record<string, unknown>): void {
   const persona = row.client_persona as { beats?: unknown[] } | null;
   const team = row.team_persona as { beats?: unknown[] } | null;
+  const docs = (row.docs ?? []) as unknown[];
   const curveballs = (row.curveballs ?? []) as unknown[];
   const deliverable = row.deliverable_spec as { components?: unknown[] } | null;
   const rubric = (row.rubric ?? {}) as Record<string, { weight?: number }>;
@@ -144,6 +147,7 @@ function printSummary(row: Record<string, unknown>): void {
   console.log("  difficulty:         ", row.difficulty);
   console.log("  dataset_ref:        ", row.dataset_ref);
   console.log("  brief (chars):      ", typeof row.brief === "string" ? row.brief.length : 0);
+  console.log("  docs:               ", docs.length);
   console.log("  client_persona beats:", persona?.beats?.length ?? 0);
   console.log("  team_persona beats: ", team?.beats?.length ?? 0);
   console.log("  curveballs:         ", curveballs.length);
