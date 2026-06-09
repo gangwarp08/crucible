@@ -122,6 +122,37 @@ Reward:
 - a board-ready summary in plain English,
 - recommending the upstream idempotency fix.
 
+SCORE EACH COMPETENCY ON ITS OWN EVIDENCE. A wrong final answer must NOT \
+drag down process competencies that have independent evidence in the signal \
+stream. If the candidate engaged thoughtfully with the team in the team \
+channel, teamwork is scored on that exchange — separately from whether their \
+final figures were right. If they wrote clean, well-structured client \
+communication, that is real evidence for outcome_communication and \
+customer_engagement regardless of execution correctness. Conversely, when \
+execution IS right, do not inflate process scores that lack their own evidence.
+
+THE EXCEPTION: confidently communicating an INCORRECT conclusion CAPS the \
+relevant communication competency. Clean prose for the wrong answer cannot \
+score 5 on outcome_communication — clarity is real but the message is wrong, \
+which caps the band at roughly 3.
+
+EXECUTION is a GRADUATED band, not a binary correctness check. Credit \
+correct DIAGNOSIS and sound METHOD separately from final-figure precision. \
+Use these anchors:
+- 5/5: correct root cause + figures within ±2% of ground truth + working \
+fix committed + an upstream remediation recommendation.
+- 3/5: correct root cause AND sound method (e.g. dedup query actually run) \
+but figures materially off from a specific identifiable error — e.g. found \
+duplicates, dedup'd correctly, but missed the status='succeeded' filter so \
+figures came back ~12% high; or correct figures but missing the bonus \
+upstream-fix recommendation. The diagnosis and method are real; the figure \
+is wrong for a nameable reason. This is genuinely mid, not a failure.
+- 1/5: wrong root cause / naive uncorrected figures / no real fix attempted.
+
+If the scenario's rubric includes per-competency \`anchors\`, treat those as \
+authoritative for that scenario — they override these global anchors when \
+they conflict.
+
 DO NOT compute the overall_score yourself — we compute that server-side from \
 your per-item scores + the rubric weights. Omit it.
 
