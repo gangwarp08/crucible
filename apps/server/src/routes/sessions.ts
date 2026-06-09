@@ -18,6 +18,9 @@ const PostSessionBody = z
   .object({
     scenarioId: z.string().uuid().optional(),
     beatTimingOverridesMs: z.record(z.string(), z.number().int().nonnegative()).optional(),
+    // Dev/test only — overrides scenario.constraints.tokens for this session.
+    // Used by the AI-assistant verifier to force token exhaustion in a few calls.
+    tokenBudgetOverride: z.number().int().nonnegative().optional(),
   })
   .optional();
 
@@ -33,8 +36,9 @@ export async function sessionRoutes(server: FastifyInstance) {
     }
     const scenarioId = parsed.data?.scenarioId;
     const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;
+    const tokenBudgetOverride = parsed.data?.tokenBudgetOverride;
     const sessionId = randomUUID();
-    await createSandbox(sessionId, scenarioId, beatTimingOverridesMs);
+    await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride);
     const entry = sessionRegistry.get(sessionId)!;
     return reply.status(201).send({
       sessionId,
@@ -55,6 +59,12 @@ export async function sessionRoutes(server: FastifyInstance) {
       budget: env.SESSION_BUDGET_USD,
       spend: entry.spendTally,
       status: entry.status,
+      // null when this session has no scenario (legacy mode); otherwise the
+      // live game-mechanic token balance the AI assistant draws from.
+      scenarioTokensRemaining:
+        entry.scenarioId !== null
+          ? ((entry.scenarioState["tokens"] as number | undefined) ?? null)
+          : null,
     };
   });
 

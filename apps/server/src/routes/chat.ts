@@ -8,10 +8,11 @@ import {
   SYSTEM_PROMPT,
 } from "../services/litellm.js";
 import { destroySandbox } from "../services/sandbox.js";
-import { persistSessionUpdate } from "../services/db.js";
+import { persistSessionUpdate, persistScenarioState } from "../services/db.js";
 import {
   recordTranscriptTurn,
   recordCost,
+  logEvent,
 } from "../services/telemetry.js";
 import { env } from "../env.js";
 
@@ -48,6 +49,31 @@ export async function chatRoutes(server: FastifyInstance) {
         message: `Session budget of $${env.SESSION_BUDGET_USD} has been exhausted.`,
         spend: entry.spendTally,
         budget: env.SESSION_BUDGET_USD,
+      });
+    }
+
+    // Scenario token-mechanic pre-flight. Distinct from the USD budget above:
+    // scenario_state.tokens is the candidate's IN-GAME AI assistant budget,
+    // seeded from scenario.constraints.tokens (default 200_000 for fde-db-
+    // triage) and decremented per call by usage.totalTokens. When it hits 0
+    // the assistant is unavailable but the session itself stays alive — the
+    // candidate is supposed to keep working unaided.
+    const hasScenario = entry.scenarioId !== null;
+    const tokensRemainingBefore = hasScenario
+      ? (entry.scenarioState["tokens"] as number | undefined)
+      : null;
+    if (
+      hasScenario &&
+      typeof tokensRemainingBefore === "number" &&
+      tokensRemainingBefore <= 0
+    ) {
+      return reply.status(402).send({
+        error: "token_budget_exhausted",
+        message:
+          "The AI assistant's token budget for this session is exhausted. You'll need to work unaided from here.",
+        spend: entry.spendTally,
+        budget: env.SESSION_BUDGET_USD,
+        scenarioTokensRemaining: tokensRemainingBefore,
       });
     }
 
@@ -92,17 +118,59 @@ export async function chatRoutes(server: FastifyInstance) {
         completionTokens: usage?.completionTokens ?? 0,
         costUsd: responseCost ?? 0,
         cumulativeSpendUsd: entry.spendTally,
+        purpose: "ai_assistant",
         ...(callId && { litellmCallId: callId }),
         transcriptId: assistantId,
       });
 
       void persistSessionUpdate(sessionId, { spend_usd: entry.spendTally });
 
-      server.log.debug({ sessionId, spendTally: entry.spendTally, latencyMs }, "chat ok");
+      // Rich ai_orchestration events alongside the lightweight chat.* markers
+      // that recordTranscriptTurn already emits — these carry the full text +
+      // token + cost + latency payload that the rubric scorer reads.
+      logEvent(sessionId, "ai.assistant.candidate", "candidate", {
+        text: prompt,
+      });
+      logEvent(sessionId, "ai.assistant.response", "system", {
+        text,
+        model: "gemini-flash",
+        prompt_tokens: usage?.promptTokens ?? 0,
+        completion_tokens: usage?.completionTokens ?? 0,
+        total_tokens: usage?.totalTokens ?? 0,
+        cost_usd: responseCost,
+        latency_ms: latencyMs,
+        litellm_call_id: callId,
+        finish_reason: finishReason,
+      });
+
+      // Scenario token-mechanic deduction. Skipped entirely for sessions
+      // without a scenario (legacy generic-mode dev sessions). The balance
+      // is allowed to go negative on the call that drives it past zero —
+      // the next call will be rejected by the pre-flight check above.
+      let tokensRemainingAfter: number | null = null;
+      if (hasScenario) {
+        const consumed = usage?.totalTokens ?? 0;
+        const before = (entry.scenarioState["tokens"] as number) ?? 0;
+        const next = before - consumed;
+        entry.scenarioState = { ...entry.scenarioState, tokens: next };
+        tokensRemainingAfter = next;
+        logEvent(sessionId, "constraint.spend", "system", {
+          resource: "tokens",
+          amount: consumed,
+          balance_after: next,
+        });
+        void persistScenarioState(sessionId, entry.scenarioState);
+      }
+
+      server.log.debug(
+        { sessionId, spendTally: entry.spendTally, latencyMs, tokensRemainingAfter },
+        "chat ok",
+      );
       return reply.send({
         reply: text,
         spend: entry.spendTally,
         budget: env.SESSION_BUDGET_USD,
+        scenarioTokensRemaining: tokensRemainingAfter,
       });
     } catch (err) {
       if (err instanceof BudgetExceededError) {

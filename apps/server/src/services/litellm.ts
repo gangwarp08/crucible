@@ -1,12 +1,25 @@
 import { env } from "../env.js";
 
 // Server-side only — NEVER sent to the browser or logged.
-export const SYSTEM_PROMPT =
-  "You are an AI technical interviewer conducting a coding assessment on the Crucible platform. " +
-  "You can observe the candidate's code and terminal session. " +
-  "Be concise, professional, and encouraging. " +
-  "Guide with targeted hints rather than direct solutions. " +
-  "When a candidate asks for help, ask a clarifying question first to understand where they are stuck.";
+//
+// Generic coding / data-analysis assistant. Intentionally knows NOTHING about
+// the candidate's scenario, the scenario's ground truth, persona guardrails,
+// or the customer database. The candidate has to direct it by typing — and
+// how well they do that is the ai_orchestration rubric signal.
+export const SYSTEM_PROMPT = `\
+You are a coding and data-analysis assistant. The user is a developer working \
+in a sandboxed dev environment. Help them clearly and concisely: write code, \
+write SQL, explain concepts, debug, think through approaches.
+
+You do not have direct access to their files, terminal, database, or any \
+project context — only what they paste into this chat. When you need a \
+schema, a sample row, an error message, or the relevant snippet, ask for it.
+
+Default to brief, focused answers. Write small targeted code examples rather \
+than sprawling templates. If they want depth, they'll ask.
+
+You are a general-purpose tool — you do NOT know what specific task the user \
+is working on unless they tell you. Don't assume.`;
 
 export class BudgetExceededError extends Error {
   constructor(message: string) {
@@ -92,8 +105,8 @@ interface PostOpts {
   maxTokens?: number;
 }
 
-/** Single-prompt shape used by the AI-interviewer chat HUD. Hardcodes the
- *  interviewer SYSTEM_PROMPT so callers don't need to know it. */
+/** Single-prompt shape used by the chat HUD / AI assistant route. Hardcodes
+ *  the generic-assistant SYSTEM_PROMPT so callers don't need to know it. */
 export async function chatCompletion(
   sessionKey: string,
   prompt: string,

@@ -23,6 +23,9 @@ export interface SessionInfo {
   budget: number;
   spend: number;
   status: "active" | "completed";
+  // null when this session has no scenario (legacy generic mode); otherwise
+  // the live game-mechanic token balance the AI assistant draws from.
+  scenarioTokensRemaining: number | null;
 }
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {
@@ -33,13 +36,18 @@ export interface ChatResponse {
   reply: string;
   spend: number;
   budget: number;
+  // null when session has no scenario; otherwise the remaining game-mechanic
+  // tokens AFTER this call's deduction.
+  scenarioTokensRemaining: number | null;
 }
 
 export interface ChatError {
+  // "budget_exhausted" | "token_budget_exhausted" | ...
   error: string;
   message: string;
   spend?: number;
   budget?: number;
+  scenarioTokensRemaining?: number | null;
 }
 
 /** Throws on network error; returns ChatError shape on 402 (caller must handle). */

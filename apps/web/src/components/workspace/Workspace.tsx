@@ -31,12 +31,19 @@ export default function Workspace({ sessionId }: Props) {
 
   const { init, setStatus, status } = useSessionStore();
 
-  // On mount: fetch session metadata to initialize the store (deadline, budget, spend).
+  // On mount: fetch session metadata to initialize the store (deadline,
+  // budget, spend, scenario AI-token balance).
   useEffect(() => {
     getSession(sessionId)
       .then((s) => {
-        init(sessionId, s.deadline, s.budget, s.spend);
+        init(sessionId, s.deadline, s.budget, s.spend, s.scenarioTokensRemaining);
         if (s.status === "completed") setStatus("ended");
+        // A page reload after the token budget was already drained shouldn't
+        // re-enable the input — flip status immediately if the server says
+        // tokens are at/below zero.
+        else if (s.scenarioTokensRemaining !== null && s.scenarioTokensRemaining <= 0) {
+          setStatus("token_exhausted");
+        }
       })
       .catch(() => { /* server may be starting — workspace still usable */ });
   }, [sessionId, init, setStatus]);

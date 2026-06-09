@@ -8,11 +8,18 @@ function isChatError(r: object): r is ChatError {
 }
 
 export default function ChatHUD() {
-  const { sessionId, status, addMessage, setSpendBudget, setStatus } =
-    useSessionStore();
+  const {
+    sessionId,
+    status,
+    addMessage,
+    setSpendBudget,
+    setStatus,
+    setTokensRemaining,
+  } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const messages = useSessionStore((s) => s.messages);
+  const tokensRemaining = useSessionStore((s) => s.tokensRemaining);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll on new messages.
@@ -37,6 +44,11 @@ export default function ChatHUD() {
           if (res.spend !== undefined && res.budget !== undefined) {
             setSpendBudget(res.spend, res.budget);
           }
+        } else if (res.error === "token_budget_exhausted") {
+          setStatus("token_exhausted");
+          if (res.scenarioTokensRemaining !== undefined && res.scenarioTokensRemaining !== null) {
+            setTokensRemaining(res.scenarioTokensRemaining);
+          }
         } else if (res.error === "session_ended") {
           setStatus("ended");
         } else {
@@ -45,6 +57,15 @@ export default function ChatHUD() {
       } else {
         addMessage({ role: "assistant", text: res.reply });
         setSpendBudget(res.spend, res.budget);
+        if (res.scenarioTokensRemaining !== null) {
+          setTokensRemaining(res.scenarioTokensRemaining);
+          // The call that drives the balance through zero is allowed to
+          // complete; the NEXT call hits the pre-flight reject. Flip status
+          // here so the input disables immediately without an extra reject.
+          if (res.scenarioTokensRemaining <= 0) {
+            setStatus("token_exhausted");
+          }
+        }
       }
     } catch {
       addMessage({ role: "assistant", text: "Network error — please retry." });
@@ -57,11 +78,13 @@ export default function ChatHUD() {
   const placeholderText =
     status === "budget_exhausted"
       ? "Budget reached"
-      : status === "ended"
-        ? "Session ended"
-        : sending
-          ? "Waiting for response…"
-          : "Ask the AI interviewer…";
+      : status === "token_exhausted"
+        ? "Token budget reached"
+        : status === "ended"
+          ? "Session ended"
+          : sending
+            ? "Waiting for response…"
+            : "Ask the AI assistant…";
 
   return (
     <div
@@ -73,7 +96,7 @@ export default function ChatHUD() {
         borderTop: "1px solid #404040",
       }}
     >
-      {/* Header */}
+      {/* Header — AI ASSISTANT label + live token balance */}
       <div
         style={{
           padding: "5px 12px",
@@ -84,9 +107,32 @@ export default function ChatHUD() {
           userSelect: "none",
           letterSpacing: "0.04em",
           flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
         }}
       >
-        AI INTERVIEWER
+        <span>AI ASSISTANT</span>
+        {tokensRemaining !== null && (
+          <span
+            style={{
+              fontSize: 11,
+              fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+              fontVariantNumeric: "tabular-nums",
+              color:
+                tokensRemaining <= 0
+                  ? "#f48771"
+                  : tokensRemaining < 20_000
+                    ? "#dcb67a"
+                    : "#858585",
+              letterSpacing: 0,
+            }}
+            title="In-scenario AI assistant token budget. Persona chat does not deduct from this."
+          >
+            {Math.max(0, tokensRemaining).toLocaleString("en-US")} tokens left
+          </span>
+        )}
       </div>
 
       {/* Status banner */}
@@ -103,7 +149,9 @@ export default function ChatHUD() {
         >
           {status === "ended"
             ? "Session has ended. Sandbox and keys have been revoked."
-            : "Budget exhausted. Session closed."}
+            : status === "token_exhausted"
+              ? "AI assistant token budget exhausted. Work unaided — your real-time judgment from here on is part of the rubric."
+              : "Budget exhausted. Session closed."}
         </div>
       )}
 

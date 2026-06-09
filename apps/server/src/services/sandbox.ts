@@ -63,6 +63,7 @@ export async function createSandbox(
   sessionId: string,
   scenarioId?: string,
   beatTimingOverridesMs?: Record<string, number>,
+  tokenBudgetOverride?: number,
 ): Promise<string> {
   const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
@@ -92,6 +93,12 @@ export async function createSandbox(
         },
         scheduled_beats: scheduledBeats,
       };
+      // Dev/test knob: override the scenario's full tokens budget with a
+      // tiny value so the assistant can be force-exhausted in a few calls.
+      // Production callers omit this; only the verifier script sets it.
+      if (tokenBudgetOverride !== undefined) {
+        scenarioState = { ...scenarioState, tokens: tokenBudgetOverride };
+      }
     } else {
       console.warn(
         `[sandbox] scenarioId=${scenarioId} did not resolve — proceeding with empty scenario_state`,
