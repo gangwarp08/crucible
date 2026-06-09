@@ -1,12 +1,19 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import {
+  FileText, BookOpen, MessageSquare, Database, TerminalSquare, Sparkles, Send,
+} from "lucide-react";
 import FileTree from "./FileTree";
 import ConstraintHUD from "./ConstraintHUD";
 import BriefPanel from "./BriefPanel";
 import EndScreen from "./EndScreen";
 import { readFile, getSession } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
+import { color } from "@/styles/tokens";
+import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
+import Pill from "@/components/ui/Pill";
 
 const Editor = dynamic(() => import("./Editor"), { ssr: false });
 const Terminal = dynamic(() => import("./Terminal"), { ssr: false });
@@ -16,21 +23,38 @@ const Messages = dynamic(() => import("./Messages"), { ssr: false });
 const DocsViewer = dynamic(() => import("./DocsViewer"), { ssr: false });
 const DeliverablePanel = dynamic(() => import("./DeliverablePanel"), { ssr: false });
 
-type RightTab = "brief" | "terminal" | "data" | "messages" | "assistant" | "docs" | "deliverable";
+type RightTab = "brief" | "docs" | "messages" | "data" | "terminal" | "assistant" | "deliverable";
 
-const TAB_ORDER: readonly RightTab[] = [
-  "brief", "terminal", "data", "messages", "assistant", "docs", "deliverable",
-] as const;
+// Reordered by candidate workflow: orient → communicate → execute → submit.
+// Icons via lucide; consistently sized at 14px so the underline strip stays
+// vertically tight.
+const TABS: ReadonlyArray<TabSpec<RightTab>> = [
+  { id: "brief",       label: "Brief",       icon: <FileText size={14} /> },
+  { id: "docs",        label: "Docs",        icon: <BookOpen size={14} /> },
+  { id: "messages",    label: "Messages",    icon: <MessageSquare size={14} /> },
+  { id: "data",        label: "Data",        icon: <Database size={14} /> },
+  { id: "terminal",    label: "Terminal",    icon: <TerminalSquare size={14} /> },
+  { id: "assistant",   label: "Assistant",   icon: <Sparkles size={14} /> },
+  { id: "deliverable", label: "Deliverable", icon: <Send size={14} /> },
+];
 
-const TAB_LABEL: Record<RightTab, string> = {
-  brief:       "Brief",
-  terminal:    "Terminal",
-  data:        "Data",
-  messages:    "Messages",
-  assistant:   "Assistant",
-  docs:        "Docs",
-  deliverable: "Deliverable",
-};
+// localStorage key for panel sizes — versioned so a future layout-shape change
+// doesn't restore a stale layout.
+const LAYOUT_KEY = "crucible.workspace.layout.v1";
+const DEFAULT_SIZES = [18, 50, 32]; // file tree / editor / tools
+
+function loadLayout(): number[] {
+  if (typeof window === "undefined") return DEFAULT_SIZES;
+  try {
+    const raw = window.localStorage.getItem(LAYOUT_KEY);
+    if (!raw) return DEFAULT_SIZES;
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed) && parsed.length === 3 && parsed.every((n) => typeof n === "number")) {
+      return parsed as number[];
+    }
+  } catch { /* fall through */ }
+  return DEFAULT_SIZES;
+}
 
 interface Props {
   sessionId: string;
@@ -39,11 +63,18 @@ interface Props {
 export default function Workspace({ sessionId }: Props) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
-  // Default to Brief on first mount so a fresh candidate sees the orientation
-  // panel; subsequent tab switches stick.
   const [rightTab, setRightTab] = useState<RightTab>("brief");
+  const [layout, setLayout] = useState<number[]>(DEFAULT_SIZES);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   const { init, setStatus, status, scenario } = useSessionStore();
+
+  // Hydrate panel layout once on mount so the PanelGroup mounts with the
+  // persisted sizes, not the defaults.
+  useEffect(() => {
+    setLayout(loadLayout());
+    setLayoutReady(true);
+  }, []);
 
   // On mount: fetch session metadata to initialize the store.
   useEffect(() => {
@@ -65,9 +96,6 @@ export default function Workspace({ sessionId }: Props) {
           },
         );
         if (s.status === "completed") setStatus("ended");
-        // A page reload after the token budget was already drained shouldn't
-        // re-enable the input — flip status immediately if the server says
-        // tokens are at/below zero.
         else if (s.scenarioTokensRemaining !== null && s.scenarioTokensRemaining <= 0) {
           setStatus("token_exhausted");
         }
@@ -92,6 +120,13 @@ export default function Workspace({ sessionId }: Props) {
     if (status === "active") setStatus("ended");
   }, [status, setStatus]);
 
+  const persistLayout = useCallback((sizes: number[]) => {
+    setLayout(sizes);
+    if (typeof window !== "undefined") {
+      try { window.localStorage.setItem(LAYOUT_KEY, JSON.stringify(sizes)); } catch { /* ignore */ }
+    }
+  }, []);
+
   return (
     <div
       style={{
@@ -99,184 +134,140 @@ export default function Workspace({ sessionId }: Props) {
         flexDirection: "column",
         height: "100vh",
         overflow: "hidden",
-        background: "#1e1e1e",
-        color: "#cccccc",
-        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+        background: color.bg.page,
+        color: color.text.primary,
       }}
     >
-      {/* Top scenario title row — full width, above the HUD. Renders nothing
-          when this session has no scenario bound (legacy generic mode). */}
-      {(scenario.title || scenario.role) && <ScenarioChrome />}
-
-      {/* Top constraint HUD — always visible, full width. */}
-      <ConstraintHUD />
-
-      {/* Main 3-column row */}
-      <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
-        {/* File tree */}
-        <div
-          style={{
-            width: 240,
-            minWidth: 240,
-            background: "#252526",
-            borderRight: "1px solid #404040",
-            overflowY: "auto",
-            flexShrink: 0,
-          }}
-        >
-          <FileTree
-            sessionId={sessionId}
-            onFileSelect={(path) => { void handleFileSelect(path); }}
-            selectedPath={selectedPath}
-          />
-        </div>
-
-        {/* Editor */}
-        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          <Editor
-            sessionId={sessionId}
-            path={selectedPath}
-            content={content}
-            onChange={setContent}
-          />
-        </div>
-
-        {/* Right column: 6-tab strip + always-mounted panes (display:none toggle
-            so the PTY WebSocket, messaging WS, and the chat HUD state survive
-            tab switches). */}
-        <div
-          style={{
-            width: 440,
-            minWidth: 440,
-            display: "flex",
-            flexDirection: "column",
-            borderLeft: "1px solid #404040",
-            flexShrink: 0,
-            overflow: "hidden",
-          }}
-        >
-          {/* Tab strip */}
-          <div
-            style={{
-              display: "flex",
-              background: "#2d2d2d",
-              borderBottom: "1px solid #404040",
-              flexShrink: 0,
-              userSelect: "none",
-              overflowX: "auto",
-            }}
-          >
-            {TAB_ORDER.map((tab) => {
-              const active = rightTab === tab;
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setRightTab(tab)}
-                  style={{
-                    padding: "6px 12px",
-                    background: "transparent",
-                    border: "none",
-                    borderBottom: active ? "2px solid #3794ff" : "2px solid transparent",
-                    color: active ? "#cccccc" : "#858585",
-                    fontSize: 11,
-                    fontFamily: "inherit",
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    flexShrink: 0,
-                  }}
-                >
-                  {TAB_LABEL[tab]}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Content area — all panes mounted, only the active one visible. */}
-          <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "brief" ? "block" : "none" }}>
-              <BriefPanel />
-            </div>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "terminal" ? "block" : "none" }}>
-              <Terminal sessionId={sessionId} onSessionEnd={handleSessionEnd} />
-            </div>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "data" ? "block" : "none" }}>
-              <DataExplorer sessionId={sessionId} />
-            </div>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "messages" ? "block" : "none" }}>
-              <Messages sessionId={sessionId} />
-            </div>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "assistant" ? "block" : "none" }}>
-              <ChatHUD />
-            </div>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "docs" ? "block" : "none" }}>
-              <DocsViewer sessionId={sessionId} />
-            </div>
-            <div style={{ position: "absolute", inset: 0, display: rightTab === "deliverable" ? "block" : "none" }}>
-              <DeliverablePanel sessionId={sessionId} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Session-ended overlay — covers the whole workspace. Acknowledgement
-          only; analysis runs server-side and there's no candidate-facing
-          scorecard view to link to. */}
-      {status === "ended" && <EndScreen />}
-    </div>
-  );
-}
-
-function ScenarioChrome() {
-  const { scenario } = useSessionStore();
-  const difficulty = scenario.difficulty;
-  const pillColor = difficulty === "mid" ? "#dcb67a" : "#858585";
-  return (
-    <div
-      style={{
-        height: 32,
-        flexShrink: 0,
-        background: "#2d2d2d",
-        borderBottom: "1px solid #404040",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 16px",
-      }}
-    >
-      <div
+      {/* Merged top chrome: scenario title + pill on the left, live HUD on the right.
+          Single 44px row replacing the prior two stacked 32px rows. */}
+      <header
         style={{
-          fontSize: 13,
-          color: "#ffffff",
-          fontWeight: 500,
-          letterSpacing: "-0.1px",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          height: 44,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "0 16px",
+          background: color.bg.panel,
+          borderBottom: `1px solid ${color.border.subtle}`,
         }}
       >
-        {scenario.title ?? "Untitled scenario"}
-      </div>
-      {(scenario.role || scenario.difficulty) && (
-        <span
+        <div
           style={{
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: pillColor,
-            border: `1px solid ${pillColor}`,
-            borderRadius: 999,
-            padding: "2px 8px",
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-            marginLeft: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            minWidth: 0,
+            flex: "0 1 auto",
           }}
         >
-          {[scenario.role, scenario.difficulty].filter(Boolean).join(" · ")}
-        </span>
-      )}
+          <div
+            style={{
+              fontSize: 13,
+              color: color.text.primary,
+              fontWeight: 600,
+              letterSpacing: "-0.1px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {scenario.title ?? "Crucible session"}
+          </div>
+          {scenario.difficulty && (
+            <Pill tone={scenario.difficulty === "mid" ? "warn" : "neutral"}>
+              {[scenario.role, scenario.difficulty].filter(Boolean).join(" · ")}
+            </Pill>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }} />
+        <ConstraintHUD />
+      </header>
+
+      {/* Resizable 3-pane workspace. PanelGroup auto-handles widths in
+          percentages. Mount-gate with `layoutReady` to avoid a layout flash
+          before localStorage hydrates. */}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {layoutReady && (
+          <PanelGroup
+            direction="horizontal"
+            onLayout={persistLayout}
+            style={{ height: "100%" }}
+          >
+            <Panel defaultSize={layout[0]} minSize={10}>
+              <div
+                style={{
+                  height: "100%",
+                  background: color.bg.panel,
+                  borderRight: `1px solid ${color.border.subtle}`,
+                  overflowY: "auto",
+                }}
+              >
+                <FileTree
+                  sessionId={sessionId}
+                  onFileSelect={(path) => { void handleFileSelect(path); }}
+                  selectedPath={selectedPath}
+                />
+              </div>
+            </Panel>
+            <PanelResizeHandle />
+            <Panel defaultSize={layout[1]} minSize={25}>
+              <div style={{ height: "100%", display: "flex", overflow: "hidden" }}>
+                <Editor
+                  sessionId={sessionId}
+                  path={selectedPath}
+                  content={content}
+                  onChange={setContent}
+                />
+              </div>
+            </Panel>
+            <PanelResizeHandle />
+            <Panel defaultSize={layout[2]} minSize={20}>
+              <div
+                style={{
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  background: color.bg.page,
+                  overflow: "hidden",
+                }}
+              >
+                <TabStrip
+                  tabs={TABS}
+                  value={rightTab}
+                  onChange={setRightTab}
+                  variant="underline"
+                />
+                <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "brief" ? "block" : "none" }}>
+                    <BriefPanel />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "docs" ? "block" : "none" }}>
+                    <DocsViewer sessionId={sessionId} />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "messages" ? "block" : "none" }}>
+                    <Messages sessionId={sessionId} />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "data" ? "block" : "none" }}>
+                    <DataExplorer sessionId={sessionId} />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "terminal" ? "block" : "none" }}>
+                    <Terminal sessionId={sessionId} onSessionEnd={handleSessionEnd} />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "assistant" ? "block" : "none" }}>
+                    <ChatHUD />
+                  </div>
+                  <div style={{ position: "absolute", inset: 0, display: rightTab === "deliverable" ? "block" : "none" }}>
+                    <DeliverablePanel sessionId={sessionId} />
+                  </div>
+                </div>
+              </div>
+            </Panel>
+          </PanelGroup>
+        )}
+      </div>
+
+      {status === "ended" && <EndScreen />}
     </div>
   );
 }

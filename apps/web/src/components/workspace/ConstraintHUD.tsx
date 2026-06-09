@@ -2,12 +2,14 @@
 import { useEffect, useState } from "react";
 import { getSession } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
+import { color } from "@/styles/tokens";
+import Stat from "@/components/ui/Stat";
 
-// Always-visible top bar showing the candidate's five scenario-mechanic
-// resources. Time and tokens and compute are LIVE (token + compute deductions
-// flow through chat / query response shapes; PTY-driven compute deductions
-// get picked up by the 3s poll). Money and memory are static context for the
-// MVP — hard enforcement is a future slice.
+// Horizontal live-resource readout designed to slot into the workspace's
+// merged top chrome row. Renders five Stat cells (Time / Tokens / Compute /
+// Money / Memory) plus a status badge when the AI assistant or platform
+// budget is exhausted. No wrapper background — the parent chrome row owns
+// padding and background.
 
 const POLL_INTERVAL_MS = 3_000;
 
@@ -33,49 +35,7 @@ function fmtTime(seconds: number): string {
   return `${m}:${s}`;
 }
 
-interface IndicatorProps {
-  label: string;
-  value: string;
-  denominator?: string | undefined;
-  color?: string | undefined;
-  context?: boolean | undefined;
-}
-
-function Indicator({ label, value, denominator, color, context }: IndicatorProps) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1, minWidth: 0 }}>
-      <div
-        style={{
-          fontSize: 9,
-          color: "#858585",
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          marginBottom: 2,
-        }}
-      >
-        {label}
-        {context && (
-          <span style={{ marginLeft: 5, color: "#555", fontStyle: "italic", letterSpacing: 0, textTransform: "none" }}>
-            (context)
-          </span>
-        )}
-      </div>
-      <div
-        style={{
-          fontSize: 13,
-          fontFamily: "'SF Mono', Menlo, Consolas, monospace",
-          fontVariantNumeric: "tabular-nums",
-          color: color ?? "#cccccc",
-        }}
-      >
-        {value}
-        {denominator && (
-          <span style={{ fontSize: 10, color: "#555", marginLeft: 4 }}>/ {denominator}</span>
-        )}
-      </div>
-    </div>
-  );
-}
+type Tone = "default" | "warn" | "error" | "muted";
 
 export default function ConstraintHUD() {
   const {
@@ -94,8 +54,6 @@ export default function ConstraintHUD() {
     if (status === "active") setStatus("ended");
   });
 
-  // Catch-all poll for balances that aren't echoed by chat/query responses
-  // (PTY-driven compute deductions, mainly). Stops when session ends.
   useEffect(() => {
     if (!sessionId || status !== "active") return;
     const tick = () => {
@@ -106,96 +64,82 @@ export default function ConstraintHUD() {
             setComputeMinutesRemaining(s.scenarioBalances.compute_minutes);
           }
         })
-        .catch(() => { /* transient — try again next tick */ });
+        .catch(() => { /* transient */ });
     };
     const id = setInterval(tick, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [sessionId, status, setTokensRemaining, setComputeMinutesRemaining]);
 
-  const timeColor =
-    remainingSec < 120 ? "#f48771" : remainingSec < 300 ? "#dcb67a" : "#cccccc";
+  const timeTone: Tone =
+    status !== "active" ? "error" : remainingSec < 120 ? "error" : remainingSec < 300 ? "warn" : "default";
 
-  const tokensColor =
-    tokensRemaining === null
-      ? "#858585"
-      : tokensRemaining <= 0
-        ? "#f48771"
-        : tokensRemaining < 20_000
-          ? "#dcb67a"
-          : "#cccccc";
+  const tokensTone: Tone =
+    tokensRemaining === null ? "muted"
+    : tokensRemaining <= 0 ? "error"
+    : tokensRemaining < 20_000 ? "warn"
+    : "default";
 
-  const computeColor =
-    computeMinutesRemaining === null
-      ? "#858585"
-      : computeMinutesRemaining <= 0
-        ? "#f48771"
-        : computeMinutesRemaining < 10
-          ? "#dcb67a"
-          : "#cccccc";
+  const computeTone: Tone =
+    computeMinutesRemaining === null ? "muted"
+    : computeMinutesRemaining <= 0 ? "error"
+    : computeMinutesRemaining < 10 ? "warn"
+    : "default";
 
-  // Static context — values come from scenarioConstraints (the frozen
-  // snapshot stashed at session creation).
-  const moneyUsd = scenarioConstraints?.money_usd;
-  const memoryMb = scenarioConstraints?.memory_mb;
-  const tokenBudget = scenarioConstraints?.tokens;
-  const computeBudget = scenarioConstraints?.compute_minutes;
-  const timeBudget = scenarioConstraints?.time_minutes;
+  const moneyUsd       = scenarioConstraints?.money_usd;
+  const memoryMb       = scenarioConstraints?.memory_mb;
+  const tokenBudget    = scenarioConstraints?.tokens;
+  const computeBudget  = scenarioConstraints?.compute_minutes;
+  const timeBudget     = scenarioConstraints?.time_minutes;
+
+  const timeValue =
+    status === "active" ? fmtTime(remainingSec)
+    : status === "ended" ? "ENDED"
+    : "OFF";
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 28,
-        padding: "6px 16px",
-        background: "#2d2d2d",
-        borderBottom: "1px solid #404040",
-        flexShrink: 0,
-        userSelect: "none",
-      }}
-    >
-      <Indicator
+    <div style={{ display: "flex", alignItems: "center", gap: 20, minWidth: 0 }}>
+      <Stat
         label="Time"
-        value={status === "active" ? fmtTime(remainingSec) : status === "ended" ? "ENDED" : "OFF"}
-        denominator={timeBudget ? `${timeBudget}m` : undefined}
-        color={status === "active" ? timeColor : "#f48771"}
+        value={timeValue}
+        denominator={timeBudget ? `/ ${timeBudget}m` : undefined}
+        tone={timeTone}
+        size="sm"
       />
-      <Indicator
+      <Stat
         label="Tokens"
         value={tokensRemaining !== null ? Math.max(0, tokensRemaining).toLocaleString("en-US") : "—"}
-        denominator={tokenBudget ? tokenBudget.toLocaleString("en-US") : undefined}
-        color={tokensColor}
+        denominator={tokenBudget ? `/ ${tokenBudget.toLocaleString("en-US")}` : undefined}
+        tone={tokensTone}
+        size="sm"
       />
-      <Indicator
+      <Stat
         label="Compute"
-        value={
-          computeMinutesRemaining !== null
-            ? `${Math.max(0, computeMinutesRemaining).toFixed(2)}m`
-            : "—"
-        }
-        denominator={computeBudget ? `${computeBudget}m` : undefined}
-        color={computeColor}
+        value={computeMinutesRemaining !== null ? `${Math.max(0, computeMinutesRemaining).toFixed(2)}m` : "—"}
+        denominator={computeBudget ? `/ ${computeBudget}m` : undefined}
+        tone={computeTone}
+        size="sm"
       />
-      <Indicator
+      <Stat
         label="Money"
         value={moneyUsd !== null && moneyUsd !== undefined ? `$${moneyUsd}` : "—"}
-        context
+        tone="muted"
+        size="sm"
       />
-      <Indicator
+      <Stat
         label="Memory"
-        value={memoryMb !== null && memoryMb !== undefined ? `${memoryMb.toLocaleString("en-US")} MB` : "—"}
-        context
+        value={memoryMb !== null && memoryMb !== undefined ? `${memoryMb.toLocaleString("en-US")}MB` : "—"}
+        tone="muted"
+        size="sm"
       />
-      <div style={{ flex: 1 }} />
       {status === "token_exhausted" && (
-        <div style={{ fontSize: 11, color: "#f48771", fontWeight: 500 }}>
+        <span style={{ fontSize: 11, color: color.error.base, fontWeight: 500, marginLeft: 8 }}>
           AI assistant locked
-        </div>
+        </span>
       )}
       {status === "budget_exhausted" && (
-        <div style={{ fontSize: 11, color: "#f48771", fontWeight: 500 }}>
-          Platform budget exhausted — session closed
-        </div>
+        <span style={{ fontSize: 11, color: color.error.base, fontWeight: 500, marginLeft: 8 }}>
+          Platform budget exhausted
+        </span>
       )}
     </div>
   );

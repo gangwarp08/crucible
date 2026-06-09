@@ -28,8 +28,8 @@ function MessageBubble({ row }: { row: ReviewTranscriptRow }) {
           maxWidth: "85%",
           padding: "8px 12px",
           borderRadius: isUser ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-          background: isUser ? "#094771" : "#2d2d2d",
-          color: "#cccccc",
+          background: isUser ? "rgba(124, 127, 255, 0.18)" : "#1c1c24",
+          color: "#e6e6ea",
           fontSize: 13,
           lineHeight: 1.55,
           whiteSpace: "pre-wrap",
@@ -42,8 +42,8 @@ function MessageBubble({ row }: { row: ReviewTranscriptRow }) {
         <div
           style={{
             fontSize: 10,
-            color: "#666",
-            fontFamily: "monospace",
+            color: "#6a6a78",
+            fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
             fontVariantNumeric: "tabular-nums",
           }}
         >
@@ -67,8 +67,8 @@ export default function TranscriptPanel({ transcript }: Props) {
   return (
     <section
       style={{
-        background: "#252526",
-        border: "1px solid #404040",
+        background: "#15151b",
+        border: "1px solid #2a2a36",
         borderRadius: 6,
         marginBottom: 16,
         overflow: "hidden",
@@ -77,21 +77,21 @@ export default function TranscriptPanel({ transcript }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#2d2d2d",
-          borderBottom: "1px solid #404040",
+          background: "#1c1c24",
+          borderBottom: "1px solid #2a2a36",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#858585", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Transcript
         </span>
-        <span style={{ fontSize: 11, color: "#666" }}>{turnRows.length} turns</span>
+        <span style={{ fontSize: 11, color: "#6a6a78" }}>{turnRows.length} turns</span>
       </header>
 
       {systemRows.length > 0 && (
-        <div style={{ borderBottom: "1px solid #353535" }}>
+        <div style={{ borderBottom: "1px solid #22222b" }}>
           <button
             onClick={() => setSystemOpen((o) => !o)}
             style={{
@@ -100,7 +100,7 @@ export default function TranscriptPanel({ transcript }: Props) {
               padding: "8px 16px",
               background: "transparent",
               border: "none",
-              color: "#858585",
+              color: "#9999a3",
               fontSize: 11,
               cursor: "pointer",
               letterSpacing: "0.04em",
@@ -117,12 +117,12 @@ export default function TranscriptPanel({ transcript }: Props) {
                   scrollMarginTop: 16,
                   padding: "8px 16px 12px 32px",
                   fontSize: 12,
-                  color: "#888",
+                  color: "#9999a3",
                   lineHeight: 1.55,
                   whiteSpace: "pre-wrap",
-                  fontFamily: "monospace",
-                  background: "#1e1e1e",
-                  borderTop: "1px solid #353535",
+                  fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                  background: "#0c0c10",
+                  borderTop: "1px solid #22222b",
                 }}
               >
                 {r.content}
@@ -133,7 +133,7 @@ export default function TranscriptPanel({ transcript }: Props) {
 
       <div style={{ padding: "12px 0", maxHeight: 480, overflowY: "auto" }}>
         {turnRows.length === 0 ? (
-          <div style={{ padding: "24px 16px", color: "#666", fontSize: 13, textAlign: "center" }}>
+          <div style={{ padding: "24px 16px", color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
             No turns
           </div>
         ) : (

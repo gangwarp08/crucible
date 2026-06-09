@@ -2,6 +2,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useSessionStore } from "@/stores/sessionStore";
 import { sendChat, type ChatError } from "@/lib/api";
+import { color, font, radius } from "@/styles/tokens";
+import Bubble from "@/components/ui/Bubble";
+import Button from "@/components/ui/Button";
+import SectionLabel from "@/components/ui/SectionLabel";
 
 function isChatError(r: object): r is ChatError {
   return "error" in r;
@@ -9,12 +13,7 @@ function isChatError(r: object): r is ChatError {
 
 export default function ChatHUD() {
   const {
-    sessionId,
-    status,
-    addMessage,
-    setSpendBudget,
-    setStatus,
-    setTokensRemaining,
+    sessionId, status, addMessage, setSpendBudget, setStatus, setTokensRemaining,
   } = useSessionStore();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -22,10 +21,7 @@ export default function ChatHUD() {
   const tokensRemaining = useSessionStore((s) => s.tokensRemaining);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll on new messages.
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const canSend = status === "active" && !sending && input.trim().length > 0 && sessionId !== null;
 
@@ -35,20 +31,16 @@ export default function ChatHUD() {
     setInput("");
     setSending(true);
     addMessage({ role: "user", text: prompt });
-
     try {
       const res = await sendChat(sessionId, prompt);
       if (isChatError(res)) {
         if (res.error === "budget_exhausted") {
           setStatus("budget_exhausted");
-          if (res.spend !== undefined && res.budget !== undefined) {
-            setSpendBudget(res.spend, res.budget);
-          }
+          if (res.spend !== undefined && res.budget !== undefined) setSpendBudget(res.spend, res.budget);
         } else if (res.error === "token_budget_exhausted") {
           setStatus("token_exhausted");
-          if (res.scenarioTokensRemaining !== undefined && res.scenarioTokensRemaining !== null) {
+          if (res.scenarioTokensRemaining !== undefined && res.scenarioTokensRemaining !== null)
             setTokensRemaining(res.scenarioTokensRemaining);
-          }
         } else if (res.error === "session_ended") {
           setStatus("ended");
         } else {
@@ -59,12 +51,7 @@ export default function ChatHUD() {
         setSpendBudget(res.spend, res.budget);
         if (res.scenarioTokensRemaining !== null) {
           setTokensRemaining(res.scenarioTokensRemaining);
-          // The call that drives the balance through zero is allowed to
-          // complete; the NEXT call hits the pre-flight reject. Flip status
-          // here so the input disables immediately without an extra reject.
-          if (res.scenarioTokensRemaining <= 0) {
-            setStatus("token_exhausted");
-          }
+          if (res.scenarioTokensRemaining <= 0) setStatus("token_exhausted");
         }
       }
     } catch {
@@ -76,57 +63,38 @@ export default function ChatHUD() {
 
   const disabled = status !== "active";
   const placeholderText =
-    status === "budget_exhausted"
-      ? "Budget reached"
-      : status === "token_exhausted"
-        ? "Token budget reached"
-        : status === "ended"
-          ? "Session ended"
-          : sending
-            ? "Waiting for response…"
-            : "Ask the AI assistant…";
+    status === "budget_exhausted" ? "Budget reached"
+    : status === "token_exhausted" ? "Token budget reached"
+    : status === "ended" ? "Session ended"
+    : sending ? "Waiting for response…"
+    : "Ask the AI assistant…";
+
+  const tokensColor =
+    tokensRemaining === null ? color.text.muted
+    : tokensRemaining <= 0 ? color.error.base
+    : tokensRemaining < 20_000 ? color.warn.base
+    : color.text.muted;
 
   return (
-    <div
-      style={{
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: color.bg.page }}>
+      <div style={{
+        padding: "8px 14px",
+        background: color.bg.elevated,
+        borderBottom: `1px solid ${color.border.subtle}`,
+        flexShrink: 0,
         display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        background: "#1e1e1e",
-        borderTop: "1px solid #404040",
-      }}
-    >
-      {/* Header — AI ASSISTANT label + live token balance */}
-      <div
-        style={{
-          padding: "5px 12px",
-          background: "#2d2d2d",
-          borderBottom: "1px solid #404040",
-          fontSize: 12,
-          color: "#858585",
-          userSelect: "none",
-          letterSpacing: "0.04em",
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
-        <span>AI ASSISTANT</span>
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}>
+        <SectionLabel>AI Assistant</SectionLabel>
         {tokensRemaining !== null && (
           <span
             style={{
               fontSize: 11,
-              fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+              fontFamily: font.mono,
               fontVariantNumeric: "tabular-nums",
-              color:
-                tokensRemaining <= 0
-                  ? "#f48771"
-                  : tokensRemaining < 20_000
-                    ? "#dcb67a"
-                    : "#858585",
-              letterSpacing: 0,
+              color: tokensColor,
             }}
             title="In-scenario AI assistant token budget. Persona chat does not deduct from this."
           >
@@ -135,146 +103,79 @@ export default function ChatHUD() {
         )}
       </div>
 
-      {/* Status banner */}
       {status !== "active" && (
-        <div
-          style={{
-            padding: "8px 12px",
-            background: status === "ended" ? "#37373d" : "#4b2020",
-            color: status === "ended" ? "#cccccc" : "#f48771",
-            fontSize: 12,
-            textAlign: "center",
-            flexShrink: 0,
-          }}
-        >
+        <div style={{
+          padding: "10px 14px",
+          background: status === "ended" ? color.bg.elevated : color.error.soft,
+          color: status === "ended" ? color.text.secondary : color.error.base,
+          fontSize: 12,
+          textAlign: "center",
+          flexShrink: 0,
+          borderBottom: `1px solid ${color.border.subtle}`,
+        }}>
           {status === "ended"
             ? "Session has ended. Sandbox and keys have been revoked."
             : status === "token_exhausted"
-              ? "AI assistant token budget exhausted. Work unaided — your real-time judgment from here on is part of the rubric."
+              ? "AI assistant token budget exhausted. Work unaided from here on."
               : "Budget exhausted. Session closed."}
         </div>
       )}
 
-      {/* Message list */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "8px 0",
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-        }}
-      >
+      <div style={{
+        flex: 1, overflowY: "auto", padding: "14px 16px",
+        display: "flex", flexDirection: "column", gap: 10,
+      }}>
         {messages.length === 0 && (
-          <div
-            style={{
-              color: "#555",
-              fontSize: 12,
-              textAlign: "center",
-              padding: "24px 12px",
-              lineHeight: 1.5,
-            }}
-          >
+          <div style={{ color: color.text.muted, fontSize: 12, textAlign: "center", padding: "32px 12px", lineHeight: 1.6 }}>
             Ask a question or request a hint.
           </div>
         )}
         {messages.map((msg, i) => (
-          <div
+          <Bubble
             key={i}
-            style={{
-              padding: "6px 12px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: msg.role === "user" ? "flex-end" : "flex-start",
-            }}
+            role={msg.role === "user" ? "self" : "other"}
+            accentColor={msg.role === "user" ? color.persona.candidate : color.persona.assistant}
+            label={msg.role === "user" ? undefined : "Assistant"}
           >
-            <div
-              style={{
-                maxWidth: "85%",
-                padding: "6px 10px",
-                borderRadius: msg.role === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                background: msg.role === "user" ? "#094771" : "#2d2d2d",
-                color: "#cccccc",
-                fontSize: 13,
-                lineHeight: 1.5,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {msg.text}
-            </div>
-          </div>
+            {msg.text}
+          </Bubble>
         ))}
         {sending && (
-          <div style={{ padding: "6px 12px" }}>
-            <div
-              style={{
-                display: "inline-block",
-                padding: "6px 10px",
-                borderRadius: "12px 12px 12px 2px",
-                background: "#2d2d2d",
-                color: "#555",
-                fontSize: 13,
-              }}
-            >
-              ···
-            </div>
-          </div>
+          <Bubble role="other" accentColor={color.persona.assistant} label="Assistant">
+            <span style={{ color: color.text.muted, fontSize: 13 }}>···</span>
+          </Bubble>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input row */}
-      <div
-        style={{
-          padding: "8px 10px",
-          borderTop: "1px solid #404040",
-          display: "flex",
-          gap: 6,
-          flexShrink: 0,
-          background: "#252526",
-        }}
-      >
+      <div style={{
+        padding: "10px 12px",
+        borderTop: `1px solid ${color.border.subtle}`,
+        display: "flex", gap: 8, flexShrink: 0,
+        background: color.bg.panel,
+      }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void handleSend();
-            }
-          }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
           disabled={disabled}
           placeholder={placeholderText}
           style={{
             flex: 1,
-            background: disabled ? "#1e1e1e" : "#3c3c3c",
-            border: "1px solid #555",
-            borderRadius: 4,
-            color: disabled ? "#555" : "#cccccc",
+            background: color.bg.input,
+            border: `1px solid ${color.border.default}`,
+            borderRadius: radius.sm,
+            color: disabled ? color.text.muted : color.text.primary,
+            fontFamily: font.sans,
             fontSize: 13,
-            padding: "5px 8px",
+            padding: "7px 10px",
             outline: "none",
             cursor: disabled ? "not-allowed" : "text",
           }}
         />
-        <button
-          onClick={() => { void handleSend(); }}
-          disabled={!canSend}
-          style={{
-            background: canSend ? "#0e639c" : "#37373d",
-            color: canSend ? "#fff" : "#555",
-            border: "none",
-            borderRadius: 4,
-            padding: "5px 12px",
-            fontSize: 13,
-            cursor: canSend ? "pointer" : "not-allowed",
-            flexShrink: 0,
-          }}
-        >
+        <Button variant="primary" size="md" disabled={!canSend} onClick={() => { void handleSend(); }}>
           Send
-        </button>
+        </Button>
       </div>
     </div>
   );

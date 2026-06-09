@@ -66,13 +66,13 @@ function SortHeader({
         textAlign: align,
         padding: "10px 14px",
         cursor: "pointer",
-        color: active ? "#ffffff" : "#858585",
+        color: active ? "#e6e6ea" : "#9999a3",
         fontSize: 11,
         fontWeight: 600,
         textTransform: "uppercase",
         letterSpacing: "0.06em",
         userSelect: "none",
-        borderBottom: "1px solid #404040",
+        borderBottom: "1px solid #2a2a36",
         whiteSpace: "nowrap",
       }}
     >
@@ -155,19 +155,19 @@ export default function SessionsTable() {
         style={{
           padding: 32,
           textAlign: "center",
-          color: "#f48771",
-          background: "#252526",
-          border: "1px solid #404040",
+          color: "#ff7a7a",
+          background: "#15151b",
+          border: "1px solid #2a2a36",
           borderRadius: 6,
         }}
       >
         <div style={{ fontSize: 14, marginBottom: 12 }}>Failed to load sessions</div>
-        <div style={{ fontSize: 12, color: "#858585", marginBottom: 16 }}>{error}</div>
+        <div style={{ fontSize: 12, color: "#9999a3", marginBottom: 16 }}>{error}</div>
         <button
           onClick={() => void load()}
           style={{
-            background: "#0e639c",
-            color: "#fff",
+            background: "#7c7fff",
+            color: "#e6e6ea",
             border: "none",
             padding: "6px 18px",
             borderRadius: 4,
@@ -183,20 +183,20 @@ export default function SessionsTable() {
 
   if (sessions === null) {
     return (
-      <div style={{ background: "#252526", border: "1px solid #404040", borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ background: "#15151b", border: "1px solid #2a2a36", borderRadius: 6, overflow: "hidden" }}>
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
             style={{
               padding: "12px 16px",
-              borderBottom: "1px solid #353535",
+              borderBottom: "1px solid #22222b",
               display: "flex",
               gap: 16,
               opacity: 0.4 - i * 0.08,
             }}
           >
             {[80, 120, 80, 60, 60, 50, 50, 50].map((w, j) => (
-              <div key={j} style={{ width: w, height: 10, background: "#404040", borderRadius: 4 }} />
+              <div key={j} style={{ width: w, height: 10, background: "#2a2a36", borderRadius: 4 }} />
             ))}
           </div>
         ))}
@@ -214,7 +214,7 @@ export default function SessionsTable() {
           gap: 12,
           marginBottom: 12,
           fontSize: 13,
-          color: "#858585",
+          color: "#9999a3",
         }}
       >
         <span>{filteredSorted.length} of {sessions.length} sessions</span>
@@ -225,8 +225,8 @@ export default function SessionsTable() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              background: "#3c3c3c",
-              color: "#cccccc",
+              background: "#0f0f14",
+              color: "#e6e6ea",
               border: "1px solid #555",
               borderRadius: 4,
               padding: "4px 8px",
@@ -249,9 +249,9 @@ export default function SessionsTable() {
           style={{
             padding: 48,
             textAlign: "center",
-            color: "#858585",
-            background: "#252526",
-            border: "1px solid #404040",
+            color: "#9999a3",
+            background: "#15151b",
+            border: "1px solid #2a2a36",
             borderRadius: 6,
             fontSize: 14,
           }}
@@ -263,35 +263,35 @@ export default function SessionsTable() {
       ) : (
         <div
           style={{
-            background: "#252526",
-            border: "1px solid #404040",
+            background: "#15151b",
+            border: "1px solid #2a2a36",
             borderRadius: 6,
             overflow: "hidden",
           }}
         >
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead style={{ background: "#2d2d2d" }}>
+            <thead style={{ background: "#1c1c24" }}>
               <tr>
-                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
                   Session
                 </th>
-                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
                   Status
                 </th>
                 <SortHeader label="Overall"  sortKey="overall_score" currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
                 <SortHeader label="Created"  sortKey="created_at"  currentKey={sortKey} currentDir={sortDir} align="left"  onSort={handleSort} />
-                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
                   Ended
                 </th>
                 <SortHeader label="Duration" sortKey="duration_ms" currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
                 <SortHeader label="Spend"    sortKey="spend_usd"   currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
-                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
+                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
                   Msgs
                 </th>
-                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
+                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
                   Files
                 </th>
-                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
+                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
                   Events
                 </th>
               </tr>
@@ -314,18 +314,18 @@ function Row({ session: s }: { session: ReviewSession }) {
     textAlign: "right",
     padding: "10px 14px",
     fontVariantNumeric: "tabular-nums",
-    fontFamily: "monospace",
-    color: "#cccccc",
+    fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+    color: "#e6e6ea",
   };
-  const cell: React.CSSProperties = { padding: "10px 14px", color: "#cccccc" };
+  const cell: React.CSSProperties = { padding: "10px 14px", color: "#e6e6ea" };
 
   return (
     <tr
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        background: hover ? "#2a2d2e" : "transparent",
-        borderBottom: "1px solid #353535",
+        background: hover ? "#1f1f28" : "transparent",
+        borderBottom: "1px solid #22222b",
         transition: "background 0.1s",
       }}
     >
@@ -333,9 +333,9 @@ function Row({ session: s }: { session: ReviewSession }) {
         <Link
           href={`/review/${s.id}`}
           style={{
-            color: hover ? "#4ec9ff" : "#3794ff",
+            color: hover ? "#9396ff" : "#7c7fff",
             textDecoration: "none",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
             fontSize: 12,
           }}
         >
@@ -345,29 +345,29 @@ function Row({ session: s }: { session: ReviewSession }) {
       <td style={cell}>
         <StatusBadge status={s.status} />
       </td>
-      <td style={{ ...numCell, color: "#cccccc" }}>
+      <td style={{ ...numCell, color: "#e6e6ea" }}>
         {typeof s.overall_score === "number" ? (
           <>
             <span style={{ color: scoreColor(Math.round(s.overall_score)), fontWeight: 600 }}>
               {s.overall_score.toFixed(2)}
             </span>
-            <span style={{ color: "#666", fontSize: 11, marginLeft: 2 }}>/5</span>
+            <span style={{ color: "#6a6a78", fontSize: 11, marginLeft: 2 }}>/5</span>
           </>
         ) : s.evaluation_status === "error" ? (
           <span
-            style={{ color: "#f48771", fontWeight: 500, fontSize: 11 }}
+            style={{ color: "#ff7a7a", fontWeight: 500, fontSize: 11 }}
             title="Evaluation errored; open the session to re-run"
           >
             ERR
           </span>
         ) : (
-          <span style={{ color: "#555" }}>—</span>
+          <span style={{ color: "#6a6a78" }}>—</span>
         )}
       </td>
-      <td style={{ ...cell, color: "#858585", fontSize: 12, whiteSpace: "nowrap" }}>
+      <td style={{ ...cell, color: "#9999a3", fontSize: 12, whiteSpace: "nowrap" }}>
         {formatDate(s.created_at)}
       </td>
-      <td style={{ ...cell, color: "#858585", fontSize: 12, whiteSpace: "nowrap" }}>
+      <td style={{ ...cell, color: "#9999a3", fontSize: 12, whiteSpace: "nowrap" }}>
         {formatDate(s.ended_at)}
       </td>
       <td style={numCell}>{formatDuration(s.duration_ms)}</td>

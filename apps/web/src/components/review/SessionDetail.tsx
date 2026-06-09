@@ -24,9 +24,9 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
     <main
       style={{
         minHeight: "100vh",
-        background: "#1e1e1e",
-        color: "#cccccc",
-        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+        background: "#0c0c10",
+        color: "#e6e6ea",
+        fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
         padding: "24px 32px",
       }}
     >

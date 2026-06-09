@@ -5,26 +5,24 @@ export default function ReviewPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#1e1e1e",
-        color: "#cccccc",
-        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-        padding: "32px 40px",
+        padding: "40px 40px 80px",
+        overflowY: "auto",
       }}
     >
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <header style={{ marginBottom: 24 }}>
+        <header style={{ marginBottom: 32 }}>
           <h1
             style={{
-              fontSize: 24,
+              fontSize: 26,
               fontWeight: 600,
-              color: "#ffffff",
+              color: "#e6e6ea",
               margin: 0,
-              letterSpacing: "-0.3px",
+              letterSpacing: "-0.4px",
             }}
           >
             Sessions
           </h1>
-          <p style={{ color: "#858585", fontSize: 13, margin: "6px 0 0" }}>
+          <p style={{ color: "#9999a3", fontSize: 13, margin: "8px 0 0" }}>
             Recruiter review · all sessions across candidates
           </p>
         </header>

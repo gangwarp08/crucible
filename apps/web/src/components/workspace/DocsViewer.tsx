@@ -2,18 +2,22 @@
 import { useEffect, useState } from "react";
 import { listScenarioDocs, recordDocView, type ScenarioDoc } from "@/lib/api";
 import MarkdownView from "./MarkdownView";
+import { color } from "@/styles/tokens";
+import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
+import SectionLabel from "@/components/ui/SectionLabel";
 
-interface Props {
-  sessionId: string;
-}
+interface Props { sessionId: string; }
 
+/** Top tab strip (one per doc) + body. Replaces the prior 180px nested
+ *  sidebar — the right pane is now narrower-by-default after the
+ *  resizable-panels rework, so a horizontal tab strip uses the width far
+ *  more efficiently than a fixed sub-sidebar. */
 export default function DocsViewer({ sessionId }: Props) {
   const [docs, setDocs] = useState<ScenarioDoc[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load doc list once per sessionId mount.
   useEffect(() => {
     let cancelled = false;
     listScenarioDocs(sessionId)
@@ -21,8 +25,6 @@ export default function DocsViewer({ sessionId }: Props) {
         if (cancelled) return;
         setDocs(d);
         if (d.length > 0) {
-          // Auto-select + fire view event for the first doc so recruiter
-          // timeline always shows "candidate opened Docs" at minimum.
           setSelectedId(d[0]!.id);
           void recordDocView(sessionId, d[0]!.id);
         }
@@ -44,95 +46,54 @@ export default function DocsViewer({ sessionId }: Props) {
 
   const selected = docs.find((d) => d.id === selectedId);
 
+  // Truncate long titles so the tab strip stays one row.
+  const tabs: TabSpec<string>[] = docs.map((d) => ({
+    id: d.id,
+    label: d.title.length > 28 ? d.title.slice(0, 26) + "…" : d.title,
+  }));
+
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100%",
-        background: "#1e1e1e",
-        overflow: "hidden",
-      }}
-    >
-      {/* Doc list */}
-      <div
-        style={{
-          width: 180,
-          minWidth: 180,
-          background: "#252526",
-          borderRight: "1px solid #404040",
-          overflowY: "auto",
-          flexShrink: 0,
-        }}
-      >
-        <div
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: color.bg.page, overflow: "hidden" }}>
+      <div style={{
+        padding: "8px 14px",
+        background: color.bg.elevated,
+        borderBottom: `1px solid ${color.border.subtle}`,
+        flexShrink: 0,
+      }}>
+        <SectionLabel>Reference Docs</SectionLabel>
+      </div>
+
+      {docs.length > 0 && selectedId && (
+        <TabStrip
+          tabs={tabs}
+          value={selectedId}
+          onChange={selectDoc}
+          variant="pill"
           style={{
-            padding: "5px 12px",
-            fontSize: 11,
-            color: "#858585",
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            borderBottom: "1px solid #404040",
-            userSelect: "none",
+            background: color.bg.panel,
+            borderBottom: `1px solid ${color.border.subtle}`,
+            padding: "6px 10px",
           }}
-        >
-          Reference Docs
-        </div>
+        />
+      )}
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px" }}>
         {loading && (
-          <div style={{ padding: "10px 12px", fontSize: 12, color: "#555" }}>
+          <div style={{ color: color.text.muted, fontSize: 12, textAlign: "center", padding: "32px 12px" }}>
             Loading…
           </div>
         )}
         {error && (
-          <div style={{ padding: "10px 12px", fontSize: 12, color: "#f48771" }}>
+          <div style={{ color: color.error.base, fontSize: 12, padding: "12px 16px", background: color.error.soft, borderRadius: 6 }}>
             {error}
           </div>
         )}
         {!loading && !error && docs.length === 0 && (
-          <div style={{ padding: "10px 12px", fontSize: 12, color: "#555" }}>
+          <div style={{ color: color.text.muted, fontSize: 12, textAlign: "center", padding: "32px 12px" }}>
             No docs for this scenario.
           </div>
         )}
-        {docs.map((d) => {
-          const active = d.id === selectedId;
-          return (
-            <button
-              key={d.id}
-              onClick={() => selectDoc(d.id)}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "8px 12px",
-                background: active ? "#094771" : "transparent",
-                color: active ? "#ffffff" : "#cccccc",
-                border: "none",
-                borderBottom: "1px solid #2d2d2d",
-                fontSize: 12,
-                fontFamily: "inherit",
-                cursor: "pointer",
-              }}
-            >
-              {d.title}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Doc body */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "16px 20px",
-        }}
-      >
-        {selected ? (
-          <MarkdownView source={selected.body} />
-        ) : !loading && !error ? (
-          <div style={{ color: "#555", fontSize: 12, textAlign: "center", paddingTop: 32 }}>
-            Select a document.
-          </div>
-        ) : null}
+        {selected && <MarkdownView source={selected.body} />}
       </div>
     </div>
   );

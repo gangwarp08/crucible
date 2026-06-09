@@ -1,13 +1,12 @@
 "use client";
 import { useState, useRef } from "react";
 import { runQuery, type QueryResult } from "@/lib/api";
+import { color, font, radius } from "@/styles/tokens";
+import Button from "@/components/ui/Button";
 
-interface Props {
-  sessionId: string;
-}
+interface Props { sessionId: string; }
 
-const STARTER_SQL =
-  "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;";
+const STARTER_SQL = "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;";
 
 export default function DataExplorer({ sessionId }: Props) {
   const [sql, setSql] = useState(STARTER_SQL);
@@ -26,9 +25,7 @@ export default function DataExplorer({ sessionId }: Props) {
       const res = await runQuery(sessionId, sql.trim());
       setResult(res);
     } catch (err) {
-      setTransportError(
-        err instanceof Error ? err.message : "Network error — please retry.",
-      );
+      setTransportError(err instanceof Error ? err.message : "Network error — please retry.");
       setResult(null);
     } finally {
       setRunning(false);
@@ -36,7 +33,6 @@ export default function DataExplorer({ sessionId }: Props) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Cmd/Ctrl + Enter to run.
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       void handleRun();
@@ -44,27 +40,14 @@ export default function DataExplorer({ sessionId }: Props) {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        background: "#1e1e1e",
-        overflow: "hidden",
-      }}
-    >
-      {/* SQL editor */}
-      <div
-        style={{
-          padding: "8px 10px",
-          background: "#252526",
-          borderBottom: "1px solid #404040",
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          flexShrink: 0,
-        }}
-      >
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: color.bg.page, overflow: "hidden" }}>
+      <div style={{
+        padding: "10px 12px",
+        background: color.bg.panel,
+        borderBottom: `1px solid ${color.border.subtle}`,
+        display: "flex", flexDirection: "column", gap: 8,
+        flexShrink: 0,
+      }}>
         <textarea
           ref={textareaRef}
           value={sql}
@@ -76,135 +59,81 @@ export default function DataExplorer({ sessionId }: Props) {
             width: "100%",
             minHeight: 96,
             maxHeight: 200,
-            background: "#3c3c3c",
-            border: "1px solid #555",
-            borderRadius: 4,
-            color: "#cccccc",
+            background: color.bg.input,
+            border: `1px solid ${color.border.default}`,
+            borderRadius: radius.sm,
+            color: color.text.primary,
             fontSize: 12,
-            fontFamily: "'SF Mono', Menlo, Consolas, 'Courier New', monospace",
-            padding: "8px 10px",
+            fontFamily: font.mono,
+            padding: "10px 12px",
             outline: "none",
             resize: "vertical",
-            lineHeight: 1.4,
+            lineHeight: 1.45,
           }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
-            onClick={() => { void handleRun(); }}
-            disabled={!canRun}
-            style={{
-              background: canRun ? "#0e639c" : "#37373d",
-              color: canRun ? "#fff" : "#555",
-              border: "none",
-              borderRadius: 4,
-              padding: "5px 14px",
-              fontSize: 13,
-              cursor: canRun ? "pointer" : "not-allowed",
-            }}
-          >
-            {running ? "Running…" : "Run"}
-          </button>
-          <div style={{ fontSize: 11, color: "#858585", flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Button variant="primary" size="md" disabled={!canRun} onClick={() => { void handleRun(); }}>
+            {running ? "Running…" : "Run query"}
+          </Button>
+          <div style={{ fontSize: 11, color: color.text.muted, flex: 1, fontFamily: font.mono, fontVariantNumeric: "tabular-nums" }}>
             {result?.status === "ok" && (
               <>
-                {result.rowCount} row{result.rowCount === 1 ? "" : "s"} in {result.durationMs} ms
+                {result.rowCount} row{result.rowCount === 1 ? "" : "s"} · {result.durationMs}ms
                 {result.truncated && (
-                  <span style={{ color: "#dcdcaa", marginLeft: 8 }}>
-                    (showing first 500 — add a LIMIT or aggregate)
+                  <span style={{ color: color.warn.base, marginLeft: 10 }}>
+                    showing first 500 — add a LIMIT or aggregate
                   </span>
                 )}
               </>
             )}
             {result?.status === "error" && (
-              <span style={{ color: "#858585" }}>
-                error in {result.durationMs} ms
-              </span>
+              <span>error in {result.durationMs}ms</span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Transport error banner */}
       {transportError && (
-        <div
-          style={{
-            padding: "8px 12px",
-            background: "#4b2020",
-            color: "#f48771",
-            fontSize: 12,
-            flexShrink: 0,
-          }}
-        >
-          {transportError}
-        </div>
+        <Banner>{transportError}</Banner>
       )}
-
-      {/* SQL error banner */}
       {result?.status === "error" && (
-        <div
-          style={{
-            padding: "10px 12px",
-            background: "#4b2020",
-            color: "#f48771",
-            fontSize: 12,
-            fontFamily: "'SF Mono', Menlo, Consolas, monospace",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            flexShrink: 0,
-            borderBottom: "1px solid #404040",
-          }}
-        >
-          {result.error}
-        </div>
+        <Banner mono>{result.error}</Banner>
       )}
 
-      {/* Results table */}
-      <div style={{ flex: 1, overflow: "auto", padding: 10 }}>
+      <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
         {result?.status === "ok" ? (
           result.rows.length === 0 ? (
-            <div
-              style={{
-                color: "#555",
-                fontSize: 12,
-                textAlign: "center",
-                padding: "32px 12px",
-              }}
-            >
-              Query returned 0 rows.
-            </div>
+            <Empty>Query returned 0 rows.</Empty>
           ) : (
-            <div
-              style={{
-                background: "#252526",
-                border: "1px solid #404040",
-                borderRadius: 6,
-                overflow: "hidden",
-              }}
-            >
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: 12,
-                  fontFamily: "'SF Mono', Menlo, Consolas, monospace",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
+            <div style={{
+              background: color.bg.panel,
+              border: `1px solid ${color.border.subtle}`,
+              borderRadius: radius.md,
+              overflow: "hidden",
+            }}>
+              <table style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 12,
+                fontFamily: font.mono,
+                fontVariantNumeric: "tabular-nums",
+              }}>
                 <thead>
-                  <tr style={{ background: "#2d2d2d" }}>
+                  <tr style={{ background: color.bg.elevated }}>
                     {result.columns.map((col) => (
                       <th
                         key={col}
                         style={{
-                          padding: "8px 12px",
+                          padding: "10px 14px",
                           textAlign: "left",
-                          fontSize: 11,
-                          color: "#858585",
+                          fontSize: 10,
+                          color: color.text.muted,
                           textTransform: "uppercase",
-                          letterSpacing: "0.04em",
+                          letterSpacing: "0.08em",
                           fontWeight: 600,
-                          borderBottom: "1px solid #404040",
+                          borderBottom: `1px solid ${color.border.subtle}`,
                           whiteSpace: "nowrap",
+                          fontFamily: font.sans,
                         }}
                       >
                         {col}
@@ -217,15 +146,16 @@ export default function DataExplorer({ sessionId }: Props) {
                     <tr
                       key={ri}
                       style={{
-                        borderBottom: ri < result.rows.length - 1 ? "1px solid #2d2d2d" : "none",
+                        borderBottom: ri < result.rows.length - 1 ? `1px solid ${color.border.subtle}` : "none",
+                        background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
                       }}
                     >
                       {result.columns.map((_, ci) => (
                         <td
                           key={ci}
                           style={{
-                            padding: "6px 12px",
-                            color: "#cccccc",
+                            padding: "8px 14px",
+                            color: color.text.primary,
                             whiteSpace: "nowrap",
                             verticalAlign: "top",
                           }}
@@ -240,23 +170,40 @@ export default function DataExplorer({ sessionId }: Props) {
             </div>
           )
         ) : !result && !transportError ? (
-          <div
-            style={{
-              color: "#555",
-              fontSize: 12,
-              textAlign: "center",
-              padding: "32px 12px",
-              lineHeight: 1.6,
-            }}
-          >
+          <Empty>
             Run a query to explore the read-only customer database.
-            <br />
-            <span style={{ fontSize: 11 }}>
-              Hint: <code>sqlite_master</code> lists tables.
-            </span>
-          </div>
+            <div style={{ marginTop: 4, fontSize: 11 }}>
+              Hint: <code style={{ fontFamily: font.mono }}>sqlite_master</code> lists tables.
+            </div>
+          </Empty>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function Banner({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <div style={{
+      padding: "10px 14px",
+      background: color.error.soft,
+      color: color.error.base,
+      fontSize: 12,
+      fontFamily: mono ? font.mono : font.sans,
+      whiteSpace: "pre-wrap",
+      wordBreak: "break-word",
+      flexShrink: 0,
+      borderBottom: `1px solid ${color.border.subtle}`,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ color: color.text.muted, fontSize: 12, textAlign: "center", padding: "40px 16px", lineHeight: 1.6 }}>
+      {children}
     </div>
   );
 }

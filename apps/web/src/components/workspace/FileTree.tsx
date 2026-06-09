@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { listFiles, type FileEntry } from "@/lib/api";
+import { color } from "@/styles/tokens";
+import SectionLabel from "@/components/ui/SectionLabel";
 
 interface Props {
   sessionId: string;
@@ -42,34 +44,28 @@ function TreeNode({ entry, sessionId, depth, onFileSelect, selectedPath }: NodeP
     <div>
       <div
         onClick={() => { void handleClick(); }}
+        data-hover
+        data-selected={isSelected ? "true" : undefined}
         style={{
-          paddingLeft: 8 + depth * 16,
-          paddingTop: 3,
-          paddingBottom: 3,
+          paddingLeft: 8 + depth * 14,
+          paddingTop: 4,
+          paddingBottom: 4,
           paddingRight: 8,
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
-          gap: 5,
+          gap: 6,
           fontSize: 13,
-          color: isSelected ? "#fff" : "#cccccc",
-          background: isSelected ? "#094771" : "transparent",
+          color: isSelected ? color.text.primary : color.text.secondary,
+          background: isSelected ? color.accent.soft : "transparent",
+          borderLeft: isSelected ? `2px solid ${color.accent.base}` : "2px solid transparent",
           userSelect: "none",
-          transition: "background 0.08s",
-        }}
-        onMouseEnter={(e) => {
-          if (!isSelected)
-            (e.currentTarget as HTMLDivElement).style.background = "#2a2d2e";
-        }}
-        onMouseLeave={(e) => {
-          if (!isSelected)
-            (e.currentTarget as HTMLDivElement).style.background = "transparent";
         }}
       >
         <span
           style={{
             fontSize: 10,
-            color: entry.isDir ? "#dcb67a" : "#858585",
+            color: entry.isDir ? color.warn.base : color.text.muted,
             flexShrink: 0,
             width: 10,
             textAlign: "center",
@@ -77,13 +73,7 @@ function TreeNode({ entry, sessionId, depth, onFileSelect, selectedPath }: NodeP
         >
           {entry.isDir ? (expanded ? "▾" : "▸") : "·"}
         </span>
-        <span
-          style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {entry.name}
         </span>
       </div>
@@ -120,25 +110,15 @@ export default function FileTree({ sessionId, onFileSelect, selectedPath }: Prop
 
   return (
     <div style={{ paddingTop: 4 }}>
-      <div
-        style={{
-          padding: "8px 12px 6px",
-          fontSize: 11,
-          fontWeight: 600,
-          color: "#858585",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          userSelect: "none",
-        }}
-      >
-        Explorer
+      <div style={{ padding: "10px 14px 8px" }}>
+        <SectionLabel>Explorer</SectionLabel>
       </div>
       {loading ? (
-        <div style={{ padding: "8px 16px", color: "#858585", fontSize: 13 }}>
+        <div style={{ padding: "8px 16px", color: color.text.muted, fontSize: 13 }}>
           Loading…
         </div>
       ) : roots.length === 0 ? (
-        <div style={{ padding: "8px 16px", color: "#858585", fontSize: 13 }}>
+        <div style={{ padding: "8px 16px", color: color.text.muted, fontSize: 13 }}>
           Empty workspace
         </div>
       ) : (

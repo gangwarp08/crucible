@@ -20,14 +20,25 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
 
     const term = new XTerm({
       theme: {
-        background: "#1e1e1e",
-        foreground: "#cccccc",
-        cursor: "#ffffff",
-        selectionBackground: "#264f78",
+        background: "#0c0c10",         // tokens.color.bg.page
+        foreground: "#e6e6ea",         // tokens.color.text.primary
+        cursor: "#7c7fff",             // tokens.color.accent.base
+        cursorAccent: "#0c0c10",
+        selectionBackground: "rgba(124, 127, 255, 0.30)",
+        black: "#0c0c10",
+        red: "#ff7a7a",
+        green: "#56d6a8",
+        yellow: "#e0b66e",
+        blue: "#7c7fff",
+        magenta: "#b48ce6",
+        cyan: "#5cc8d7",
+        white: "#e6e6ea",
+        brightBlack: "#6a6a78",
       },
       fontSize: 13,
-      fontFamily: "'Cascadia Code', 'Fira Code', Consolas, monospace",
+      fontFamily: "var(--font-mono, 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace)",
       cursorBlink: true,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();

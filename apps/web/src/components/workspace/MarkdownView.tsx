@@ -106,12 +106,12 @@ function renderInline(text: string): React.ReactNode[] {
       <code
         key={key++}
         style={{
-          background: "#3c3c3c",
-          color: "#dcdcaa",
+          background: "#0f0f14",
+          color: "#e0b66e",
           padding: "1px 5px",
           borderRadius: 3,
           fontSize: "0.92em",
-          fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+          fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
         }}
       >
         {match[1]}
@@ -130,10 +130,10 @@ export default function MarkdownView({ source }: Props) {
   return (
     <div
       style={{
-        color: "#cccccc",
+        color: "#e6e6ea",
         fontSize: 13,
         lineHeight: 1.55,
-        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+        fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
       }}
     >
       {blocks.map((b, i) => {
@@ -145,10 +145,10 @@ export default function MarkdownView({ source }: Props) {
                 style={{
                   fontSize: 15,
                   fontWeight: 600,
-                  color: "#cccccc",
+                  color: "#e6e6ea",
                   margin: i === 0 ? "0 0 8px" : "20px 0 8px",
                   paddingBottom: 4,
-                  borderBottom: "1px solid #2d2d2d",
+                  borderBottom: "1px solid #1c1c24",
                 }}
               >
                 {renderInline(b.lines[0]!)}
@@ -165,15 +165,15 @@ export default function MarkdownView({ source }: Props) {
               <pre
                 key={i}
                 style={{
-                  background: "#252526",
-                  border: "1px solid #404040",
+                  background: "#15151b",
+                  border: "1px solid #2a2a36",
                   borderRadius: 4,
                   padding: "8px 12px",
                   margin: "0 0 12px",
                   overflow: "auto",
-                  color: "#cccccc",
+                  color: "#e6e6ea",
                   fontSize: 12,
-                  fontFamily: "'SF Mono', Menlo, Consolas, monospace",
+                  fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
                   lineHeight: 1.45,
                 }}
               >
@@ -187,9 +187,9 @@ export default function MarkdownView({ source }: Props) {
                 style={{
                   margin: "0 0 12px",
                   padding: "6px 12px",
-                  borderLeft: "3px solid #3794ff",
-                  background: "#252526",
-                  color: "#cccccc",
+                  borderLeft: "3px solid #7c7fff",
+                  background: "#15151b",
+                  color: "#e6e6ea",
                   fontStyle: "normal",
                 }}
               >

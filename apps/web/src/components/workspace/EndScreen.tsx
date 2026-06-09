@@ -1,19 +1,14 @@
 "use client";
 import { useSessionStore } from "@/stores/sessionStore";
-
-const PANEL  = "#252526";
-const BORDER = "#404040";
-const TEXT   = "#cccccc";
-const MUTED  = "#858585";
-const WHITE  = "#ffffff";
+import { color, radius, shadow, space } from "@/styles/tokens";
+import SectionLabel from "@/components/ui/SectionLabel";
+import Stat from "@/components/ui/Stat";
 
 function fmtLocalTime(iso: string | null): string {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
     });
   } catch {
     return iso;
@@ -22,8 +17,7 @@ function fmtLocalTime(iso: string | null): string {
 
 /** Full-screen overlay shown once the session status flips to "ended".
  *  Same overlay regardless of end reason (timer, manual DELETE, server
- *  expiry, budget exhausted). Read-only acknowledgement — no CTA, no
- *  link, no auto-close. */
+ *  expiry, budget exhausted). Read-only acknowledgement — no CTA, no link. */
 export default function EndScreen() {
   const { sessionId, endedAt } = useSessionStore();
   const shortId = sessionId ? sessionId.slice(0, 8) : "—";
@@ -33,83 +27,66 @@ export default function EndScreen() {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(30, 30, 30, 0.96)",
-        backdropFilter: "blur(2px)",
+        background: "rgba(8, 8, 12, 0.85)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
-        fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
     >
       <div
         style={{
-          background: PANEL,
-          border: `1px solid ${BORDER}`,
-          borderRadius: 8,
-          padding: "36px 40px",
-          maxWidth: 480,
+          background: color.bg.panel,
+          border: `1px solid ${color.border.default}`,
+          borderRadius: radius.lg,
+          padding: "40px 44px",
+          maxWidth: 520,
           width: "calc(100% - 48px)",
-          boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
-          textAlign: "left",
+          boxShadow: shadow.lg,
         }}
       >
-        <div
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            color: MUTED,
-            fontWeight: 600,
-            marginBottom: 8,
-          }}
-        >
-          Session ended
-        </div>
+        <SectionLabel>Session complete</SectionLabel>
         <h1
           style={{
             margin: 0,
+            marginTop: 8,
             marginBottom: 16,
             fontSize: 22,
-            color: WHITE,
+            color: color.text.primary,
             fontWeight: 600,
             letterSpacing: "-0.3px",
           }}
         >
-          Assessment complete
+          Thanks — your work has been captured
         </h1>
         <p
           style={{
-            color: TEXT,
+            color: color.text.secondary,
             fontSize: 14,
-            lineHeight: 1.55,
+            lineHeight: 1.6,
             margin: 0,
-            marginBottom: 24,
+            marginBottom: 28,
           }}
         >
-          Your work has been captured. Our team will review your session and
-          follow up shortly. You can close this tab.
+          Our team will review your session and follow up shortly. You can
+          close this tab whenever you&apos;re ready.
         </p>
-        <dl
+        <div
           style={{
-            margin: 0,
             display: "grid",
-            gridTemplateColumns: "auto 1fr",
-            rowGap: 6,
-            columnGap: 14,
-            fontSize: 12,
-            color: MUTED,
+            gridTemplateColumns: "1fr 1fr",
+            gap: space[4],
+            padding: space[4],
+            background: color.bg.elevated,
+            borderRadius: radius.md,
+            border: `1px solid ${color.border.subtle}`,
           }}
         >
-          <dt style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>Session</dt>
-          <dd style={{ margin: 0, color: TEXT, fontFamily: "'SF Mono', Menlo, Consolas, monospace" }}>
-            {shortId}
-          </dd>
-          <dt style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}>Ended</dt>
-          <dd style={{ margin: 0, color: TEXT, fontFamily: "'SF Mono', Menlo, Consolas, monospace" }}>
-            {fmtLocalTime(endedAt)}
-          </dd>
-        </dl>
+          <Stat label="Session" value={shortId} size="sm" />
+          <Stat label="Ended at" value={fmtLocalTime(endedAt)} size="sm" />
+        </div>
       </div>
     </div>
   );
