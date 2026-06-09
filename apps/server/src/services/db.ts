@@ -53,8 +53,12 @@ export async function persistSessionUpdate(
   }
 }
 
-/** Persist the live scenario_state jsonb after a persona beat fires. Best-
- *  effort — never throws into the persona-reply path. */
+/** Persist the live scenario_state jsonb as a WHOLE-OBJECT REPLACE. Keep this
+ *  for genuine full writes (e.g. future session-resume code that rebuilds
+ *  state from scratch). Per-field callers MUST use persistScenarioStatePatch
+ *  instead — concurrent whole-object writes from different fire-and-forget
+ *  paths race against each other and silently clobber sibling fields. Best-
+ *  effort; never throws. */
 export async function persistScenarioState(
   sessionId: string,
   scenarioState: Record<string, unknown>,
@@ -72,6 +76,29 @@ export async function persistScenarioState(
     if (error) console.error("[db] persistScenarioState failed", error.message);
   } catch (err) {
     console.error("[db] persistScenarioState unexpected error", err);
+  }
+}
+
+/** Partial jsonb merge of scenario_state via the merge_scenario_state RPC
+ *  (migration 0005). Each caller passes ONLY its changed top-level key(s)
+ *  so concurrent fire-and-forget updates to disjoint keys can never clobber
+ *  each other — Postgres serializes the UPDATEs but each only writes its
+ *  own keys. Within-key concurrent writes are dominated by the latest
+ *  in-memory state (callers also mutate entry.scenarioState in-place so
+ *  the latest snapshot is always consistent). Best-effort; never throws. */
+export async function persistScenarioStatePatch(
+  sessionId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase.rpc("merge_scenario_state", {
+      p_session_id: sessionId,
+      p_patch: patch,
+    });
+    if (error) console.error("[db] persistScenarioStatePatch failed", error.message);
+  } catch (err) {
+    console.error("[db] persistScenarioStatePatch unexpected error", err);
   }
 }
 

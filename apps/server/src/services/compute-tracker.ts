@@ -10,7 +10,7 @@
 
 import { sessionRegistry } from "./registry.js";
 import { logEvent } from "./telemetry.js";
-import { persistScenarioState } from "./db.js";
+import { persistScenarioStatePatch } from "./db.js";
 
 export type ComputeReason = "db_query" | "sandbox_command";
 
@@ -30,7 +30,9 @@ export function deductComputeMinutes(
   if (typeof current !== "number") return null;
 
   const next = current - amount;
-  entry.scenarioState = { ...entry.scenarioState, compute_minutes: next };
+  // In-place mutation; patch only the compute_minutes key so a concurrent
+  // tokens / deliverable / personas write can't clobber it (and vice versa).
+  entry.scenarioState["compute_minutes"] = next;
 
   logEvent(sessionId, "constraint.spend", "system", {
     resource: "compute_minutes",
@@ -39,7 +41,7 @@ export function deductComputeMinutes(
     reason,
   });
 
-  void persistScenarioState(sessionId, entry.scenarioState);
+  void persistScenarioStatePatch(sessionId, { compute_minutes: next });
 
   return next;
 }

@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { logEvent } from "../services/telemetry.js";
-import { persistScenarioState } from "../services/db.js";
+import { persistScenarioStatePatch } from "../services/db.js";
 
 const DeliverableDataSchema = z.object({
   corrected_monthly_revenue: z.string().max(20_000),
@@ -67,9 +67,12 @@ export async function deliverableRoutes(server: FastifyInstance) {
 
       // Mirror latest into scenario_state for downstream consumers (Analysis
       // Agent + recruiter review). Latest-wins; the events table retains
-      // history.
-      entry.scenarioState = { ...entry.scenarioState, deliverable: persisted };
-      void persistScenarioState(sessionId, entry.scenarioState);
+      // history. In-place mutation + partial patch so concurrent token /
+      // compute writes can't clobber the deliverable (the exact bug that
+      // surfaced in the first analysis-agent end-to-end run before this
+      // race fix).
+      entry.scenarioState["deliverable"] = persisted;
+      void persistScenarioStatePatch(sessionId, { deliverable: persisted });
 
       logEvent(
         sessionId,

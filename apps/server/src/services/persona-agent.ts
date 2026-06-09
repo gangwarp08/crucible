@@ -19,7 +19,7 @@ import {
   chatCompletionWithMessages,
   type ChatMessage,
 } from "./litellm.js";
-import { persistScenarioState } from "./db.js";
+import { persistScenarioStatePatch } from "./db.js";
 
 // Per-session scenario cache so we don't round-trip to Supabase every turn.
 // Sessions are short-lived (60-90 min) and scenario content is immutable for
@@ -366,14 +366,19 @@ export async function replyAsPersona(
     stateChanged = true;
   }
   if (stateChanged) {
-    entry.scenarioState = {
-      ...entry.scenarioState,
-      personas: {
-        client: { ...entry.personaState.client },
-        team:   { ...entry.personaState.team },
-      },
+    // Mirror the personaState flags into the scenarioState.personas subtree
+    // IN PLACE on the existing object so other readers don't see a stale
+    // reference. Patch sends only the personas top-level key.
+    const personas = (entry.scenarioState["personas"] ?? {}) as {
+      client?: Record<string, unknown>;
+      team?: Record<string, unknown>;
     };
-    void persistScenarioState(sessionId, entry.scenarioState);
+    if (!personas.client) personas.client = {};
+    if (!personas.team) personas.team = {};
+    Object.assign(personas.client, entry.personaState.client);
+    Object.assign(personas.team, entry.personaState.team);
+    entry.scenarioState["personas"] = personas;
+    void persistScenarioStatePatch(sessionId, { personas });
   }
 
   return {
@@ -501,14 +506,17 @@ export async function proactiveBeatMessage(
     stateChanged = true;
   }
   if (stateChanged) {
-    entry.scenarioState = {
-      ...entry.scenarioState,
-      personas: {
-        client: { ...entry.personaState.client },
-        team:   { ...entry.personaState.team },
-      },
+    // Same in-place + partial-patch pattern as the reactive path above.
+    const personas = (entry.scenarioState["personas"] ?? {}) as {
+      client?: Record<string, unknown>;
+      team?: Record<string, unknown>;
     };
-    void persistScenarioState(sessionId, entry.scenarioState);
+    if (!personas.client) personas.client = {};
+    if (!personas.team) personas.team = {};
+    Object.assign(personas.client, entry.personaState.client);
+    Object.assign(personas.team, entry.personaState.team);
+    entry.scenarioState["personas"] = personas;
+    void persistScenarioStatePatch(sessionId, { personas });
   }
 
   return {

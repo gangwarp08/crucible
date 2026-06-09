@@ -8,7 +8,7 @@ import {
   SYSTEM_PROMPT,
 } from "../services/litellm.js";
 import { destroySandbox } from "../services/sandbox.js";
-import { persistSessionUpdate, persistScenarioState } from "../services/db.js";
+import { persistSessionUpdate, persistScenarioStatePatch } from "../services/db.js";
 import {
   recordTranscriptTurn,
   recordCost,
@@ -152,14 +152,19 @@ export async function chatRoutes(server: FastifyInstance) {
         const consumed = usage?.totalTokens ?? 0;
         const before = (entry.scenarioState["tokens"] as number) ?? 0;
         const next = before - consumed;
-        entry.scenarioState = { ...entry.scenarioState, tokens: next };
+        // In-place mutation on the shared scenarioState object so concurrent
+        // readers (and other writers' future spreads) see the latest value
+        // without losing sibling fields. Persistence below patches ONLY the
+        // tokens key via the merge RPC so it can't clobber compute_minutes /
+        // deliverable / personas etc. from a parallel write.
+        entry.scenarioState["tokens"] = next;
         tokensRemainingAfter = next;
         logEvent(sessionId, "constraint.spend", "system", {
           resource: "tokens",
           amount: consumed,
           balance_after: next,
         });
-        void persistScenarioState(sessionId, entry.scenarioState);
+        void persistScenarioStatePatch(sessionId, { tokens: next });
       }
 
       server.log.debug(

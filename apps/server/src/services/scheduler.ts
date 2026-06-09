@@ -25,7 +25,7 @@ import {
 } from "./persona-agent.js";
 import { broadcastToSession } from "./messaging.js";
 import { logEvent, recordCost } from "./telemetry.js";
-import { persistSessionUpdate, persistScenarioState } from "./db.js";
+import { persistSessionUpdate, persistScenarioStatePatch } from "./db.js";
 
 const TICK_MS = Number(process.env["CRUCIBLE_SCHEDULER_TICK_MS"]) || 15_000;
 
@@ -103,7 +103,16 @@ async function sweep(): Promise<void> {
         }
       }
       if (stateChanged) {
-        void persistScenarioState(sessionId, entry.scenarioState);
+        // Patch ONLY the two top-level keys the scheduler owns: personas
+        // (reveal flags applied by fireBeat) and scheduled_beats (the
+        // per-beat fired booleans, mutated in-place above). The sweep loop
+        // is guarded by sweepInFlight so multiple concurrent sweeps can't
+        // race; but a parallel token / compute / deliverable write must
+        // not lose its key from a whole-object replace here.
+        void persistScenarioStatePatch(sessionId, {
+          personas: entry.scenarioState["personas"],
+          scheduled_beats: entry.scenarioState["scheduled_beats"],
+        });
       }
     }
   } finally {
@@ -125,15 +134,18 @@ async function fireBeat(sessionId: string, beat: ScheduledBeat): Promise<void> {
   applyBeatReveal(entry.personaState, beat);
 
   // Mirror personaState into scenarioState.personas so the recruiter-facing
-  // jsonb stays consistent with the in-memory flags. The persist of
-  // scheduled_beats.fired happens in the sweep loop after this returns.
-  entry.scenarioState = {
-    ...entry.scenarioState,
-    personas: {
-      client: { ...entry.personaState.client },
-      team:   { ...entry.personaState.team },
-    },
+  // jsonb stays consistent with the in-memory flags. IN-PLACE mutation —
+  // the actual persist happens in the sweep loop above via a partial patch
+  // covering both personas + scheduled_beats.
+  const personas = (entry.scenarioState["personas"] ?? {}) as {
+    client?: Record<string, unknown>;
+    team?: Record<string, unknown>;
   };
+  if (!personas.client) personas.client = {};
+  if (!personas.team) personas.team = {};
+  Object.assign(personas.client, entry.personaState.client);
+  Object.assign(personas.team, entry.personaState.team);
+  entry.scenarioState["personas"] = personas;
 
   const tOffsetMs = Date.now() - entry.createdAt.getTime();
 
