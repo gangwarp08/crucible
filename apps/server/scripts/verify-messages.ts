@@ -150,11 +150,23 @@ function ask(
   const scenarioId = scenarioRow.id as string;
   console.log(`\n[setup] scenario ${SLUG} → ${scenarioId}`);
 
-  // 2. Create a session bound to that scenario.
+  // 2. Create a session bound to that scenario. Push both proactive beats
+  //    past session end — this verifier exercises ONLY the reactive persona
+  //    path; the proactive scheduler is tested separately in
+  //    verify-proactive-beats.ts. Without these overrides, Sam's default
+  //    T+30s misleading_teammate_hint beat fires during this verifier's
+  //    60s cooldown and lands a 7th persona event, breaking the strict
+  //    "6 reactive turns → 6 persona events" assertion below.
   const createRes = await fetch(`${SERVER_URL}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scenarioId }),
+    body: JSON.stringify({
+      scenarioId,
+      beatTimingOverridesMs: {
+        misleading_teammate_hint: 3_600_000,
+        requirement_change:       3_600_000,
+      },
+    }),
   });
   if (!createRes.ok) {
     console.error("session create failed:", createRes.status, await createRes.text());
