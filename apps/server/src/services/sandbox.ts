@@ -3,8 +3,10 @@ import { env } from "../env.js";
 import { sessionRegistry } from "./registry.js";
 import { mintSessionKey } from "./litellm.js";
 import { expireSession } from "./session.js";
-import { persistSessionCreated } from "./db.js";
+import { persistSessionCreated, loadSessionRow } from "./db.js";
 import { logEvent } from "./telemetry.js";
+import { appendEvent } from "./events-direct.js";
+import { supabase } from "./supabase.js";
 import { loadScenarioById, type Scenario } from "./scenarios.js";
 import { seedScenarioDataset } from "./dataset-seed.js";
 import type { ScheduledBeat } from "./registry.js";
@@ -206,13 +208,91 @@ export async function createSandbox(
 }
 
 /** Cancel the orchestrator timer and run expireSession (the shared teardown path).
- *  Called by the manual DELETE /sessions/:id endpoint. */
+ *  Called by the manual DELETE /sessions/:id endpoint.
+ *
+ *  When the in-memory registry entry is missing (server restart, tsx-watch
+ *  reload between create and DELETE), falls back to orphanTeardown which
+ *  uses the Supabase row as source-of-truth: best-effort sandbox.kill, mark
+ *  the row terminal, append a session.ended event. Before this fallback the
+ *  silent `if (!entry) return` left the E2B sandbox running until its own
+ *  timeout and the sessions row stuck on status='active' indefinitely. */
 export async function destroySandbox(
   sessionId: string,
   endReason: "manual" | "budget" = "manual",
 ): Promise<void> {
   const entry = sessionRegistry.get(sessionId);
-  if (!entry) return;
-  clearTimeout(entry.expiryTimer);
-  await expireSession(sessionId, endReason);
+  if (entry) {
+    clearTimeout(entry.expiryTimer);
+    await expireSession(sessionId, endReason);
+    return;
+  }
+  await orphanTeardown(sessionId);
+}
+
+/** Orphan-session teardown. Runs when DELETE /sessions/:id lands for a
+ *  session whose in-memory entry was dropped. Reads sandbox_id + status
+ *  from Supabase, best-effort kills the sandbox via Sandbox.connect, marks
+ *  the row terminal, and appends a session.ended event for the recruiter
+ *  timeline. Idempotent: a second call sees status='completed' and no-ops.
+ *
+ *  Skips: LiteLLM key revoke (the key value is only in memory and we have
+ *  just the alias here; the key's mint-time TTL bounds the cost), and the
+ *  Analysis Agent auto-eval (recruiter can trigger manually via
+ *  POST /api/review/sessions/:id/evaluate if they want the scorecard). */
+async function orphanTeardown(sessionId: string): Promise<void> {
+  const row = await loadSessionRow(sessionId);
+  if (!row) {
+    console.log(`[orphan-teardown] session ${sessionId} not in Supabase — no-op`);
+    return;
+  }
+  if (row.status !== "active") {
+    console.log(
+      `[orphan-teardown] session ${sessionId} already terminal (status=${row.status}) — no-op`,
+    );
+    return;
+  }
+
+  console.log(
+    `[orphan-teardown] session ${sessionId} — registry miss; killing sandbox ${row.sandbox_id} via Supabase fallback`,
+  );
+
+  // Best-effort sandbox kill. Connect can fail if the sandbox is already
+  // dead (good — that's the outcome we want); swallow.
+  try {
+    const sandbox = await Sandbox.connect(row.sandbox_id);
+    await sandbox.kill();
+  } catch (err) {
+    console.log(
+      `[orphan-teardown] Sandbox.connect/kill for ${row.sandbox_id} threw (likely already dead):`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
+  // Mark the row terminal. endReason='orphaned' is semantically distinct
+  // from manual/timeout/budget so /review can flag these sessions.
+  const endedAt = new Date();
+  const durationMs = endedAt.getTime() - new Date(row.created_at).getTime();
+  if (supabase) {
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        status: "completed",
+        end_reason: "orphaned",
+        ended_at: endedAt.toISOString(),
+        duration_ms: durationMs,
+        updated_at: endedAt.toISOString(),
+      })
+      .eq("id", sessionId);
+    if (error) {
+      console.error("[orphan-teardown] sessions update failed", error.message);
+    }
+  }
+
+  // Emit session.ended for the recruiter timeline. appendEvent's
+  // registry-bypass path (events-direct.ts) writes straight to Supabase
+  // with seq = MAX(seq)+1, which is exactly the case here.
+  await appendEvent(sessionId, "session.ended", "system", {
+    endReason: "orphaned",
+    durationMs,
+  });
 }

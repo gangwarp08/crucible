@@ -35,6 +35,40 @@ export async function persistSessionCreated(sessionId: string): Promise<void> {
   }
 }
 
+/** Source-of-truth read for the orphan-teardown path. When the in-memory
+ *  registry entry is gone (server restart / tsx-watch reload), DELETE
+ *  /sessions/:id falls back to this row to find the sandbox to kill and
+ *  whether the row is already terminal. Returns null on miss or any error
+ *  so callers can no-op cleanly. */
+export interface SessionRowMinimal {
+  id:                string;
+  sandbox_id:        string;
+  scenario_id:       string | null;
+  litellm_key_alias: string;
+  status:            string;
+  created_at:        string;
+}
+export async function loadSessionRow(
+  sessionId: string,
+): Promise<SessionRowMinimal | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("id, sandbox_id, scenario_id, litellm_key_alias, status, created_at")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (error) {
+      console.error("[db] loadSessionRow failed", error.message);
+      return null;
+    }
+    return (data as SessionRowMinimal | null) ?? null;
+  } catch (err) {
+    console.error("[db] loadSessionRow unexpected error", err);
+    return null;
+  }
+}
+
 /** Update mutable fields (spend, status) — called on each spend change. */
 export async function persistSessionUpdate(
   sessionId: string,
@@ -102,10 +136,14 @@ export async function persistScenarioStatePatch(
   }
 }
 
-/** Write final session state — called once in expireSession before teardown. */
+/** Write final session state — called once in expireSession before teardown.
+ *  Accepts the full EndReason union (including "orphaned") so the type flows
+ *  cleanly through expireSession, even though the orphan path bypasses this
+ *  function entirely (it does its own UPDATE in sandbox.ts orphanTeardown).
+ *  The status mapping below collapses anything-not-"timeout" to "completed". */
 export async function finalizeSession(
   sessionId: string,
-  endReason: "timeout" | "manual" | "budget",
+  endReason: "timeout" | "manual" | "budget" | "orphaned",
 ): Promise<void> {
   if (!supabase) return;
   try {

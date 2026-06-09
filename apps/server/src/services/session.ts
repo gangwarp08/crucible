@@ -4,7 +4,14 @@ import { finalizeSession } from "./db.js";
 import { logEvent, flushTelemetry } from "./telemetry.js";
 import { runAnalysisAgent } from "./analysis-agent.js";
 
-export type EndReason = "timeout" | "manual" | "budget";
+// "orphaned" is the orphan-teardown reason — set by sandbox.ts's
+// orphanTeardown() when DELETE /sessions/:id runs against a session
+// whose in-memory entry was dropped by a server restart / tsx-watch
+// reload. orphanTeardown does not call expireSession (which requires
+// the entry), so "orphaned" is not reachable through expireSession's
+// own call sites — it only flows through the orphan path's direct
+// finalizeSession-style UPDATE + appendEvent.
+export type EndReason = "timeout" | "manual" | "budget" | "orphaned";
 
 /**
  * Tear down a session: finalize Supabase row, emit session.ended, flush telemetry,
