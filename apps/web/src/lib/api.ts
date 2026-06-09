@@ -13,8 +13,20 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function createSession(): Promise<{ sessionId: string; deadline: string }> {
-  return apiFetch("/sessions", { method: "POST" });
+export interface CreateSessionResult {
+  sessionId: string;
+  deadline: string;
+  scenarioId: string | null;
+}
+
+export async function createSession(
+  opts?: { scenarioId?: string },
+): Promise<CreateSessionResult> {
+  const init: RequestInit = { method: "POST" };
+  if (opts?.scenarioId) {
+    init.body = JSON.stringify({ scenarioId: opts.scenarioId });
+  }
+  return apiFetch<CreateSessionResult>("/sessions", init);
 }
 
 export interface ScenarioConstraints {
@@ -60,6 +72,48 @@ export interface SessionInfo {
   scenarioBalances: ScenarioBalances | null;
   // Latest deliverable mirrored from scenario_state.deliverable.
   deliverable: Deliverable | null;
+  // Frozen presentation metadata for the candidate UI (null when this
+  // session has no scenario).
+  scenarioTitle:      string | null;
+  scenarioBrief:      string | null;
+  scenarioRole:       string | null;
+  scenarioDifficulty: string | null;
+}
+
+// ── Candidate-safe scenario lookup ──────────────────────────────────────────
+
+export interface ScenarioDeliverableComponent {
+  key: string;
+  label: string;
+  what: string;
+}
+
+export interface Scenario {
+  id: string;
+  slug: string;
+  title: string;
+  role: string;
+  difficulty: string | null;
+  brief: string | null;
+  constraints: ScenarioConstraints;
+  deliverable_components: ScenarioDeliverableComponent[];
+}
+
+export class ScenarioNotFoundError extends Error {
+  constructor(slug: string) {
+    super(`Scenario "${slug}" not found`);
+    this.name = "ScenarioNotFoundError";
+  }
+}
+
+/** Fetch a scenario's candidate-safe metadata (brief, constraints, deliverable
+ *  components). Throws ScenarioNotFoundError on 404 so the caller can render
+ *  a clean "not found" state distinct from other failures. */
+export async function getScenarioBySlug(slug: string): Promise<Scenario> {
+  const res = await fetch(`${SERVER_URL}/api/scenarios/${encodeURIComponent(slug)}`);
+  if (res.status === 404) throw new ScenarioNotFoundError(slug);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<Scenario>;
 }
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {

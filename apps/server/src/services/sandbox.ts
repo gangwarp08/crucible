@@ -172,6 +172,14 @@ export async function createSandbox(
     nextTranscriptSeq: 0,
     scenarioId: scenarioId ?? null,
     scenarioState,
+    scenarioMeta: scenario
+      ? {
+          title:      scenario.title,
+          brief:      scenario.brief,
+          role:       scenario.role,
+          difficulty: scenario.difficulty,
+        }
+      : null,
     messagingSockets: new Set(),
     channelHistory: { client: [], team: [] },
     personaState: {

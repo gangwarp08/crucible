@@ -15,6 +15,7 @@ import { queryRoutes } from "./routes/query.js";
 import { messageRoutes } from "./routes/messages.js";
 import { docsRoutes } from "./routes/docs.js";
 import { deliverableRoutes } from "./routes/deliverable.js";
+import { scenariosRoutes } from "./routes/scenarios.js";
 import { startBeatScheduler } from "./services/scheduler.js";
 
 export async function buildServer() {
@@ -47,6 +48,7 @@ export async function buildServer() {
   await server.register(messageRoutes);
   await server.register(docsRoutes, { prefix: "/api" });
   await server.register(deliverableRoutes, { prefix: "/api" });
+  await server.register(scenariosRoutes, { prefix: "/api/scenarios" });
   await server.register(reviewRoutes, { prefix: "/api/review" });
 
   // Start the proactive-beat scheduler. The sweep loop iterates the live

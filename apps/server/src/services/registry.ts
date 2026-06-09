@@ -81,6 +81,17 @@ export interface SessionEntry {
   scenarioId: string | null;
   scenarioState: Record<string, unknown>;
 
+  // Frozen presentation metadata copied off the scenario row at session
+  // creation so GET /sessions/:id can populate the candidate UI (title /
+  // brief / role / difficulty) without re-querying Supabase on every HUD
+  // poll. Null when scenarioId is null.
+  scenarioMeta: {
+    title:      string;
+    brief:      string | null;
+    role:       string;
+    difficulty: string | null;
+  } | null;
+
   // Persona messaging (client / team channels).
   messagingSockets: Set<MessagingSocket>;
   channelHistory: { client: PersonaTurn[]; team: PersonaTurn[] };

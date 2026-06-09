@@ -3,6 +3,8 @@ import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import FileTree from "./FileTree";
 import ConstraintHUD from "./ConstraintHUD";
+import BriefPanel from "./BriefPanel";
+import EndScreen from "./EndScreen";
 import { readFile, getSession } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
 
@@ -14,9 +16,14 @@ const Messages = dynamic(() => import("./Messages"), { ssr: false });
 const DocsViewer = dynamic(() => import("./DocsViewer"), { ssr: false });
 const DeliverablePanel = dynamic(() => import("./DeliverablePanel"), { ssr: false });
 
-type RightTab = "terminal" | "data" | "messages" | "assistant" | "docs" | "deliverable";
+type RightTab = "brief" | "terminal" | "data" | "messages" | "assistant" | "docs" | "deliverable";
+
+const TAB_ORDER: readonly RightTab[] = [
+  "brief", "terminal", "data", "messages", "assistant", "docs", "deliverable",
+] as const;
 
 const TAB_LABEL: Record<RightTab, string> = {
+  brief:       "Brief",
   terminal:    "Terminal",
   data:        "Data",
   messages:    "Messages",
@@ -32,9 +39,11 @@ interface Props {
 export default function Workspace({ sessionId }: Props) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [content, setContent] = useState("");
-  const [rightTab, setRightTab] = useState<RightTab>("terminal");
+  // Default to Brief on first mount so a fresh candidate sees the orientation
+  // panel; subsequent tab switches stick.
+  const [rightTab, setRightTab] = useState<RightTab>("brief");
 
-  const { init, setStatus, status } = useSessionStore();
+  const { init, setStatus, status, scenario } = useSessionStore();
 
   // On mount: fetch session metadata to initialize the store.
   useEffect(() => {
@@ -48,6 +57,12 @@ export default function Workspace({ sessionId }: Props) {
           s.scenarioTokensRemaining,
           s.scenarioBalances?.compute_minutes ?? null,
           s.scenarioConstraints,
+          {
+            title:      s.scenarioTitle,
+            brief:      s.scenarioBrief,
+            role:       s.scenarioRole,
+            difficulty: s.scenarioDifficulty,
+          },
         );
         if (s.status === "completed") setStatus("ended");
         // A page reload after the token budget was already drained shouldn't
@@ -89,6 +104,10 @@ export default function Workspace({ sessionId }: Props) {
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
       }}
     >
+      {/* Top scenario title row — full width, above the HUD. Renders nothing
+          when this session has no scenario bound (legacy generic mode). */}
+      {(scenario.title || scenario.role) && <ScenarioChrome />}
+
       {/* Top constraint HUD — always visible, full width. */}
       <ConstraintHUD />
 
@@ -147,7 +166,7 @@ export default function Workspace({ sessionId }: Props) {
               overflowX: "auto",
             }}
           >
-            {(["terminal", "data", "messages", "assistant", "docs", "deliverable"] as const).map((tab) => {
+            {TAB_ORDER.map((tab) => {
               const active = rightTab === tab;
               return (
                 <button
@@ -176,6 +195,9 @@ export default function Workspace({ sessionId }: Props) {
 
           {/* Content area — all panes mounted, only the active one visible. */}
           <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+            <div style={{ position: "absolute", inset: 0, display: rightTab === "brief" ? "block" : "none" }}>
+              <BriefPanel />
+            </div>
             <div style={{ position: "absolute", inset: 0, display: rightTab === "terminal" ? "block" : "none" }}>
               <Terminal sessionId={sessionId} onSessionEnd={handleSessionEnd} />
             </div>
@@ -197,6 +219,64 @@ export default function Workspace({ sessionId }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Session-ended overlay — covers the whole workspace. Acknowledgement
+          only; analysis runs server-side and there's no candidate-facing
+          scorecard view to link to. */}
+      {status === "ended" && <EndScreen />}
+    </div>
+  );
+}
+
+function ScenarioChrome() {
+  const { scenario } = useSessionStore();
+  const difficulty = scenario.difficulty;
+  const pillColor = difficulty === "mid" ? "#dcb67a" : "#858585";
+  return (
+    <div
+      style={{
+        height: 32,
+        flexShrink: 0,
+        background: "#2d2d2d",
+        borderBottom: "1px solid #404040",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 16px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          color: "#ffffff",
+          fontWeight: 500,
+          letterSpacing: "-0.1px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {scenario.title ?? "Untitled scenario"}
+      </div>
+      {(scenario.role || scenario.difficulty) && (
+        <span
+          style={{
+            fontSize: 10,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: pillColor,
+            border: `1px solid ${pillColor}`,
+            borderRadius: 999,
+            padding: "2px 8px",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+            marginLeft: 12,
+          }}
+        >
+          {[scenario.role, scenario.difficulty].filter(Boolean).join(" · ")}
+        </span>
+      )}
     </div>
   );
 }

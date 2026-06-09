@@ -88,6 +88,12 @@ export async function sessionRoutes(server: FastifyInstance) {
       // Latest deliverable mirrored from scenario_state.deliverable. The
       // POST /api/sessions/:id/deliverable route owns writes.
       deliverable: (entry.scenarioState["deliverable"] ?? null) as Record<string, unknown> | null,
+      // Presentation metadata for the candidate UI (frozen at session
+      // creation; see services/sandbox.ts scenarioMeta wiring).
+      scenarioTitle:      entry.scenarioMeta?.title      ?? null,
+      scenarioBrief:      entry.scenarioMeta?.brief      ?? null,
+      scenarioRole:       entry.scenarioMeta?.role       ?? null,
+      scenarioDifficulty: entry.scenarioMeta?.difficulty ?? null,
     };
   });
 
