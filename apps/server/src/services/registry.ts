@@ -5,6 +5,25 @@ export interface PtySocket {
   close(code?: number, data?: string): void;
 }
 
+/** Reuse the same minimal socket shape for the messaging WS — close+readyState
+ *  are all expireSession needs to flush the connection on teardown. */
+export type MessagingSocket = PtySocket;
+
+/** One turn in a persona channel — kept in memory only (events table is the
+ *  durable log). Used to seed the messages array on the next LLM call. */
+export interface PersonaTurn {
+  role: "candidate" | "persona";
+  text: string;
+  ts: string; // ISO 8601
+}
+
+/** Per-channel beat-tracking flags. Mirrored into scenarioState.personas so
+ *  recruiter review + future analysis can see when each reveal fired. */
+export interface PersonaState {
+  client: { revealed_specifics: boolean };
+  team:   { gave_refund_hint: boolean; gave_webhook_clue: boolean };
+}
+
 /** A single buffered telemetry event waiting to be flushed to Supabase. */
 export interface EventRecord {
   id: string;
@@ -50,6 +69,11 @@ export interface SessionEntry {
   // scenario's constraints at session start and mutated as the simulation runs.
   scenarioId: string | null;
   scenarioState: Record<string, unknown>;
+
+  // Persona messaging (client / team channels).
+  messagingSockets: Set<MessagingSocket>;
+  channelHistory: { client: PersonaTurn[]; team: PersonaTurn[] };
+  personaState: PersonaState;
 }
 
 // In-memory session store keyed by sessionId.

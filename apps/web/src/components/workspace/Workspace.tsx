@@ -10,8 +10,15 @@ const Editor = dynamic(() => import("./Editor"), { ssr: false });
 const Terminal = dynamic(() => import("./Terminal"), { ssr: false });
 const ChatHUD = dynamic(() => import("./ChatHUD"), { ssr: false });
 const DataExplorer = dynamic(() => import("./DataExplorer"), { ssr: false });
+const Messages = dynamic(() => import("./Messages"), { ssr: false });
 
-type RightTab = "terminal" | "data";
+type RightTab = "terminal" | "data" | "messages";
+
+const TAB_LABEL: Record<RightTab, string> = {
+  terminal: "Terminal",
+  data: "Data Explorer",
+  messages: "Messages",
+};
 
 interface Props {
   sessionId: string;
@@ -126,7 +133,7 @@ export default function Workspace({ sessionId }: Props) {
               userSelect: "none",
             }}
           >
-            {(["terminal", "data"] as const).map((tab) => {
+            {(["terminal", "data", "messages"] as const).map((tab) => {
               const active = rightTab === tab;
               return (
                 <button
@@ -145,7 +152,7 @@ export default function Workspace({ sessionId }: Props) {
                     cursor: "pointer",
                   }}
                 >
-                  {tab === "terminal" ? "Terminal" : "Data Explorer"}
+                  {TAB_LABEL[tab]}
                 </button>
               );
             })}
@@ -168,6 +175,15 @@ export default function Workspace({ sessionId }: Props) {
               }}
             >
               <DataExplorer sessionId={sessionId} />
+            </div>
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: rightTab === "messages" ? "block" : "none",
+              }}
+            >
+              <Messages sessionId={sessionId} />
             </div>
           </div>
         </div>

@@ -44,6 +44,16 @@ export async function expireSession(
   }
   entry.ptySockets.clear();
 
+  // Close all active messaging WebSocket connections (client/team persona threads).
+  for (const socket of entry.messagingSockets) {
+    try {
+      if (socket.readyState === 1 /* OPEN */) socket.close(1001, "Session expired");
+    } catch {
+      // socket may already be closing — ignore
+    }
+  }
+  entry.messagingSockets.clear();
+
   // Revoke the per-session LiteLLM key (best-effort).
   await revokeSessionKey(entry.litellmKey).catch(() => {});
 

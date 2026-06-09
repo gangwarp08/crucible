@@ -53,6 +53,28 @@ export async function persistSessionUpdate(
   }
 }
 
+/** Persist the live scenario_state jsonb after a persona beat fires. Best-
+ *  effort — never throws into the persona-reply path. */
+export async function persistScenarioState(
+  sessionId: string,
+  scenarioState: Record<string, unknown>,
+): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        scenario_state: scenarioState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
+
+    if (error) console.error("[db] persistScenarioState failed", error.message);
+  } catch (err) {
+    console.error("[db] persistScenarioState unexpected error", err);
+  }
+}
+
 /** Write final session state — called once in expireSession before teardown. */
 export async function finalizeSession(
   sessionId: string,

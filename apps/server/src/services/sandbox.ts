@@ -27,8 +27,17 @@ export async function createSandbox(
   if (scenarioId) {
     scenario = await loadScenarioById(scenarioId);
     if (scenario) {
-      // Seed the live game-mechanic ledger from the scenario's constraints.
-      scenarioState = { ...scenario.constraints };
+      // Seed the live game-mechanic ledger from the scenario's constraints,
+      // plus a per-persona beat-tracking sub-state for the messaging channels.
+      // All reveal flags start false — they flip when the persona-agent fires
+      // a beat reveal (see services/persona-agent.ts).
+      scenarioState = {
+        ...scenario.constraints,
+        personas: {
+          client: { revealed_specifics: false },
+          team:   { gave_refund_hint: false, gave_webhook_clue: false },
+        },
+      };
     } else {
       console.warn(
         `[sandbox] scenarioId=${scenarioId} did not resolve — proceeding with empty scenario_state`,
@@ -88,6 +97,12 @@ export async function createSandbox(
     nextTranscriptSeq: 0,
     scenarioId: scenarioId ?? null,
     scenarioState,
+    messagingSockets: new Set(),
+    channelHistory: { client: [], team: [] },
+    personaState: {
+      client: { revealed_specifics: false },
+      team:   { gave_refund_hint: false, gave_webhook_clue: false },
+    },
   });
 
   // Persist the sessions row synchronously so FK constraints on telemetry tables

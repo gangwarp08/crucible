@@ -82,32 +82,71 @@ export interface ChatCompletionResult {
   usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
 }
 
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+interface PostOpts {
+  responseFormat?: "json_object";
+  maxTokens?: number;
+}
+
+/** Single-prompt shape used by the AI-interviewer chat HUD. Hardcodes the
+ *  interviewer SYSTEM_PROMPT so callers don't need to know it. */
 export async function chatCompletion(
   sessionKey: string,
   prompt: string,
 ): Promise<ChatCompletionResult> {
+  return _postChatCompletion(sessionKey, [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: prompt },
+  ]);
+}
+
+/** Multi-turn shape used by the persona-agent (Dana / Sam). Caller provides
+ *  the full messages array including its OWN system prompt — we do not inject
+ *  the interviewer SYSTEM_PROMPT here. Optionally requests JSON-only output. */
+export async function chatCompletionWithMessages(
+  sessionKey: string,
+  messages: ChatMessage[],
+  opts?: PostOpts,
+): Promise<ChatCompletionResult> {
+  return _postChatCompletion(sessionKey, messages, opts);
+}
+
+async function _postChatCompletion(
+  sessionKey: string,
+  messages: ChatMessage[],
+  opts: PostOpts = {},
+): Promise<ChatCompletionResult> {
+  const body: Record<string, unknown> = {
+    model: "gemini-flash",
+    messages,
+  };
+  if (opts.responseFormat === "json_object") {
+    body.response_format = { type: "json_object" };
+  }
+  if (opts.maxTokens !== undefined) {
+    body.max_tokens = opts.maxTokens;
+  }
+
   const res = await fetch(`${env.LITELLM_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${sessionKey}`, // session key — never the master key
     },
-    body: JSON.stringify({
-      model: "gemini-flash",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
-    const body = await res.text();
+    const errBody = await res.text();
     // LiteLLM returns 429 (not 400) when a key's max_budget is exceeded.
-    if (body.includes("budget_exceeded")) {
+    if (errBody.includes("budget_exceeded")) {
       throw new BudgetExceededError("Gateway budget exceeded");
     }
-    throw new Error(`LiteLLM chat/completions failed: ${res.status} ${body}`);
+    throw new Error(`LiteLLM chat/completions failed: ${res.status} ${errBody}`);
   }
 
   // x-litellm-response-cost is the cost of this call, written synchronously.
