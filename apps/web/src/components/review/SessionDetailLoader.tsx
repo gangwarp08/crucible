@@ -49,7 +49,7 @@ export default function SessionDetailLoader({ id }: Props) {
   if (state.kind === "error") {
     return <Errored message={state.message} onRetry={() => void load()} />;
   }
-  return <SessionDetail detail={state.detail} />;
+  return <SessionDetail detail={state.detail} onRefetch={load} />;
 }
 
 // ── states ────────────────────────────────────────────────────────────────────

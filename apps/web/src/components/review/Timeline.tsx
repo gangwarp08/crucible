@@ -62,16 +62,25 @@ function describe(ev: ReviewEvent): EventDescriptor {
   }
 }
 
-function scrollToId(id: string) {
+/** Smooth-scroll to a DOM id and flash a 1.2s blue outline highlight. Used by
+ *  Timeline internally for its existing scrollTo behaviour (file.write,
+ *  chat.user, chat.assistant rows), and by Scorecard.tsx to jump from an
+ *  evidence chip to the underlying event row (`event-${seq}`). Returns true
+ *  if the element was found, false if not — Scorecard uses this to grey out
+ *  evidence whose seq isn't in the loaded events window. */
+export function scrollToHighlight(id: string): boolean {
   const el = document.getElementById(id);
-  if (!el) return;
+  if (!el) return false;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
-  // Brief highlight to show what was just navigated to.
   const original = el.style.outline;
   el.style.outline = "2px solid #3794ff";
   el.style.outlineOffset = "2px";
   setTimeout(() => { el.style.outline = original; el.style.outlineOffset = ""; }, 1200);
+  return true;
 }
+
+// Backwards-compatible alias for the original internal use sites.
+const scrollToId = scrollToHighlight;
 
 export default function Timeline({ events, sessionStart }: Props) {
   const startMs = new Date(sessionStart).getTime();
@@ -115,6 +124,7 @@ export default function Timeline({ events, sessionStart }: Props) {
             return (
               <div
                 key={ev.id}
+                id={`event-${ev.seq}`}
                 onClick={clickable ? () => scrollToId(d.scrollTo!) : undefined}
                 style={{
                   padding: "8px 16px",

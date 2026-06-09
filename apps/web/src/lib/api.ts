@@ -219,6 +219,9 @@ export interface ReviewSession {
   event_count: number;
   messages: number;
   file_saves: number;
+  // Null when the session has no scenario or hasn't been evaluated yet.
+  overall_score: number | null;
+  evaluation_status: "complete" | "error" | null;
 }
 
 export async function listReviewSessions(): Promise<ReviewSession[]> {
@@ -295,12 +298,53 @@ export interface ReviewCostRow {
   transcript_id: string | null;
 }
 
+export interface ReviewEvaluationItem {
+  competency: string;             // e.g. "data_fluency"
+  score: number;                  // integer 1-5
+  weight: number;                 // 0..1, from scenarios.rubric
+  rationale: string;
+  evidence: Array<{ event_seq: number; note: string }>;
+  created_at: string;
+}
+
+export interface ReviewEvaluation {
+  id: string;
+  session_id: string;
+  scenario_id: string | null;
+  overall_score: number | string; // numeric in pg; supabase-js sometimes returns string
+  summary: string | null;
+  model: string | null;
+  status: "complete" | "error";
+  created_at: string;
+  items: ReviewEvaluationItem[];
+}
+
 export interface ReviewSessionDetail {
   session: ReviewSessionFull;
   events: ReviewEvent[];
   transcript: ReviewTranscriptRow[];
   fileSnapshots: ReviewFileSnapshot[];
   cost: ReviewCostRow[];
+  evaluation: ReviewEvaluation | null;
+}
+
+/** Trigger the Analysis Agent to (re)evaluate a completed session. Replaces
+ *  any prior evaluation for the session_id. Returns the new evaluation row
+ *  but callers usually want to refetch the full detail too — the analysis
+ *  also emits an ai.evaluation event that the timeline should pick up. */
+export async function postEvaluate(sessionId: string): Promise<unknown> {
+  // Fastify rejects empty payloads when Content-Type is application/json;
+  // send "{}" explicitly. The route ignores the body.
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/evaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Re-evaluate failed: ${res.status} ${body.slice(0, 200)}`);
+  }
+  return res.json();
 }
 
 export class NotFoundError extends Error {

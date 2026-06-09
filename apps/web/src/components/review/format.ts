@@ -63,3 +63,23 @@ export function formatRelativeMs(deltaMs: number): string {
   const s = totalSecs % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+/** Color-code an evaluation score 1-5. Aligns with the StatusBadge palette
+ *  used elsewhere in /review (#4ec9b0 / #3794ff / #dcb67a / #f48771). */
+export function scoreColor(score: number | null | undefined): string {
+  if (typeof score !== "number" || Number.isNaN(score)) return "#858585";
+  const s = Math.round(score);
+  if (s >= 5) return "#4ec9b0";
+  if (s >= 4) return "#3794ff";
+  if (s >= 3) return "#dcb67a";
+  return "#f48771";
+}
+
+/** "data_fluency" → "Data Fluency"; "ai_orchestration" → "Ai Orchestration"
+ *  (special-case the AI acronym). */
+export function prettyCompetency(key: string): string {
+  return key
+    .split("_")
+    .map((w) => (w === "ai" ? "AI" : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}

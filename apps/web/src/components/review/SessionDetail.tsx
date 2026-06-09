@@ -2,6 +2,7 @@
 import dynamic from "next/dynamic";
 import type { ReviewSessionDetail } from "@/lib/api";
 import SessionSummary from "./SessionSummary";
+import Scorecard from "./Scorecard";
 import TranscriptPanel from "./TranscriptPanel";
 import FilesDiffPanel from "./FilesDiffPanel";
 import Timeline from "./Timeline";
@@ -12,9 +13,13 @@ const TerminalReplay = dynamic(() => import("./TerminalReplay"), { ssr: false })
 
 interface Props {
   detail: ReviewSessionDetail;
+  /** Refetches the full detail (incl. evaluation + new ai.evaluation event)
+   *  from the server. Wired from SessionDetailLoader's load() so the
+   *  Scorecard's Re-evaluate button can refresh in place. */
+  onRefetch: () => Promise<void> | void;
 }
 
-export default function SessionDetail({ detail }: Props) {
+export default function SessionDetail({ detail, onRefetch }: Props) {
   return (
     <main
       style={{
@@ -27,6 +32,13 @@ export default function SessionDetail({ detail }: Props) {
     >
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         <SessionSummary detail={detail} />
+
+        <Scorecard
+          evaluation={detail.evaluation}
+          sessionId={detail.session.id}
+          events={detail.events}
+          onRefetch={onRefetch}
+        />
 
         <div
           style={{

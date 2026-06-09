@@ -60,8 +60,10 @@ export async function reviewRoutes(server: FastifyInstance) {
     // One grouped query per child table, fired in parallel.
     // We fetch only session_id and aggregate in JS — avoids the N+1 trap and
     // doesn't require an RPC. For 100 sessions this is at most a few hundred
-    // rows per child query.
-    const [eventsRes, msgsRes, filesRes] = await Promise.all([
+    // rows per child query. Evaluations is the fourth parallel read: we want
+    // the LATEST per session (re-runs delete-then-insert but defence in depth
+    // against any stray duplicates — keep most-recent created_at per session).
+    const [eventsRes, msgsRes, filesRes, evalsRes] = await Promise.all([
       supabase.from("events").select("session_id").in("session_id", ids),
       supabase
         .from("transcript")
@@ -69,9 +71,14 @@ export async function reviewRoutes(server: FastifyInstance) {
         .in("session_id", ids)
         .neq("role", "system"),
       supabase.from("file_snapshots").select("session_id").in("session_id", ids),
+      supabase
+        .from("evaluations")
+        .select("session_id, overall_score, status, created_at")
+        .in("session_id", ids)
+        .order("created_at", { ascending: false }),
     ]);
 
-    for (const res of [eventsRes, msgsRes, filesRes]) {
+    for (const res of [eventsRes, msgsRes, filesRes, evalsRes]) {
       if (res.error) {
         server.log.error({ err: res.error }, "[review] count query failed");
         return reply.status(500).send({ error: "Failed to load session counts" });
@@ -82,19 +89,37 @@ export async function reviewRoutes(server: FastifyInstance) {
     const msgCounts   = countBySessionId(msgsRes.data ?? []);
     const fileCounts  = countBySessionId(filesRes.data ?? []);
 
-    const rows = (sessions as SessionRow[]).map((s) => ({
-      id: s.id,
-      status: s.status,
-      end_reason: s.end_reason,
-      model: s.model,
-      created_at: s.created_at,
-      ended_at: s.ended_at,
-      duration_ms: s.duration_ms,
-      spend_usd: s.spend_usd,
-      event_count: eventCounts.get(s.id) ?? 0,
-      messages:    msgCounts.get(s.id) ?? 0,
-      file_saves:  fileCounts.get(s.id) ?? 0,
-    }));
+    // Build latest-evaluation-per-session map. Rows arrived sorted by
+    // created_at DESC so the first row we see for a given session_id wins.
+    interface EvalListRow {
+      session_id: string;
+      overall_score: number | string;
+      status: string;
+      created_at: string;
+    }
+    const latestEval = new Map<string, EvalListRow>();
+    for (const r of (evalsRes.data ?? []) as EvalListRow[]) {
+      if (!latestEval.has(r.session_id)) latestEval.set(r.session_id, r);
+    }
+
+    const rows = (sessions as SessionRow[]).map((s) => {
+      const ev = latestEval.get(s.id);
+      return {
+        id: s.id,
+        status: s.status,
+        end_reason: s.end_reason,
+        model: s.model,
+        created_at: s.created_at,
+        ended_at: s.ended_at,
+        duration_ms: s.duration_ms,
+        spend_usd: s.spend_usd,
+        event_count: eventCounts.get(s.id) ?? 0,
+        messages:    msgCounts.get(s.id) ?? 0,
+        file_saves:  fileCounts.get(s.id) ?? 0,
+        overall_score:     ev ? Number(ev.overall_score) : null,
+        evaluation_status: ev ? (ev.status as "complete" | "error") : null,
+      };
+    });
 
     return reply.send({ sessions: rows });
   });
@@ -111,9 +136,11 @@ export async function reviewRoutes(server: FastifyInstance) {
 
     const id = parsed.data.id;
 
-    // Fire all five reads in parallel — they share no dependencies.
+    // Fire all six parallel reads — they share no dependencies.
     // file_snapshots has no seq column, so we order it by ts (insertion order).
-    const [sessRes, eventsRes, transcriptRes, fileSnapshotsRes, costRes] =
+    // The latest evaluation per session is the most-recent row (re-evals
+    // delete-then-insert but defence in depth: limit 1 ordered DESC).
+    const [sessRes, eventsRes, transcriptRes, fileSnapshotsRes, costRes, evalRes] =
       await Promise.all([
         supabase.from("sessions").select("*").eq("id", id).maybeSingle(),
         supabase
@@ -136,6 +163,13 @@ export async function reviewRoutes(server: FastifyInstance) {
           .select("*")
           .eq("session_id", id)
           .order("ts", { ascending: true }),
+        supabase
+          .from("evaluations")
+          .select("*")
+          .eq("session_id", id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
 
     if (sessRes.error) {
@@ -146,11 +180,28 @@ export async function reviewRoutes(server: FastifyInstance) {
       return reply.status(404).send({ error: "Session not found" });
     }
 
-    for (const res of [eventsRes, transcriptRes, fileSnapshotsRes, costRes]) {
+    for (const res of [eventsRes, transcriptRes, fileSnapshotsRes, costRes, evalRes]) {
       if (res.error) {
         server.log.error({ err: res.error, id }, "[review] detail child query failed");
         return reply.status(500).send({ error: "Failed to load session detail" });
       }
+    }
+
+    // Conditionally fetch evaluation_items only when an evaluation exists.
+    // Sequential here (depends on evalRes); cheap one-row-lookup pattern.
+    let evaluation: Record<string, unknown> | null = null;
+    if (evalRes.data) {
+      const evalRow = evalRes.data as Record<string, unknown>;
+      const { data: itemsData, error: itemsErr } = await supabase
+        .from("evaluation_items")
+        .select("competency, score, weight, rationale, evidence, created_at")
+        .eq("evaluation_id", evalRow.id as string)
+        .order("competency", { ascending: true });
+      if (itemsErr) {
+        server.log.error({ err: itemsErr, id }, "[review] evaluation_items load failed");
+        // Don't fail the whole detail — return the eval header with empty items.
+      }
+      evaluation = { ...evalRow, items: itemsData ?? [] };
     }
 
     return reply.send({
@@ -159,6 +210,7 @@ export async function reviewRoutes(server: FastifyInstance) {
       transcript:    transcriptRes.data ?? [],
       fileSnapshots: fileSnapshotsRes.data ?? [],
       cost:          costRes.data ?? [],
+      evaluation,
     });
   });
 

@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { listReviewSessions, type ReviewSession } from "@/lib/api";
 import StatusBadge from "./StatusBadge";
+import { scoreColor } from "./format";
 
-type SortKey = "created_at" | "spend_usd" | "duration_ms";
+type SortKey = "created_at" | "spend_usd" | "duration_ms" | "overall_score";
 type SortDir = "asc" | "desc";
 
 // ── formatters ───────────────────────────────────────────────────────────────
@@ -125,6 +126,16 @@ export default function SessionsTable() {
       } else if (sortKey === "spend_usd") {
         av = typeof a.spend_usd === "string" ? parseFloat(a.spend_usd) : a.spend_usd;
         bv = typeof b.spend_usd === "string" ? parseFloat(b.spend_usd) : b.spend_usd;
+      } else if (sortKey === "overall_score") {
+        // Unevaluated sessions sort to the bottom in BOTH directions so the
+        // recruiter sees scored sessions first when ranking by overall.
+        const aHas = typeof a.overall_score === "number";
+        const bHas = typeof b.overall_score === "number";
+        if (!aHas && !bHas) return 0;
+        if (!aHas) return 1;
+        if (!bHas) return -1;
+        av = a.overall_score!;
+        bv = b.overall_score!;
       } else {
         av = a.duration_ms ?? 0;
         bv = b.duration_ms ?? 0;
@@ -267,6 +278,7 @@ export default function SessionsTable() {
                 <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
                   Status
                 </th>
+                <SortHeader label="Overall"  sortKey="overall_score" currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
                 <SortHeader label="Created"  sortKey="created_at"  currentKey={sortKey} currentDir={sortDir} align="left"  onSort={handleSort} />
                 <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#858585", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #404040" }}>
                   Ended
@@ -332,6 +344,25 @@ function Row({ session: s }: { session: ReviewSession }) {
       </td>
       <td style={cell}>
         <StatusBadge status={s.status} />
+      </td>
+      <td style={{ ...numCell, color: "#cccccc" }}>
+        {typeof s.overall_score === "number" ? (
+          <>
+            <span style={{ color: scoreColor(Math.round(s.overall_score)), fontWeight: 600 }}>
+              {s.overall_score.toFixed(2)}
+            </span>
+            <span style={{ color: "#666", fontSize: 11, marginLeft: 2 }}>/5</span>
+          </>
+        ) : s.evaluation_status === "error" ? (
+          <span
+            style={{ color: "#f48771", fontWeight: 500, fontSize: 11 }}
+            title="Evaluation errored; open the session to re-run"
+          >
+            ERR
+          </span>
+        ) : (
+          <span style={{ color: "#555" }}>—</span>
+        )}
       </td>
       <td style={{ ...cell, color: "#858585", fontSize: 12, whiteSpace: "nowrap" }}>
         {formatDate(s.created_at)}
