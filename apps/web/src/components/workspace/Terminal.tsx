@@ -53,9 +53,21 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
     const attachAddon = new AttachAddon(ws);
     term.loadAddon(attachAddon);
 
-    // When the server closes the PTY socket (session expired), notify the workspace.
+    // Track whether the WS actually established. Without this guard,
+    // (a) a transient connection failure during component-mount (sandbox
+    //     not ready, 404, network blip) closes with code 1006, and
+    // (b) a normal Workspace unmount calling ws.close() with no code
+    //     closes with the default (non-1000) code
+    // — both falsely look like "server-initiated session end" and flip
+    // the global store status to "ended", which renders EndScreen over
+    // the NEXT session that mounts. Only treat the close as a real
+    // session-end when (1) the WS opened successfully first, AND (2)
+    // we didn't initiate the close ourselves via the cleanup below.
+    let opened = false;
+    let selfClosed = false;
+    ws.addEventListener("open", () => { opened = true; });
     ws.addEventListener("close", (ev) => {
-      // code 1000 = normal close (user navigated away); anything else = server-initiated.
+      if (!opened || selfClosed) return;
       if (ev.code !== 1000) {
         onSessionEnd?.();
       }
@@ -67,8 +79,9 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
     observer.observe(containerRef.current);
 
     return () => {
+      selfClosed = true;
       observer.disconnect();
-      ws.close();
+      ws.close(1000, "client unmount");
       term.dispose();
     };
   }, [sessionId, onSessionEnd]);

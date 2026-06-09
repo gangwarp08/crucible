@@ -28,6 +28,13 @@ export async function buildServer() {
   await server.register(fastifyHelmet);
   await server.register(fastifyCors, {
     origin: env.NODE_ENV === "production" ? false : ["http://localhost:3000"],
+    // Without `methods`, the default Access-Control-Allow-Methods response
+    // came back as GET,HEAD,POST — missing DELETE and PUT. The browser
+    // blocked our DELETE /sessions/:id and PUT /file calls before they
+    // ever reached the server, surfacing as "Failed to fetch" in the UI.
+    // Explicit allow-list per the actual route methods we use.
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   });
   await server.register(fastifyRateLimit, {
     max: 100,

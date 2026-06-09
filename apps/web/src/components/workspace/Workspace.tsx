@@ -68,6 +68,11 @@ export default function Workspace({ sessionId }: Props) {
   const [layoutReady, setLayoutReady] = useState(false);
 
   const { init, setStatus, status, scenario } = useSessionStore();
+  // The store's sessionId, distinct from the prop. Used to suppress UI from
+  // a PRIOR session (EndScreen overlay especially) while the new session is
+  // still hydrating. `hydrated` flips true once the store matches the route.
+  const storeSessionId = useSessionStore((s) => s.sessionId);
+  const hydrated = storeSessionId === sessionId;
 
   // Hydrate panel layout once on mount so the PanelGroup mounts with the
   // persisted sizes, not the defaults.
@@ -76,8 +81,16 @@ export default function Workspace({ sessionId }: Props) {
     setLayoutReady(true);
   }, []);
 
-  // On mount: fetch session metadata to initialize the store.
+  // On mount: eagerly reset the store with empty defaults for the NEW
+  // session BEFORE hydrating from the server. Without this, the zustand
+  // store (a module-level singleton) leaks status="ended" / endedAt /
+  // sessionId from a prior session across the route change — which
+  // renders EndScreen the moment the new workspace mounts. After the
+  // eager reset, the brief render before getSession resolves shows a
+  // blank workspace (loading), not the prior session's EndScreen.
   useEffect(() => {
+    init(sessionId, "", 0, 0, null, null, null,
+      { title: null, brief: null, role: null, difficulty: null });
     getSession(sessionId)
       .then((s) => {
         init(
@@ -267,7 +280,11 @@ export default function Workspace({ sessionId }: Props) {
         )}
       </div>
 
-      {status === "ended" && <EndScreen />}
+      {/* Only render EndScreen when the ended-state belongs to THIS session,
+          not a residual from a prior one (the store is a module-level
+          singleton). `hydrated` flips true once the store's sessionId
+          matches the route prop. */}
+      {hydrated && status === "ended" && <EndScreen />}
     </div>
   );
 }

@@ -5,8 +5,11 @@ import {
   type DeliverableData, type DeliverableStatus,
 } from "@/lib/api";
 import { color, font, radius } from "@/styles/tokens";
+import { useSessionStore } from "@/stores/sessionStore";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
+
+const SERVER_URL = process.env["NEXT_PUBLIC_SERVER_URL"] ?? "http://localhost:3001";
 
 interface Props { sessionId: string; }
 
@@ -37,6 +40,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const setSessionStatus = useSessionStore((s) => s.setStatus);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,26 +55,59 @@ export default function DeliverablePanel({ sessionId }: Props) {
     return () => { cancelled = true; };
   }, [sessionId]);
 
-  async function save(nextStatus: DeliverableStatus) {
+  /** Save draft is iterative — persists the current form as status='draft'
+   *  and does NOT end the session. The candidate can keep working. */
+  async function saveDraft() {
     if (busy) return;
-    if (nextStatus === "submitted") {
-      if (!window.confirm("Submit final deliverable? You can resubmit if you change your mind — the latest wins.")) return;
-    }
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await saveDeliverable(sessionId, { status: nextStatus, data });
+      const result = await saveDeliverable(sessionId, { status: "draft", data });
       setStatus(result.status);
       setUpdatedAt(result.updated_at);
       setFeedback({
         kind: "ok",
-        text: nextStatus === "submitted"
-          ? `Submitted · ${new Date(result.updated_at).toLocaleTimeString()}`
-          : `Draft saved · ${new Date(result.updated_at).toLocaleTimeString()}`,
+        text: `Draft saved · ${new Date(result.updated_at).toLocaleTimeString()}`,
       });
     } catch (err) {
       setFeedback({ kind: "err", text: err instanceof Error ? err.message : "Save failed" });
     } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Submit is terminal — persists the deliverable as status='submitted',
+   *  DELETEs the session (triggers server expireSession: sandbox killed,
+   *  LiteLLM key revoked, telemetry flushed, Analysis Agent auto-eval),
+   *  and flips local status to "ended" optimistically so the EndScreen
+   *  renders immediately. There is no resubmit after Submit — the
+   *  confirmation makes that explicit. */
+  async function submit() {
+    if (busy) return;
+    if (!window.confirm(
+      "Submit and end the session?\n\n" +
+      "This is final — your work is sent for review, the sandbox closes, " +
+      "and the session cannot be reopened.",
+    )) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      await saveDeliverable(sessionId, { status: "submitted", data });
+    } catch (err) {
+      setFeedback({ kind: "err", text: err instanceof Error ? err.message : "Submit failed" });
+      setBusy(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        throw new Error(`DELETE returned ${res.status}`);
+      }
+      // Flip the global status synchronously so EndScreen renders without
+      // waiting for the PTY WS close to bounce back.
+      setSessionStatus("ended");
+    } catch (err) {
+      setFeedback({ kind: "err", text: err instanceof Error ? err.message : "Failed to end session" });
       setBusy(false);
     }
   }
@@ -145,11 +182,8 @@ export default function DeliverablePanel({ sessionId }: Props) {
         display: "flex", alignItems: "center", gap: 10,
         flexShrink: 0,
       }}>
-        <Button variant="secondary" size="md" disabled={busy} onClick={() => void save("draft")}>
+        <Button variant="secondary" size="md" disabled={busy} onClick={() => void saveDraft()}>
           Save draft
-        </Button>
-        <Button variant="primary" size="md" disabled={busy} onClick={() => void save("submitted")}>
-          Submit
         </Button>
         <div style={{ flex: 1 }} />
         {feedback && (
@@ -158,10 +192,20 @@ export default function DeliverablePanel({ sessionId }: Props) {
             color: feedback.kind === "ok" ? color.success.base : color.error.base,
             fontFamily: font.mono,
             fontVariantNumeric: "tabular-nums",
+            marginRight: 8,
           }}>
             {feedback.text}
           </div>
         )}
+        <Button
+          variant="primary"
+          size="md"
+          disabled={busy}
+          onClick={() => void submit()}
+          title="Submit and end the session. This is final."
+        >
+          {busy ? "Submitting…" : "Submit"}
+        </Button>
       </div>
     </div>
   );
