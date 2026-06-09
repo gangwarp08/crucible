@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { supabase } from "../services/supabase.js";
+import { runAnalysisAgent, AnalysisError } from "../services/analysis-agent.js";
 
 const LIST_LIMIT = 100;
 
@@ -160,4 +161,38 @@ export async function reviewRoutes(server: FastifyInstance) {
       cost:          costRes.data ?? [],
     });
   });
+
+  // ─── Manual evaluation trigger (calibration / rubric iteration) ─────────
+  // Runs the Analysis Agent against any completed session. Replaces any prior
+  // evaluation for the same session_id (delete + insert, items cascade).
+  // One LLM call per request; rate-limited to keep accidental loops cheap.
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/evaluate",
+    {
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id" });
+      }
+      const sessionId = idParse.data.id;
+      try {
+        const result = await runAnalysisAgent(sessionId);
+        return reply.send(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // AnalysisError covers "session not found", "no scenario", and
+        // "has not ended" — all 400-class conditions surfaced to the caller.
+        // LLM/parse failures inside runAnalysisAgent already persist a
+        // status='error' row before re-throwing, so a 500 here still leaves
+        // a recruiter-visible trace.
+        if (err instanceof AnalysisError && /not found|no scenario|not ended/i.test(msg)) {
+          return reply.status(400).send({ error: msg });
+        }
+        server.log.error({ err, sessionId }, "manual analysis failed");
+        return reply.status(500).send({ error: "analysis failed", message: msg });
+      }
+    },
+  );
 }

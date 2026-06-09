@@ -2,6 +2,7 @@ import { sessionRegistry } from "./registry.js";
 import { revokeSessionKey } from "./litellm.js";
 import { finalizeSession } from "./db.js";
 import { logEvent, flushTelemetry } from "./telemetry.js";
+import { runAnalysisAgent } from "./analysis-agent.js";
 
 export type EndReason = "timeout" | "manual" | "budget";
 
@@ -62,5 +63,18 @@ export async function expireSession(
     await entry.sandbox.kill();
   } catch {
     // already dead or network error — ignore
+  }
+
+  // Fire-and-forget the Analysis Agent for scenario-bound sessions. Runs
+  // after telemetry flush + finalizeSession so all events are queryable
+  // from Supabase when the agent assembles its input. Errors are logged
+  // but never propagate — the session is cleanly ended either way.
+  if (entry.scenarioId !== null) {
+    void runAnalysisAgent(sessionId).catch((err) => {
+      console.error(
+        `[analysis] auto-eval failed for ${sessionId}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
   }
 }

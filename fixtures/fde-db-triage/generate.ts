@@ -402,7 +402,21 @@ interface GroundTruth {
     base_payments: number;
     duplicate_payments: number;
   };
+  // Plain-English root-cause narrative, used by the Analysis Agent's judge
+  // prompt to grade root-cause + dedup-method evidence in the deliverable.
+  // Synthetic with the rest of the fixture; bug-spoiler — keep on the server.
+  root_cause_narrative: string;
 }
+
+const ROOT_CAUSE_NARRATIVE =
+  "In the bug months (Apr + May 2026) a webhook-retry bug double-inserted " +
+  "~8% of succeeded payments. Duplicates share external_payment_id + " +
+  "amount_cents + subscription_id and differ only by id and a few seconds " +
+  "of created_at. The correct method is to dedup by external_payment_id " +
+  "(e.g. SELECT MIN(id) per external_payment_id, JOIN back) before SUMing " +
+  "amount_cents — filtering to status = 'succeeded'. Refunds (~10% of all " +
+  "payments, normally distributed) and UTC month-boundary timestamps are " +
+  "red herrings and do not close the gap.";
 
 function computeGroundTruth(
   payments: Payment[],
@@ -478,6 +492,7 @@ function computeGroundTruth(
       base_payments: basePayments.length,
       duplicate_payments: duplicatePayments.length,
     },
+    root_cause_narrative: ROOT_CAUSE_NARRATIVE,
   };
 }
 
