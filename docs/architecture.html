@@ -1,0 +1,1458 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crucible — Architecture, modules & operating guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-page:      #0c0c10;
+      --bg-panel:     #15151b;
+      --bg-elevated:  #1c1c24;
+      --bg-code:      #0f0f14;
+      --bg-hover:     #1f1f28;
+      --border-subtle:#1c1c25;
+      --border:       #2a2a36;
+      --border-strong:#3a3a48;
+      --text:         #e6e6ea;
+      --text-2:       #a0a0ad;
+      --text-3:       #6a6a78;
+      --accent:       #7c7fff;
+      --accent-2:     #9396ff;
+      --accent-soft:  rgba(124, 127, 255, 0.10);
+      --accent-line:  rgba(124, 127, 255, 0.30);
+      --success:      #56d6a8;
+      --warn:         #e0b66e;
+      --error:        #ff7a7a;
+      --code-string:  #b6e3a8;
+      --code-keyword: #c39bff;
+      --code-comment: #6a6a78;
+      --code-number:  #f0b07a;
+      --font-sans:    "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body { margin: 0; padding: 0; background: var(--bg-page); color: var(--text); }
+    body {
+      font-family: var(--font-sans);
+      font-size: 15px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Themed thin scrollbars. */
+    * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    *::-webkit-scrollbar { width: 8px; height: 8px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+    *::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+    :focus { outline: none; }
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    a { color: var(--accent); text-decoration: none; transition: color 120ms; }
+    a:hover { color: var(--accent-2); }
+
+    /* Wordmark / header */
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      background: rgba(12, 12, 16, 0.86);
+      backdrop-filter: saturate(180%) blur(10px);
+      -webkit-backdrop-filter: saturate(180%) blur(10px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 14px 32px;
+    }
+    .topbar-inner {
+      display: flex; align-items: center; gap: 12px;
+      max-width: 1320px; margin: 0 auto;
+    }
+    .wordmark-c {
+      width: 22px; height: 22px; border-radius: 5px;
+      background: linear-gradient(135deg, var(--accent) 0%, #9b87ff 100%);
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: 12px;
+      letter-spacing: -0.5px;
+      box-shadow: 0 1px 3px rgba(124, 127, 255, 0.35);
+    }
+    .wordmark {
+      font-size: 12px; font-weight: 600; letter-spacing: 0.16em;
+      color: var(--text-2); text-transform: uppercase;
+    }
+    .topbar .doc-title {
+      font-size: 13px; color: var(--text-3);
+      border-left: 1px solid var(--border); padding-left: 12px;
+      margin-left: 4px;
+    }
+
+    /* Main layout: sticky TOC + content */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 48px;
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 48px 32px 96px;
+    }
+    @media (max-width: 1080px) {
+      .layout { grid-template-columns: 1fr; gap: 32px; padding: 32px 24px 96px; }
+      .toc { position: static !important; max-height: none !important; }
+    }
+
+    /* Table of contents */
+    .toc {
+      position: sticky;
+      top: 72px;
+      align-self: start;
+      max-height: calc(100vh - 96px);
+      overflow-y: auto;
+      padding-right: 8px;
+    }
+    .toc-title {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+      color: var(--text-3); text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .toc ol {
+      list-style: none; padding: 0; margin: 0;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .toc a {
+      display: block;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--text-2);
+      border-left: 2px solid transparent;
+      border-radius: 0 4px 4px 0;
+      line-height: 1.4;
+    }
+    .toc a:hover { background: var(--accent-soft); color: var(--text); border-left-color: var(--accent-line); }
+    .toc .sub a { padding-left: 28px; font-size: 12px; color: var(--text-3); }
+
+    /* Content column */
+    .content { max-width: 880px; min-width: 0; }
+
+    .hero {
+      margin-bottom: 56px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .hero-eyebrow {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.16em;
+      color: var(--accent); text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: -0.8px;
+      margin: 12px 0 16px;
+      color: #fff;
+      line-height: 1.15;
+    }
+    .audience {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent);
+      padding: 16px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      color: var(--text-2);
+      margin-top: 24px;
+    }
+    .audience strong { color: var(--text); font-weight: 600; }
+
+    /* Typography */
+    h2 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin: 64px 0 18px;
+      color: #fff;
+      scroll-margin-top: 84px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    h2:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+    h3 {
+      font-size: 17px; font-weight: 600;
+      letter-spacing: -0.1px;
+      margin: 36px 0 12px; color: var(--text);
+      scroll-margin-top: 84px;
+    }
+    h4 {
+      font-size: 14px; font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      margin: 28px 0 10px; color: var(--text-2);
+    }
+
+    p { margin: 0 0 16px; }
+    p:last-child { margin-bottom: 0; }
+
+    strong { color: var(--text); font-weight: 600; }
+    em { color: var(--text); font-style: italic; }
+
+    /* Inline code */
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+      background: var(--bg-elevated);
+      color: var(--text);
+      padding: 1.5px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: var(--text);
+      font-size: 13px;
+      white-space: pre;
+    }
+
+    /* Code / ASCII blocks */
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 16px 0 20px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    /* SQL code highlighting */
+    pre.sql .kw { color: var(--code-keyword); font-weight: 500; }
+    pre.sql .str { color: var(--code-string); }
+    pre.sql .num { color: var(--code-number); }
+    pre.sql .cm { color: var(--code-comment); font-style: italic; }
+
+    /* Lists */
+    ul, ol { margin: 0 0 18px; padding-left: 24px; }
+    li { margin-bottom: 6px; }
+    li > p { margin-bottom: 6px; }
+    li ul, li ol { margin: 6px 0; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; margin: 16px 0 24px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    thead { background: var(--bg-elevated); }
+    th {
+      text-align: left;
+      padding: 12px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: top;
+    }
+    td {
+      padding: 11px 14px;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text);
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background-color 120ms; }
+    tbody tr:hover { background: var(--bg-hover); }
+    td.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    /* Callouts */
+    .callout {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 20px 0;
+    }
+    .callout.accent { border-left: 3px solid var(--accent); }
+    .callout.warn { border-left: 3px solid var(--warn); }
+    .callout.success { border-left: 3px solid var(--success); }
+    .callout.error { border-left: 3px solid var(--error); }
+    .callout-label {
+      display: inline-block;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .callout.warn .callout-label { color: var(--warn); }
+    .callout.success .callout-label { color: var(--success); }
+    .callout.error .callout-label { color: var(--error); }
+
+    /* Pills (tones for in-text emphasis) */
+    .pill {
+      display: inline-flex; align-items: center;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .pill.success { background: rgba(86, 214, 168, 0.12); color: var(--success); }
+    .pill.warn { background: rgba(224, 182, 110, 0.12); color: var(--warn); }
+    .pill.error { background: rgba(255, 122, 122, 0.10); color: var(--error); }
+    .pill.neutral { background: var(--bg-elevated); color: var(--text-2); border: 1px solid var(--border); }
+
+    /* Section labels above lists / sub-sections */
+    .section-label {
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-3);
+      margin: 28px 0 10px;
+    }
+
+    /* Anchor link affordance */
+    h2, h3 { position: relative; }
+    h2::before, h3::before {
+      content: "#"; position: absolute;
+      left: -22px; color: var(--text-3);
+      opacity: 0;
+      transition: opacity 120ms;
+      font-weight: 500;
+    }
+    h2:hover::before, h3:hover::before { opacity: 1; }
+
+    /* Footer */
+    footer {
+      margin-top: 80px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 12px;
+      color: var(--text-3);
+      text-align: center;
+    }
+
+    .meta-row {
+      display: flex; align-items: center; gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="wordmark-c">C</span>
+      <span class="wordmark">Crucible</span>
+      <span class="doc-title">Architecture, modules &amp; operating guide</span>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <aside class="toc" aria-label="Table of contents">
+      <div class="toc-title">On this page</div>
+      <ol>
+        <li><a href="#tldr">TL;DR</a></li>
+        <li><a href="#diagram">The system in one diagram</a></li>
+        <li><a href="#layers">The three layers, in detail</a>
+          <ol class="sub">
+            <li><a href="#layer-browser">Browser</a></li>
+            <li><a href="#layer-server">Server</a></li>
+            <li><a href="#layer-infra">External infra</a></li>
+          </ol>
+        </li>
+        <li><a href="#mental-model">The mental model: session = the unit of everything</a></li>
+        <li><a href="#flow-candidate">Flow 1 — Candidate runs an assessment</a></li>
+        <li><a href="#flow-recruiter">Flow 2 — Recruiter reviews</a></li>
+        <li><a href="#flow-personas">Flow 3 — Persona simulation</a></li>
+        <li><a href="#analysis-agent">The Analysis Agent (the judge)</a></li>
+        <li><a href="#calibration">Calibration &amp; verification harness</a></li>
+        <li><a href="#persistence">Data persistence — what lives where</a></li>
+        <li><a href="#module-reference">Module reference</a></li>
+        <li><a href="#monitoring">Monitoring — what to watch &amp; where</a></li>
+        <li><a href="#runbook">Operating Crucible going forward — a runbook</a></li>
+        <li><a href="#notable">What's notable about how it's built</a></li>
+        <li><a href="#glossary">Glossary</a></li>
+      </ol>
+    </aside>
+
+    <main class="content">
+
+      <section class="hero">
+        <div class="hero-eyebrow">Engineering Reference</div>
+        <h1>Crucible — architecture, modules, and operating guide</h1>
+        <div class="audience">
+          <strong>Audience:</strong> anyone joining the project, or returning to it after a break.<br>
+          <strong>Goal:</strong> in one read you should be able to (a) describe what every directory
+          does, (b) trace any user-visible interaction down to a row in Supabase, and (c) know what to
+          monitor in production.
+        </div>
+      </section>
+
+      <h2 id="tldr">TL;DR (3 paragraphs)</h2>
+
+      <p><strong>Crucible is an AI-conducted coding assessment platform.</strong>
+        A candidate clicks a link, lands on a brief, clicks Begin, and gets dropped into a
+        sandboxed dev environment with a file tree, an editor, a terminal, a SQL data explorer,
+        a chat with two AI personas (a client and a teammate), an AI assistant, and a
+        deliverable form. They have a timer, a token budget, and a compute budget. While they
+        work, the personas reach out unprompted according to a scripted beat schedule. When time
+        runs out — or they submit and end the session — an <strong>Analysis Agent</strong> scores
+        everything they did against an 8-competency rubric. A recruiter later reviews the session
+        timeline + scorecard.</p>
+
+      <p><strong>Three layers.</strong> The <strong>browser</strong> is a Next.js (app router) app
+        that talks ONLY to our own server. The <strong>server</strong> is a Fastify process that
+        owns sessions: it provisions E2B microVMs for the sandbox, mints short-lived per-session
+        keys for LiteLLM (our only path to model providers), writes telemetry to Supabase, and
+        runs the persona engine. The <strong>external infra</strong> is E2B (sandboxes),
+        LiteLLM on Railway (the model gateway — provider keys live ONLY there, never in this
+        app), Supabase (Postgres + Auth + RLS), and Redis (rate-limit + session-side state).</p>
+
+      <p><strong>Everything is session-scoped.</strong> A <code>sessions.id</code> UUID is the
+        central key in the DB and the central object in server memory. Every event, every persona
+        turn, every file save, every cost line, every evaluation joins back to a session. The
+        in-memory <code>sessionRegistry</code> Map holds the live wiring (sandbox handle,
+        WebSockets, persona state, scenario mechanics); Supabase holds the durable record. If
+        the server restarts mid-session, telemetry is preserved but live wiring is lost — that's
+        the source of the orphan-teardown fallback in <code>destroySandbox</code>.</p>
+
+      <h2 id="diagram">The system in one diagram</h2>
+
+      <pre>                          ┌─────────────────────────────┐
+                          │       BROWSER (Next.js)     │
+                          │  /start/[slug] · /session/* │
+                          │  /review · /review/[id]     │
+                          └──────┬───────────────────┬──┘
+                          REST  │            WS     │
+                                ▼                   ▼
+              ┌─────────────────────────────────────────────────┐
+              │              SERVER (Fastify)                   │
+              │                                                 │
+              │  routes/    POST /sessions       sessions.ts    │
+              │             GET  /sessions/:id                  │
+              │             DEL  /sessions/:id                  │
+              │             POST /api/chat       chat.ts        │
+              │             POST /api/sessions/:id/query        │
+              │             POST /api/sessions/:id/deliverable  │
+              │             GET  /api/scenarios/:slug           │
+              │             GET  /api/review/*                  │
+              │             WS   /pty/:sessionId                │
+              │             WS   /messages/:sessionId           │
+              │                                                 │
+              │  services/  sessionRegistry  (in-memory map)    │
+              │             scenarios + personas + scheduler    │
+              │             sandbox lifecycle                   │
+              │             litellm (mint/revoke session keys)  │
+              │             telemetry buffers + flusher         │
+              │             analysis-agent (the judge)          │
+              └────┬───────────────┬───────────────┬────────┬───┘
+                   │               │               │        │
+                   ▼               ▼               ▼        ▼
+            ┌──────────┐   ┌────────────┐   ┌───────────┐ ┌──────┐
+            │  E2B     │   │  LiteLLM   │   │ Supabase  │ │Redis │
+            │ microVM  │   │  Railway   │   │  Postgres │ │      │
+            │ (Python  │   │  gateway   │   │   + Auth  │ │ rate │
+            │  + SQL)  │   │ provider→  │   │   + RLS   │ │ limit│
+            │          │   │ Anthropic/ │   │           │ │      │
+            │          │   │ OpenAI/    │   │ sessions  │ │      │
+            │          │   │ Gemini     │   │ events    │ │      │
+            │          │   │            │   │ transcript│ │      │
+            │          │   │            │   │ cost_…    │ │      │
+            │          │   │            │   │ evaluations│ │     │
+            └──────────┘   └────────────┘   └───────────┘ └──────┘</pre>
+
+      <div class="callout warn">
+        <div class="callout-label">Hard rules (from CLAUDE.md)</div>
+        <ul style="margin-bottom:0">
+          <li>The browser NEVER talks to E2B, LiteLLM, or Supabase directly.</li>
+          <li>Provider keys (Anthropic / OpenAI / Gemini) NEVER appear in app env — only on the
+            Railway LiteLLM service.</li>
+          <li>Server-only env: <code>LITELLM_MASTER_KEY</code>, <code>E2B_API_KEY</code>,
+            <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>SUPABASE_DB_URL</code>. Only
+            <code>NEXT_PUBLIC_*</code> may reach the client.</li>
+        </ul>
+      </div>
+
+      <h2 id="layers">The three layers, in detail</h2>
+
+      <h3 id="layer-browser">Layer 1 — Browser (<code>apps/web/</code>)</h3>
+
+      <p>Next.js 15 app router, React 19, zustand for state, <strong>inline styles</strong> sourced
+        from <code>src/styles/tokens.ts</code>. After the Week 6 UI overhaul, a tiny
+        <code>src/app/globals.css</code> handles hover/focus pseudo-classes, scrollbars, and
+        <code>react-resizable-panels</code> drag handles.</p>
+
+      <pre>apps/web/src/
+  app/
+    layout.tsx          loads Inter + JetBrains Mono via next/font; imports globals.css
+    page.tsx            redirects /  →  /start/fde-db-triage
+    start/[slug]/       candidate landing page (brief, constraints, Begin)
+    session/[id]/       the workspace
+    review/             recruiter list
+    review/[id]/        recruiter session detail
+    globals.css         body resets, focus rings, data-hover, scrollbars
+  components/
+    start/              StartScreen.tsx — the landing UX
+    workspace/          the IDE itself (see below)
+    review/             the recruiter surface (see below)
+    ui/                 8 shared primitives (Button, Card, Pill, Bubble, Stat,
+                        TabStrip, SectionLabel, IconButton)
+  stores/
+    sessionStore.ts     zustand singleton; sessionId, deadline, status, balances,
+                        scenario presentation, endedAt
+  lib/
+    api.ts              EVERY HTTP call to the server — typed wrappers
+  styles/
+    tokens.ts           color/space/radius/font/size/shadow tokens</pre>
+
+      <p><strong>The workspace is a resizable 3-pane IDE.</strong> From left to right:</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Pane</th><th class="num">Default</th><th class="num">Min</th><th>Contents</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>File tree</td><td class="num">18%</td><td class="num">10%</td><td><code>FileTree</code> — lists <code>/workspace</code> recursively</td></tr>
+            <tr><td>Editor</td><td class="num">50%</td><td class="num">25%</td><td>Monaco (<code>vs-dark</code>, ts/py/sql, automatic layout)</td></tr>
+            <tr><td>Tool panel</td><td class="num">32%</td><td class="num">20%</td><td>7-tab strip + always-mounted panes</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The 7 tabs (in workflow order): <strong>Brief · Docs · Messages · Data · Terminal ·
+        Assistant · Deliverable</strong>. All seven stay mounted (<code>display: block / none</code>)
+        so the PTY WS, messaging WS, and chat state survive tab switches. Pane sizes persist to
+        <code>localStorage</code> under <code>crucible.workspace.layout.v1</code>.</p>
+
+      <p>The top <strong>chrome row</strong> (44px) merges scenario title + role/difficulty pill
+        with the live <code>ConstraintHUD</code> (Time / Tokens / Compute / Money / Memory). Time,
+        Tokens, Compute are live (color-coded as they cross warning thresholds). Money + Memory
+        are static context.</p>
+
+      <p>When <code>sessionStore.status === "ended"</code> an <strong>EndScreen</strong> overlay
+        covers the workspace — same overlay regardless of end reason (timer, manual DELETE, budget
+        exhausted).</p>
+
+      <h3 id="layer-server">Layer 2 — Server (<code>apps/server/</code>)</h3>
+
+      <p>Fastify, TypeScript, single process. The dev loop is <code>tsx watch src/index.ts</code>.
+        Everything is module-level — no DI, no factory pattern. The in-memory
+        <code>sessionRegistry</code> Map is the single source of in-flight truth.</p>
+
+      <pre>apps/server/src/
+  index.ts              dotenv bootstrap; await buildServer(); listen; SIGTERM cleanup
+  server.ts             registers helmet, CORS, rate-limit, JWT (optional), WS plugin,
+                        and every routes/ file; starts the beat scheduler
+  env.ts                strict env loader with Zod — fails fast on misconfig
+
+  routes/               (HTTP + WS endpoints)
+    health.ts             GET /health
+    sessions.ts           POST/GET/DELETE /sessions[/:id]
+    files.ts              GET /files /file ; PUT /file
+    pty.ts                WS /pty/:sessionId — attached to sandbox PTY
+    messages.ts           WS /messages/:sessionId — persona chat channel
+    chat.ts               POST /api/chat — AI assistant turn
+    query.ts              POST /api/sessions/:id/query — read-only SQLite
+    docs.ts               GET  /api/sessions/:id/docs ; POST .../docs/:docId/view
+    deliverable.ts        GET/POST /api/sessions/:id/deliverable
+    scenarios.ts          GET /api/scenarios/:slug — candidate-safe scenario lookup
+    review.ts             GET /api/review/sessions ; .../sessions/:id ;
+                          POST .../sessions/:id/evaluate  (manual re-eval)
+
+  services/             (cross-cutting business logic)
+    registry.ts           in-memory SessionEntry shape + the Map
+    sandbox.ts            createSandbox / destroySandbox / orphanTeardown
+                          (E2B lifecycle, scenarioState seed, beat scheduling)
+    session.ts            expireSession (shared teardown path — telemetry, sockets,
+                          LiteLLM revoke, sandbox kill, auto-eval)
+    litellm.ts            mint/revoke per-session keys; chatCompletionWithMessages
+                          (all model calls go through this)
+    persona-agent.ts      LLM-driven Client (Dana) + Team (Sam) personas; reactive
+                          and proactive beats; reveal-flag state machine
+    scheduler.ts          15-second sweep loop; fires due-but-unfired proactive beats
+    messaging.ts          WS broadcast helpers for messages.ts
+    telemetry.ts          buffered events + transcript + cost ledger flush to Supabase
+    events-direct.ts      registry-bypass appendEvent — used by analysis-agent on
+                          sessions whose in-memory entry is gone
+    db.ts                 thin Supabase writers (sessions row create/update/finalize,
+                          loadSessionRow, persistScenarioStatePatch via RPC)
+    supabase.ts           single service-role Supabase client; null when env missing
+    scenarios.ts          loadScenarioById / loadScenarioBySlug
+    analysis-input.ts     assembleAnalysisInput — condenses telemetry into the JSON
+                          payload the judge sees
+    analysis-agent.ts     the judge: SYSTEM_PROMPT + parseAndValidate + persist
+                          evaluations + evaluation_items rows
+    compute-tracker.ts    deductComputeMinutes — for db.query + sandbox commands
+    query-runner.ts       runs an SQL query via a Python helper inside the sandbox
+    sqlrun.py.ts          the Python helper, embedded as a TS string for atomic copy
+    dataset-seed.ts       copies the scenario's seed.sql + creates customer.db inside
+                          the freshly-booted sandbox
+
+  scripts/              (one-off ops + the calibration verifiers — see § Calibration)
+    encode-fde-db-triage.ts       upsert fixtures/fde-db-triage/scenario.json → DB
+    apply-migration-0005.sh       creates the merge_scenario_state RPC
+    verify-*.ts                   end-to-end verifiers (one per slice)</pre>
+
+      <h3 id="layer-infra">Layer 3 — External infrastructure</h3>
+
+      <ul>
+        <li><strong>E2B</strong> — provides isolated Linux microVMs from a template called
+          <code>crucible-dev</code> (Python 3, sqlite3, common system tools). The server is the
+          only thing that touches E2B; <code>E2B_API_KEY</code> lives in server env. Every
+          sandbox is created with <code>metadata.sessionId</code> for traceability.</li>
+        <li><strong>LiteLLM</strong> (hosted on Railway) — the ONLY way the platform reaches
+          Anthropic, OpenAI, or Gemini. The server authenticates with
+          <code>LITELLM_MASTER_KEY</code> to mint per-session keys via <code>/key/generate</code>
+          with <code>max_budget</code> + <code>duration</code> set. Per-session keys cap cost +
+          expire on their own.</li>
+        <li><strong>Supabase</strong> — Postgres + Auth + Row-Level Security. The server uses the
+          service-role key (server-only). The browser never queries Supabase directly — every
+          recruiter read goes through <code>/api/review/*</code>.</li>
+        <li><strong>Redis</strong> — app-side rate limiting (via <code>@fastify/rate-limit</code>)
+          and session-side state. Currently lightly used.</li>
+        <li><strong>Langfuse</strong> (planned) — our own debugging observability. Not candidate-
+          or recruiter-facing.</li>
+      </ul>
+
+      <h2 id="mental-model">The mental model: session = the unit of everything</h2>
+
+      <p>A <strong>session</strong> is the central object. Every other entity hangs off it.</p>
+
+      <pre>SESSIONS                    (durable Supabase row + in-memory SessionEntry)
+   ├── sandbox_id           ←→ one E2B microVM
+   ├── litellm_key_alias    ←→ one per-session LiteLLM key
+   ├── scenario_id          ←→ the FDE simulation it's bound to (nullable)
+   ├── scenario_state       ←→ live game-mechanic ledger (tokens, compute,
+   │                            personas reveal flags, scheduled_beats,
+   │                            deliverable)
+   ├── events[]             ←→ append-only timeline (every action)
+   ├── transcript[]         ←→ every persona / assistant LLM turn (full text)
+   ├── file_snapshots[]     ←→ deduped file content versions
+   ├── cost_ledger[]        ←→ per-LLM-call USD attribution
+   └── evaluations          ←→ the Analysis Agent scorecard (1 per session)
+        └── evaluation_items[]   8 per-competency rows</pre>
+
+      <p>The Supabase row is durable. The <code>SessionEntry</code> in
+        <code>apps/server/src/services/registry.ts</code> is the live wiring (sandbox handle,
+        WebSocket sets, telemetry buffer, personaState, scheduled beats, etc.). When
+        <code>tsx watch</code> reloads or the server restarts mid-session, the in-memory entry
+        is lost — that's exactly the orphan path <code>destroySandbox</code> now handles by
+        reading the sessions row + best-effort killing the sandbox via
+        <code>Sandbox.connect(sandbox_id)</code>.</p>
+
+      <h2 id="flow-candidate">Flow 1 — Candidate runs an assessment</h2>
+
+      <p>Walking through what happens between <code>/start/fde-db-triage</code> and the EndScreen,
+        with module names.</p>
+
+      <ol>
+        <li><strong>Landing.</strong> Browser hits <code>/start/fde-db-triage</code>
+          (Next server component → <code>StartScreen</code> client component).
+          <code>StartScreen</code> calls <code>GET /api/scenarios/fde-db-triage</code>
+          (<code>apps/server/src/routes/scenarios.ts</code>), which reads the row via
+          <code>loadScenarioBySlug</code> and returns ONLY the candidate-safe fields (no rubric,
+          no personas, no ground truth).</li>
+
+        <li><strong>Begin.</strong> Click → <code>createSession({ scenarioId })</code>
+          (lib/api.ts) → <code>POST /sessions</code> (routes/sessions.ts) →
+          <code>createSandbox</code> (services/sandbox.ts):
+          <ul>
+            <li><code>loadScenarioById</code> reads rubric + constraints + personas.</li>
+            <li><code>Sandbox.create("crucible-dev", { timeoutMs: SESSION_TIMEOUT_MIN * 60_000,
+              metadata: { sessionId } })</code> provisions the E2B microVM.</li>
+            <li><code>mintSessionKey(sessionId)</code> → LiteLLM POST <code>/key/generate</code>
+              with <code>key_alias: "session-${sessionId}"</code>,
+              <code>max_budget: SESSION_BUDGET_USD</code>, <code>duration: ${SESSION_TIMEOUT_MIN}m</code>.
+              Returns the secret key (held ONLY in memory on <code>SessionEntry.litellmKey</code>).</li>
+            <li><code>seedScenarioDataset</code> copies the scenario's <code>seed.sql</code> into
+              the sandbox + initializes <code>/workspace/customer.db</code> (read-only SQLite).</li>
+            <li><code>computeScheduledBeats</code> reads <code>scenario.curveballs[]</code>,
+              applies any <code>beatTimingOverridesMs</code> (dev/test knob), and computes
+              absolute <code>due_ts</code> per beat.</li>
+            <li>Build <code>scenarioState</code> from <code>scenario.constraints</code> (tokens,
+              compute_minutes, money_usd, memory_mb) + the persona-reveal flag sub-objects.</li>
+            <li><code>sessionRegistry.set(sessionId, …)</code> — the live entry is born.</li>
+            <li><code>persistSessionCreated(sessionId)</code> writes the durable row.</li>
+            <li><code>setTimeout(() => expireSession(sessionId, "timeout"), timeoutMs)</code> —
+              the kill switch.</li>
+            <li><code>logEvent(sessionId, "session.created", …)</code> — first row in the event
+              stream.</li>
+            <li>Response: <code>{ sessionId, deadline, scenarioId }</code>.</li>
+          </ul>
+        </li>
+
+        <li><strong>Workspace mounts.</strong> Browser routes to <code>/session/[id]</code>.
+          <code>Workspace</code> calls <code>getSession(sessionId)</code>, hydrates the
+          <code>sessionStore</code>, opens two WebSockets:
+          <ul>
+            <li><code>WS /pty/:sessionId</code> (routes/pty.ts) — backed by E2B's
+              <code>sandbox.pty.create()</code>. Bytes flow both directions; xterm.js renders.
+              Each PTY command (Enter press) deducts compute via
+              <code>deductComputeMinutes(sessionId, COMPUTE_COST_PER_COMMAND, "sandbox_command")</code>.</li>
+            <li><code>WS /messages/:sessionId</code> (routes/messages.ts) — the persona channel.
+              Carries Client/Team messages in both directions.</li>
+          </ul>
+        </li>
+
+        <li><strong>Working.</strong> Each action takes a different code path:
+          <ul>
+            <li><strong>Editing files</strong> — Monaco changes → <code>PUT /file</code>
+              (routes/files.ts) → <code>sandbox.files.write(...)</code>. File snapshots are
+              deduped via SHA256; only changed contents land in <code>file_snapshots</code>.</li>
+            <li><strong>Running SQL</strong> — <code>DataExplorer</code> →
+              <code>POST /api/sessions/:id/query</code> (routes/query.ts) →
+              <code>query-runner.ts</code> calls a Python helper embedded in
+              <code>sqlrun.py.ts</code> inside the sandbox. Deducts compute. Streams rows back
+              (max 500). Logs a <code>db.query</code> event.</li>
+            <li><strong>Sending the AI assistant a message</strong> — <code>ChatHUD</code> →
+              <code>POST /api/chat</code> (routes/chat.ts) →
+              <code>chatCompletionWithMessages</code> with the session's key. Returns the reply
+              + new spend + remaining tokens. Logs <code>ai.assistant.*</code> events. Token
+              deduction is in <code>scenarioState.tokens</code>; if it drops ≤ 0 the next call
+              is rejected (<code>token_budget_exhausted</code>).</li>
+            <li><strong>Messaging Client/Team</strong> — <code>Messages</code> → WS message →
+              backend <code>messaging.ts</code> enqueues a turn for
+              <code>persona-agent.ts</code>. The persona LLM runs with the channel's history +
+              the persona's system prompt + current reveal-flag state. Reply broadcasts back
+              via WS.</li>
+            <li><strong>Viewing docs</strong> — <code>DocsViewer</code> →
+              <code>POST /api/sessions/:id/docs/:docId/view</code> (routes/docs.ts) → logs
+              <code>doc.view</code> event (for the recruiter timeline and the Analysis Agent's
+              surfaced_seqs).</li>
+            <li><strong>Saving deliverable</strong> — <code>DeliverablePanel</code> →
+              <code>POST /api/sessions/:id/deliverable</code> (routes/deliverable.ts) → mirrors
+              to <code>scenarioState.deliverable</code> via
+              <code>persistScenarioStatePatch</code> (the merge_scenario_state RPC, race-safe).
+              Logs <code>deliverable.draft</code> or <code>deliverable.submit</code>.</li>
+          </ul>
+        </li>
+
+        <li><strong>Personas reach out unprompted.</strong> <code>services/scheduler.ts</code>
+          runs <code>setInterval(sweep, 15_000)</code>. Each sweep walks
+          <code>sessionRegistry</code>, finds beats whose <code>due_ts &lt;= now</code> and
+          <code>fired === false</code>, calls <code>proactiveBeatMessage(...)</code> to
+          generate the message via LLM, broadcasts via <code>messaging.ts</code>, marks the
+          beat fired, and persists via <code>persistScenarioStatePatch({ personas, scheduled_beats })</code>.</li>
+
+        <li><strong>End.</strong> Three ways:
+          <ul>
+            <li>Timer expires → <code>expireSession(sessionId, "timeout")</code>.</li>
+            <li>Manual DELETE → <code>destroySandbox</code> →
+              <code>expireSession(sessionId, "manual")</code> (or <code>orphanTeardown</code>
+              if registry entry is gone).</li>
+            <li>Budget exhausted → server flips status to <code>budget_exhausted</code> and
+              ultimately runs through <code>expireSession</code>.</li>
+          </ul>
+          <p style="margin-top:10px"><code>expireSession</code> is the shared teardown:</p>
+          <ul>
+            <li>Mark status completed (registry).</li>
+            <li><code>logEvent("session.ended")</code> + <code>flushTelemetry</code> (drains
+              buffer).</li>
+            <li><code>finalizeSession</code> writes terminal row state.</li>
+            <li>Close all PTY + messaging sockets.</li>
+            <li><code>revokeSessionKey(litellmKey)</code> — best-effort LiteLLM POST
+              <code>/key/delete</code>.</li>
+            <li><code>sandbox.kill()</code> — frees the E2B VM.</li>
+            <li><strong>Fire-and-forget <code>runAnalysisAgent(sessionId)</code></strong> — the
+              auto-eval.</li>
+          </ul>
+        </li>
+
+        <li><strong>End screen.</strong> Browser's <code>ConstraintHUD.useCountdown</code> fires
+          <code>setStatus("ended")</code> when the deadline hits, OR the PTY WS close triggers
+          <code>handleSessionEnd</code>, OR <code>getSession</code> returns
+          <code>status: "completed"</code> on rehydrate. Any of these flip the store →
+          <code>&lt;EndScreen&gt;</code> overlay renders.</li>
+
+        <li><strong>Auto-eval (in parallel with the end screen).</strong> The agent reads the
+          full Supabase row + condensed telemetry, calls one LLM (Gemini Flash by default,
+          json_object mode, max_tokens 8000), validates the response (drops hallucinated
+          event_seqs, clamps scores), computes the weighted overall server-side, DELETEs any
+          prior evaluation, INSERTs the new one + 8 evaluation_items, records cost with
+          <code>purpose: "analysis"</code>, and emits an <code>ai.evaluation</code> event for
+          the recruiter timeline.</li>
+      </ol>
+
+      <h2 id="flow-recruiter">Flow 2 — Recruiter reviews</h2>
+
+      <ol>
+        <li><code>/review</code> → <code>SessionsTable</code> →
+          <code>GET /api/review/sessions</code>
+          (<code>apps/server/src/routes/review.ts</code>). One main query for sessions + four
+          parallel grouped counts (events, transcript messages, file_snapshots, evaluations)
+          merged in JS. Returns up to 100 rows with <code>overall_score</code> +
+          <code>evaluation_status</code> per row.</li>
+        <li>Click a row → <code>/review/[id]</code> → <code>SessionDetail</code> →
+          <code>GET /api/review/sessions/:id</code>. Fires six parallel reads (session + events
+          + transcript + file_snapshots + cost_ledger + evaluation header), then conditionally
+          fetches <code>evaluation_items</code> when an evaluation exists. The detail bundle
+          hydrates:
+          <ul>
+            <li><strong><code>Scorecard</code></strong> — 8 per-competency cells with score +
+              rationale + evidence chips that link back to specific events.</li>
+            <li><strong><code>TranscriptPanel</code></strong> — every persona / assistant turn,
+              rendered as Bubbles.</li>
+            <li><strong><code>TerminalReplay</code></strong> — xterm.js replays the recorded PTY
+              stream.</li>
+            <li><strong><code>FilesDiffPanel</code></strong> — step-through diff of every file
+              save.</li>
+            <li><strong><code>Timeline</code></strong> — every event row, click any to scroll
+              its detail into focus.</li>
+            <li><strong><code>CostPanel</code></strong> — per-call USD attribution.</li>
+            <li><strong><code>SessionSummary</code></strong> — top-level metadata stats.</li>
+          </ul>
+        </li>
+        <li>Manual re-eval: <code>Scorecard</code> →
+          <code>POST /api/review/sessions/:id/evaluate</code> → <code>runAnalysisAgent</code>
+          (replaces prior evaluation row + items cascade-drop on DELETE).</li>
+      </ol>
+
+      <h2 id="flow-personas">Flow 3 — Persona simulation</h2>
+
+      <p>The FDE simulation is what makes Crucible distinctive. Two layers:</p>
+
+      <h3>Reactive (the candidate sent a message)</h3>
+
+      <p><code>messages.ts</code> WS receives a candidate message → routed into
+        <code>persona-agent.processCandidateMessage(sessionId, channel, text)</code>:</p>
+
+      <ul>
+        <li>Loads the channel's history from
+          <code>SessionEntry.channelHistory[channel]</code>.</li>
+        <li>Loads the persona's system prompt (from <code>scenario.client_persona</code> /
+          <code>scenario.team_persona</code>) + current reveal-flag state from
+          <code>personaState</code>.</li>
+        <li>Calls LLM via <code>chatCompletionWithMessages</code>. The persona prompt is written
+          to respect reveal flags: e.g., Sam only "concedes with evidence" if the candidate
+          brought specific numbers refuting the refund hypothesis. The LLM returns
+          <code>{ text, reveals: { ... } }</code> — reveals flip the corresponding personaState
+          flags.</li>
+        <li>Broadcasts the reply, persists, logs.</li>
+      </ul>
+
+      <h3>Proactive (no candidate input — beats fire on their own)</h3>
+
+      <p><code>scheduler.ts</code> runs every 15 s. Each beat in
+        <code>SessionEntry.scenarioState.scheduled_beats[]</code> has:</p>
+
+      <ul>
+        <li><code>id</code> (curveball id from scenario.json)</li>
+        <li><code>channel: "client" | "team"</code></li>
+        <li><code>beat: "refund_hint" | "requirement_change"</code> (which reveal flag it sets)</li>
+        <li><code>due_ts: ISO</code></li>
+        <li><code>fired: boolean</code></li>
+      </ul>
+
+      <p>On sweep:</p>
+      <ul>
+        <li>If <code>due_ts &gt; now</code>: skip.</li>
+        <li>If <code>beatAlreadyRevealed</code>: mark fired silently (the reactive path already
+          gave the same reveal).</li>
+        <li>Else: <code>fireBeat</code> → <code>proactiveBeatMessage</code> (LLM call) →
+          broadcast → <code>applyBeatReveal</code> → log <code>curveball.fired</code> +
+          <code>message.&lt;channel&gt;.persona</code> → record cost with
+          <code>purpose: "proactive_client"|"proactive_team"</code>.</li>
+      </ul>
+
+      <p>Beats are durable: <code>scheduled_beats</code> is part of <code>scenarioState</code>,
+        which lives in the Supabase row. A future session-resume slice can rebuild SessionEntry
+        from Supabase and the schedule survives.</p>
+
+      <h2 id="analysis-agent">The Analysis Agent (the judge)</h2>
+
+      <p><code>apps/server/src/services/analysis-agent.ts</code>. The most carefully-tuned piece
+        of the system.</p>
+
+      <p><strong>Input</strong> (assembled by <code>analysis-input.ts</code>): scenario.rubric
+        (8 competencies × weight + description + signals + <strong>anchors</strong>),
+        ground_truth.json (correct figures + root cause), deliverable_spec, success_criteria,
+        the candidate's deliverable, a condensed signal stream (messages, db.queries,
+        doc.views, ai.assistant turns, file snapshots, curveball.fired events, constraint
+        trajectory), and <strong><code>surfaced_seqs</code></strong> — the whitelist of valid
+        event_seqs the judge may cite as evidence.</p>
+
+      <p><strong>System prompt</strong> — global judge principles + two anchor blocks added in
+        Week 4.12.3:</p>
+
+      <ul>
+        <li><strong>"Score each competency on its own evidence"</strong> — a wrong final answer
+          must NOT drag down process competencies that have independent evidence. Exception:
+          confidently communicating an INCORRECT conclusion caps
+          <code>outcome_communication</code> at ~3.</li>
+        <li><strong>Execution is a graduated band</strong>, with explicit 5/3/1 anchors: e.g.,
+          dedup'd correctly but missed <code>status='succeeded'</code> so figures are ~12% off
+          = 3, not 1.</li>
+      </ul>
+
+      <p>If the scenario's rubric includes per-competency <code>anchors</code>, those override
+        the global ones for that scenario. fde-db-triage has them.</p>
+
+      <p><strong>Output processing:</strong></p>
+      <ul>
+        <li>LLM responds with <code>{overall_summary, items: {&lt;competency&gt;: {score,
+          rationale, evidence: [{event_seq, note}]}}}</code>.</li>
+        <li><code>parseAndValidate</code> drops hallucinated event_seqs (filters against
+          <code>surfacedSet</code>), clamps scores to [1, 5], fills missing competencies with
+          score=1 + "(no item returned)" rationale.</li>
+        <li><strong>Server computes the weighted overall</strong> — never trust the model to do
+          arithmetic.</li>
+        <li>Persist: DELETE any prior evaluation for the session (cascade drops items), INSERT
+          new evaluation + 8 evaluation_items.</li>
+        <li>Cost recorded with <code>purpose: "analysis"</code>.</li>
+        <li><code>ai.evaluation</code> event emitted via <code>events-direct.appendEvent</code>
+          — the registry-bypass writer that works even for sessions whose in-memory entry is
+          gone.</li>
+      </ul>
+
+      <p><strong>Triggers:</strong></p>
+      <ul>
+        <li><strong>Auto</strong> — fire-and-forget from <code>expireSession</code> at the tail.</li>
+        <li><strong>Manual</strong> — <code>POST /api/review/sessions/:id/evaluate</code> from
+          the Scorecard's "Re-evaluate" button.</li>
+      </ul>
+
+      <h2 id="calibration">Calibration &amp; verification harness</h2>
+
+      <p><code>apps/server/scripts/verify-*.ts</code> is where the system gets stress-tested
+        end-to-end. Each script:</p>
+
+      <ul>
+        <li>Creates a real session via the real <code>POST /sessions</code>.</li>
+        <li>Drives it through the real WS + REST endpoints (no mocks).</li>
+        <li>Either waits for auto-eval or triggers manual eval.</li>
+        <li>Asserts shape + computed values against ground truth.</li>
+        <li>Reports a structured pass/fail/skip.</li>
+      </ul>
+
+      <p>Order of evolution (matches the slices in <code>git log --oneline</code>):</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Script</th><th>Slice</th><th>What it proved</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>verify-fde-db-triage.ts</code></td><td>4.4</td><td>Sandbox + SQLite seed + Data Explorer reach the right rows.</td></tr>
+            <tr><td><code>verify-messages.ts</code></td><td>4.5</td><td>Client/Team persona WS round-trip works.</td></tr>
+            <tr><td><code>verify-proactive-beats.ts</code></td><td>4.6</td><td>Scheduler fires beats; beats are durable across restart.</td></tr>
+            <tr><td><code>verify-ai-assistant.ts</code></td><td>4.7</td><td>AI assistant turn deducts tokens; force-exhaust path.</td></tr>
+            <tr><td><code>verify-candidate-surfaces.ts</code></td><td>4.8</td><td>Docs viewer + deliverable submission + constraint HUD.</td></tr>
+            <tr><td><code>verify-analysis-agent.ts</code></td><td>4.9</td><td>Auto-eval lands a complete 8-item scorecard with valid evidence_seqs.</td></tr>
+            <tr><td><code>verify-scenario-state-race.ts</code></td><td>4.10</td><td>jsonb merge RPC prevents lost deliverables under concurrent writes.</td></tr>
+            <tr><td><code>verify-discrimination.ts</code></td><td>4.12</td><td>Judge SEPARATES a strong from a weak playthrough (spread ≥ 1.5).</td></tr>
+            <tr><td><code>verify-gradient.ts</code></td><td>4.12.2</td><td>Judge uses the middle band, scores competencies independently.</td></tr>
+            <tr><td><code>verify-anchor-tuning.ts</code></td><td>4.12.3</td><td>Anchor changes re-evaluate 5 prior sessions + a held-out PROFILE D, confirming generalization.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout accent">
+        <div class="callout-label">Regression suite</div>
+        These scripts ARE the regression suite. Run them before / after any substantive judge
+        or persona change.
+      </div>
+
+      <h2 id="persistence">Data persistence — what lives where</h2>
+
+      <h3>Supabase tables (<code>supabase/migrations/</code>)</h3>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Table</th><th>Key columns</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>scenarios</code></td>
+              <td>id, slug, title, brief, role, difficulty, <strong>rubric</strong>,
+                <strong>deliverable_spec</strong>, <strong>success_criteria</strong>,
+                client_persona, team_persona, curveballs, dataset_ref</td>
+              <td>Authoring; written by <code>scripts/encode-fde-db-triage.ts</code>.</td>
+            </tr>
+            <tr>
+              <td><code>sessions</code></td>
+              <td>id, sandbox_id, <strong>scenario_id</strong>,
+                <strong>scenario_state</strong> (jsonb), litellm_key_alias, status, end_reason,
+                started_at, ended_at, duration_ms, spend_usd</td>
+              <td>One row per session. status ∈ {active, completed, timed_out, error, aborted}.
+                end_reason ∈ {manual, timeout, budget, orphaned}.</td>
+            </tr>
+            <tr>
+              <td><code>events</code></td>
+              <td>id, session_id, <strong>seq</strong> (monotonic), type, actor, ts,
+                payload (jsonb)</td>
+              <td>Append-only timeline. Type taxonomy: <code>session.*</code>,
+                <code>message.&lt;channel&gt;.&lt;actor&gt;</code>, <code>doc.view</code>,
+                <code>db.query</code>, <code>chat.*</code>, <code>ai.assistant.*</code>,
+                <code>ai.evaluation</code>, <code>deliverable.draft</code>,
+                <code>deliverable.submit</code>, <code>curveball.fired</code>,
+                <code>constraint.spend</code>.</td>
+            </tr>
+            <tr>
+              <td><code>transcript</code></td>
+              <td>id, session_id, seq, role, content, model, prompt_tokens, completion_tokens,
+                cost_usd, latency_ms, finish_reason, litellm_call_id</td>
+              <td>Full LLM round-trip records (persona + assistant + analysis).</td>
+            </tr>
+            <tr>
+              <td><code>file_snapshots</code></td>
+              <td>id, session_id, ts, path, content, action, size_bytes, content_hash</td>
+              <td>Deduped file-version history.</td>
+            </tr>
+            <tr>
+              <td><code>cost_ledger</code></td>
+              <td>id, session_id, ts, model, prompt_tokens, completion_tokens, cost_usd,
+                cumulative_spend_usd, litellm_call_id, transcript_id,
+                <strong>purpose</strong></td>
+              <td>Every LLM call. purpose ∈ {assistant, proactive_client, proactive_team,
+                reactive_client, reactive_team, analysis}.</td>
+            </tr>
+            <tr>
+              <td><code>evaluations</code></td>
+              <td>id, session_id, scenario_id, overall_score, summary, model, status
+                (complete|error), created_at</td>
+              <td>One per session (DELETE+INSERT on re-eval).</td>
+            </tr>
+            <tr>
+              <td><code>evaluation_items</code></td>
+              <td>id, evaluation_id, competency, score, weight, rationale, evidence (jsonb)</td>
+              <td>8 rows per evaluation. evidence references events.seq.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>In-memory (server)</h3>
+
+      <p><code>apps/server/src/services/registry.ts</code> — <code>SessionEntry</code> map.
+        Fields include <code>sandbox</code>, <code>sandboxId</code>, <code>scenarioState</code>,
+        <code>scenarioMeta</code> (presentation cache for the candidate UI),
+        <code>litellmKey</code> (NEVER logged), <code>spendTally</code>, telemetry buffers, PTY
+        + messaging socket sets, <code>channelHistory</code>, <code>personaState</code>.
+        Entries persist until server restart; completed entries are NOT evicted yet (TODO in
+        registry.ts).</p>
+
+      <h3>Browser (<code>apps/web/src/stores/sessionStore.ts</code>)</h3>
+
+      <p>Singleton zustand store: sessionId, deadline, endedAt, spend, budget, tokensRemaining,
+        computeMinutesRemaining, scenarioConstraints (frozen), scenario (presentation), status,
+        messages (AI assistant chat history). Workspace pane resize sizes go to
+        <code>localStorage</code>, NOT the store.</p>
+
+      <h2 id="module-reference">Module reference (concise)</h2>
+
+      <h3>Server services — what each owns</h3>
+
+      <ul>
+        <li><strong><code>registry.ts</code></strong> — the SessionEntry shape + the in-memory
+          Map. No logic; just types and the singleton.</li>
+        <li><strong><code>scenarios.ts</code></strong> — read scenarios from Supabase by id or
+          slug.</li>
+        <li><strong><code>sandbox.ts</code></strong> — <code>createSandbox</code> (the
+          heavyweight setup), <code>destroySandbox</code> (with orphan fallback),
+          <code>orphanTeardown</code>, <code>computeScheduledBeats</code>. Owns E2B lifecycle.</li>
+        <li><strong><code>session.ts</code></strong> — <code>expireSession</code>, the shared
+          teardown path. Type <code>EndReason = "timeout" | "manual" | "budget" | "orphaned"</code>.</li>
+        <li><strong><code>litellm.ts</code></strong> — <code>mintSessionKey</code>,
+          <code>revokeSessionKey</code>, <code>getKeySpend</code>,
+          <code>chatCompletionWithMessages</code> (the single LLM call surface). All model
+          calls anywhere in the server eventually land here.</li>
+        <li><strong><code>scheduler.ts</code></strong> — <code>startBeatScheduler</code> +
+          <code>sweep</code>. The 15s tick is configurable via
+          <code>CRUCIBLE_SCHEDULER_TICK_MS</code>.</li>
+        <li><strong><code>persona-agent.ts</code></strong> —
+          <code>processCandidateMessage</code> (reactive), <code>proactiveBeatMessage</code>
+          (proactive). System prompts per scenario.</li>
+        <li><strong><code>messaging.ts</code></strong> — <code>broadcastToSession</code> + the
+          messaging WS bookkeeping helpers.</li>
+        <li><strong><code>telemetry.ts</code></strong> — <code>logEvent</code>,
+          <code>recordCost</code>, <code>flushTelemetry</code>. Buffered to reduce write
+          amplification; flushed on a timer + on <code>expireSession</code>.</li>
+        <li><strong><code>events-direct.ts</code></strong> — <code>appendEvent</code> that works
+          for sessions without an in-memory entry (analysis agent on historic sessions, orphan
+          teardown).</li>
+        <li><strong><code>db.ts</code></strong> — <code>persistSessionCreated</code>,
+          <code>persistSessionUpdate</code>, <code>loadSessionRow</code> (added in Week 5.1 for
+          orphan teardown), <code>persistScenarioStatePatch</code> (RPC
+          <code>merge_scenario_state</code> for race-safe partial writes),
+          <code>finalizeSession</code>.</li>
+        <li><strong><code>supabase.ts</code></strong> — exports a single Supabase client built
+          with the service-role key. <code>null</code> when env is missing (tests).</li>
+        <li><strong><code>compute-tracker.ts</code></strong> —
+          <code>deductComputeMinutes(amount, reason)</code>. Deductions emit
+          <code>constraint.spend</code> events; depletion does NOT block (it's a rubric signal,
+          not a hard gate).</li>
+        <li><strong><code>query-runner.ts</code> + <code>sqlrun.py.ts</code></strong> —
+          read-only SQLite query execution inside the sandbox. Python helper enforces the
+          read-only contract; results capped at 500 rows.</li>
+        <li><strong><code>dataset-seed.ts</code></strong> — copies <code>seed.sql</code> into
+          the sandbox and runs it. Failure tears down the sandbox cleanly.</li>
+        <li><strong><code>analysis-input.ts</code></strong> — assembles the JSON payload the
+          judge sees. Includes <code>surfaced_seqs</code> whitelist.</li>
+        <li><strong><code>analysis-agent.ts</code></strong> — the judge. See § Analysis Agent.</li>
+      </ul>
+
+      <h3>Server routes — what each accepts/returns</h3>
+
+      <p>(All under <code>apps/server/src/routes/</code>. Headers/CORS/rate-limit handled by
+        Fastify plugins in <code>server.ts</code>.)</p>
+
+      <ul>
+        <li><strong><code>health.ts</code></strong> — <code>GET /health</code> returns
+          <code>{status: "ok"}</code>.</li>
+        <li><strong><code>sessions.ts</code></strong> — <code>POST /sessions {scenarioId?}</code>,
+          <code>GET /sessions/:id</code>, <code>DELETE /sessions/:id</code>.</li>
+        <li><strong><code>files.ts</code></strong> — <code>GET /files?path=...</code>,
+          <code>GET /file?path=...</code>, <code>PUT /file {path, content}</code>. All scoped to
+          <code>/workspace</code> in the sandbox.</li>
+        <li><strong><code>pty.ts</code></strong> — <code>WS /pty/:sessionId</code>.
+          Bidirectional PTY stream.</li>
+        <li><strong><code>messages.ts</code></strong> — <code>WS /messages/:sessionId</code>.
+          Inbound <code>{channel, text}</code>; outbound <code>{channel, role, persona_name,
+          text, ts}</code> or <code>{type:"error", code, message}</code>.</li>
+        <li><strong><code>chat.ts</code></strong> — <code>POST /api/chat {sessionId, prompt}</code>
+          → AI assistant. Returns 402 with <code>{error}</code> on budget exhaustion.</li>
+        <li><strong><code>query.ts</code></strong> —
+          <code>POST /api/sessions/:id/query {sql}</code>. Deducts compute.</li>
+        <li><strong><code>docs.ts</code></strong> — <code>GET /api/sessions/:id/docs</code>
+          returns scenario.docs;
+          <code>POST /api/sessions/:id/docs/:docId/view</code> logs <code>doc.view</code>.</li>
+        <li><strong><code>deliverable.ts</code></strong> —
+          <code>GET/POST /api/sessions/:id/deliverable</code>.</li>
+        <li><strong><code>scenarios.ts</code></strong> — <code>GET /api/scenarios/:slug</code>.
+          Candidate-safe fields only (no rubric / ground_truth / personas).</li>
+        <li><strong><code>review.ts</code></strong> — <code>GET /api/review/sessions</code>,
+          <code>GET /api/review/sessions/:id</code>,
+          <code>POST /api/review/sessions/:id/evaluate</code>. Recruiter-only by convention (no
+          auth yet; later slice).</li>
+      </ul>
+
+      <h3>Web UI primitives (Week 6)</h3>
+
+      <p><code>apps/web/src/components/ui/</code> — token-driven, no raw hexes:</p>
+
+      <ul>
+        <li><strong><code>Button</code></strong> — variants: primary | secondary | ghost |
+          danger. Sizes: sm | md | lg. <code>leadingIcon</code>, <code>trailingIcon</code>,
+          <code>fullWidth</code>.</li>
+        <li><strong><code>IconButton</code></strong> — square icon-only button. Required
+          <code>label</code> for a11y.</li>
+        <li><strong><code>Pill</code></strong> — tones: neutral | accent | success | warn |
+          error. Variants: soft | outline.</li>
+        <li><strong><code>Card</code></strong> — surface with optional header + headerRight.
+          Body padding via <code>space</code> token.</li>
+        <li><strong><code>SectionLabel</code></strong> — canonical uppercase-letter-spaced
+          micro-header.</li>
+        <li><strong><code>Bubble</code></strong> — chat bubble. Roles: self | other | system.</li>
+        <li><strong><code>TabStrip</code></strong> — generic tabs. Variants: underline
+          (top-level) | pill (sub-tabs). Optional icon + badge per tab.</li>
+        <li><strong><code>Stat</code></strong> — label-over-value cell. Tones: default | warn |
+          error | success | muted.</li>
+      </ul>
+
+      <p><code>tokens.ts</code> exports <code>color</code>, <code>space</code>,
+        <code>radius</code>, <code>font</code>, <code>size</code>, <code>shadow</code>,
+        <code>motion</code>, and <code>scoreColor(n)</code> (1→error, 3→warn, 4→accent,
+        5→success).</p>
+
+      <h2 id="monitoring">Monitoring — what to watch &amp; where</h2>
+
+      <h3>Live operations</h3>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Signal</th><th>Where</th><th>What good looks like</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>E2B live sandbox count</td>
+              <td><code>e2b sandbox list</code></td>
+              <td>One row per active session. Anything dangling past
+                <code>SESSION_TIMEOUT_MIN</code> is a leak.</td>
+            </tr>
+            <tr>
+              <td>LiteLLM master + per-session spend</td>
+              <td>LiteLLM dashboard on Railway</td>
+              <td>Per-session cost ≤ <code>SESSION_BUDGET_USD</code>. Watch for keys that don't
+                get revoked.</td>
+            </tr>
+            <tr>
+              <td>Server logs</td>
+              <td><code>tsx watch</code> console</td>
+              <td><code>[scheduler]</code>, <code>[sandbox]</code>,
+                <code>[orphan-teardown]</code>, <code>[analysis]</code>, <code>[db]</code>
+                prefixes are deliberate. Errors prefixed <code>[…]</code> are real.</td>
+            </tr>
+            <tr>
+              <td>Supabase health</td>
+              <td>Supabase dashboard</td>
+              <td>Watch <code>sessions</code> table count growth; <code>evaluations</code>
+                <code>status='error'</code> rate.</td>
+            </tr>
+            <tr>
+              <td>Gemini free-tier daily quota</td>
+              <td>model provider account</td>
+              <td>20 req/day on free tier. Calibration verifiers all have quota-aware SKIP
+                paths but if you're running multiple times a day, you may hit it.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Per-session forensics (when something went wrong)</h3>
+
+<pre class="sql"><span class="cm">-- The whole story of one session, ordered:</span>
+<span class="kw">SELECT</span> seq, type, actor, ts, payload
+<span class="kw">FROM</span> events
+<span class="kw">WHERE</span> session_id = <span class="str">'&lt;uuid&gt;'</span>
+<span class="kw">ORDER BY</span> seq;
+
+<span class="cm">-- All LLM round-trips:</span>
+<span class="kw">SELECT</span> seq, role, model, prompt_tokens, completion_tokens, cost_usd, latency_ms, left(content, <span class="num">200</span>) <span class="kw">as</span> preview
+<span class="kw">FROM</span> transcript
+<span class="kw">WHERE</span> session_id = <span class="str">'&lt;uuid&gt;'</span>
+<span class="kw">ORDER BY</span> seq;
+
+<span class="cm">-- The scorecard:</span>
+<span class="kw">SELECT</span> competency, score, weight, rationale
+<span class="kw">FROM</span> evaluation_items
+<span class="kw">WHERE</span> evaluation_id = (
+  <span class="kw">SELECT</span> id <span class="kw">FROM</span> evaluations <span class="kw">WHERE</span> session_id = <span class="str">'&lt;uuid&gt;'</span>
+);
+
+<span class="cm">-- Was the analysis agent run? did it succeed?</span>
+<span class="kw">SELECT</span> status, overall_score, summary <span class="kw">FROM</span> evaluations <span class="kw">WHERE</span> session_id = <span class="str">'&lt;uuid&gt;'</span>;</pre>
+
+      <h3>Recurring sanity checks</h3>
+
+      <ul>
+        <li><strong>Orphan sessions.</strong> Should be ZERO with the Week 5.1 fix in place.
+          <code>SELECT id, end_reason FROM sessions WHERE status='active' AND created_at &lt;
+          now() - interval '2 hours';</code> — if this returns anything, investigate.</li>
+        <li><strong>Scorecard error rate.</strong> <code>SELECT count(*) FROM evaluations WHERE
+          status='error';</code> — climbing means the analysis agent is failing (often Gemini
+          quota; sometimes a malformed scenario row).</li>
+        <li><strong>Token cost outliers.</strong> <code>SELECT * FROM cost_ledger ORDER BY
+          cost_usd DESC LIMIT 20;</code> — should all be sub-$0.05 with current models.</li>
+      </ul>
+
+      <h3>Adding a new scenario</h3>
+
+      <ol>
+        <li>Drop scenario assets under <code>fixtures/&lt;slug&gt;/</code>:
+          <ul>
+            <li><code>scenario.json</code> (title, brief, role, difficulty, constraints,
+              curveballs, deliverable_spec, <strong>rubric with anchors</strong>,
+              success_criteria, client_persona, team_persona, docs)</li>
+            <li><code>ground_truth.json</code> (the answers, hidden from the candidate)</li>
+            <li><code>seed.sql</code> + <code>schema.sql</code> if the scenario needs a
+              database</li>
+            <li><code>queries.sql</code> — reference queries the judge can match against</li>
+            <li><code>generate.ts</code> — synthetic-data generator (one-shot)</li>
+          </ul>
+        </li>
+        <li>Write a per-scenario encoder script (copy
+          <code>apps/server/scripts/encode-fde-db-triage.ts</code>).</li>
+        <li>Run it once: <code>pnpm --filter @crucible/server exec tsx
+          scripts/encode-&lt;slug&gt;.ts</code>.</li>
+        <li>Add the scenario doc under <code>docs/scenarios/</code>.</li>
+        <li>Run the calibration sequence (discrimination → gradient → anchor tuning) to
+          confirm the new rubric discriminates.</li>
+        <li>The candidate URL is automatically <code>/start/&lt;slug&gt;</code>.</li>
+      </ol>
+
+      <h3>Common pitfalls</h3>
+
+      <ul>
+        <li><strong>Browser can't reach the server</strong> — check
+          <code>NEXT_PUBLIC_SERVER_URL</code> in <code>.env</code>. CORS allows
+          <code>localhost:3000</code> in dev only.</li>
+        <li><strong><code>tsx watch</code> reload between Begin and DELETE</strong> — the
+          orphan path catches it (Week 5.1). If you see <code>[orphan-teardown]</code> logs,
+          that's fine — it's the safety net doing its job.</li>
+        <li><strong>Gemini quota</strong> — calibration verifiers print SKIP for quota failures
+          rather than fail. Watch for <code>RESOURCE_EXHAUSTED</code> in logs.</li>
+        <li><strong>scenario_state lost writes</strong> — fixed by
+          <code>merge_scenario_state</code> RPC (Week 4.10). If you find concurrent writes
+          losing data, check that the caller is using <code>persistScenarioStatePatch</code>,
+          not <code>persistScenarioState</code>.</li>
+        <li><strong>Adding a route</strong> — register it in
+          <code>apps/server/src/server.ts</code> with the right <code>prefix</code>.
+          Conventions: <code>/api/*</code> for non-WS, no prefix for WS,
+          <code>/sessions/*</code> for the core session CRUD.</li>
+      </ul>
+
+      <h2 id="runbook">Operating Crucible going forward — a runbook</h2>
+
+      <h3>Daily (when you're actively building)</h3>
+
+      <ul>
+        <li><code>pnpm dev</code> (or <code>pnpm --filter @crucible/server dev</code>,
+          <code>pnpm --filter @crucible/web dev</code> separately) — both with hot reload.</li>
+        <li>Open <code>http://localhost:3000</code> → redirects to
+          <code>/start/fde-db-triage</code>.</li>
+        <li>The server logs are noisy on purpose. <code>[scheduler]</code> ticks every 15s even
+          when idle.</li>
+      </ul>
+
+      <h3>Before merging changes that touch the judge or rubric</h3>
+
+      <ol>
+        <li><code>pnpm --filter @crucible/server typecheck</code></li>
+        <li><code>pnpm --filter @crucible/server exec tsx scripts/verify-analysis-agent.ts</code>
+          (sanity)</li>
+        <li><code>pnpm --filter @crucible/server exec tsx scripts/verify-anchor-tuning.ts</code>
+          (re-evaluates the 5 calibration sessions + held-out D). Confirm verdict is
+          <span class="pill success">PASS</span>.</li>
+      </ol>
+
+      <h3>Before merging changes that touch personas or scheduler</h3>
+
+      <ol>
+        <li><code>pnpm --filter @crucible/server exec tsx scripts/verify-messages.ts</code></li>
+        <li><code>pnpm --filter @crucible/server exec tsx scripts/verify-proactive-beats.ts</code></li>
+      </ol>
+
+      <h3>Before merging UI changes</h3>
+
+      <ol>
+        <li><code>pnpm --filter @crucible/web typecheck</code></li>
+        <li>Manually visit <code>/</code>, <code>/start/fde-db-triage</code>, click Begin,
+          check all 7 tabs work, end the session, confirm EndScreen.</li>
+        <li>Check <code>/review</code>, click into a session, confirm Scorecard renders.</li>
+      </ol>
+
+      <h3>When you ship to production (eventual)</h3>
+
+      <ul>
+        <li>Provider keys MUST stay on Railway LiteLLM, never in app env.</li>
+        <li><code>SESSION_BUDGET_USD</code> and <code>SESSION_TIMEOUT_MIN</code> are the cost
+          stops. Don't weaken without a written justification.</li>
+        <li>Add a TTL-based eviction job for completed <code>sessionRegistry</code> entries
+          (TODO in registry.ts) — without it, memory grows unboundedly across long uptimes.</li>
+        <li>Add monitoring around the orphan-teardown rate. A high rate means the deployment is
+          reloading mid-session (bad).</li>
+        <li>Plan auth before exposing <code>/review/*</code> to anyone outside the team.</li>
+      </ul>
+
+      <h3>When things break — the diagnosis order</h3>
+
+      <ol>
+        <li><strong>Browser console</strong> — most issues surface here first (CORS, WebSocket,
+          fetch failures).</li>
+        <li><strong><code>tsx watch</code> server logs</strong> — look for
+          <code>[orphan-teardown]</code>, <code>[db]</code>, <code>[analysis]</code>,
+          <code>[scheduler]</code>, <code>[sandbox]</code> prefixes.</li>
+        <li><strong><code>e2b sandbox list</code></strong> — orphan sandboxes mean DELETE didn't
+          reach the server-side teardown.</li>
+        <li><strong>Supabase SQL</strong> — see § Per-session forensics. Almost any "did this
+          work?" question is one query away.</li>
+        <li><strong>LiteLLM dashboard</strong> — for cost / rate-limit / provider failures.</li>
+        <li>The four calibration verifiers — for "is the judge sane?" questions.</li>
+      </ol>
+
+      <h2 id="notable">What's notable about how Crucible is built</h2>
+
+      <ul>
+        <li><strong>Real services in tests.</strong> The verifier scripts hit the real endpoints,
+          mint real LiteLLM keys, boot real E2B sandboxes, and write to real Supabase. There's
+          almost no mocking. This is the source of confidence that the calibration findings are
+          trustworthy.</li>
+        <li><strong>Telemetry first.</strong> Every meaningful interaction emits an event with a
+          monotonic seq. The event stream IS the system's audit log, the recruiter timeline, AND
+          the input to the Analysis Agent. Adding a new interaction usually means logging a new
+          event type.</li>
+        <li><strong>One LLM gateway.</strong> All model calls — persona reactive, persona
+          proactive, AI assistant, analysis agent — go through
+          <code>chatCompletionWithMessages</code> in <code>services/litellm.ts</code>. Provider /
+          model selection is centralized.</li>
+        <li><strong>Server computes the math, not the LLM.</strong> The Analysis Agent's
+          weighted overall is computed server-side from the LLM's per-item scores + the rubric
+          weights. The model isn't trusted with arithmetic.</li>
+        <li><strong>Source-of-truth split.</strong> scenario.json on disk is the authoring
+          source. The encode script pushes it into Supabase. The server reads from Supabase.
+          Don't bypass the encoder.</li>
+        <li><strong>The plan / verify discipline.</strong> Most non-trivial slices have a
+          planning document in <code>.claude/plans/</code> and a one-shot verifier in
+          <code>apps/server/scripts/verify-*.ts</code>. The verifier proves the slice in
+          CI-style, end-to-end. Keep this pattern.</li>
+      </ul>
+
+      <h2 id="glossary">Glossary</h2>
+
+      <ul>
+        <li><strong>Beat</strong> — a scripted persona action (reactive or proactive).</li>
+        <li><strong>Curveball</strong> — a beat that disrupts the candidate (e.g.,
+          requirement_change, misleading_teammate_hint).</li>
+        <li><strong>Reveal flag</strong> — a boolean on <code>personaState</code> that gates
+          what the persona will say next (e.g., <code>team.gave_webhook_clue</code>).</li>
+        <li><strong>Scenario state</strong> — the live game-mechanic ledger for a session
+          (tokens, compute_minutes, personas, scheduled_beats, deliverable).</li>
+        <li><strong>Surfaced seqs</strong> — the whitelist of event_seqs the Analysis Agent may
+          cite as evidence; prevents the judge from hallucinating evidence from events that
+          didn't happen.</li>
+        <li><strong>Anchor</strong> — explicit 5/3/1 scoring guidance in the judge prompt
+          (global) and rubric (per-scenario). Added in Week 4.12.3.</li>
+        <li><strong>Orphan session</strong> — a session whose in-memory <code>SessionEntry</code>
+          was dropped (server restart) but whose E2B sandbox is still alive. The Week 5.1 fix
+          handles these via Supabase-backed teardown.</li>
+        <li><strong>PROFILE A/B/C/D</strong> — scripted candidate playthroughs used by the
+          calibration verifiers.
+          <span class="pill">A</span> = technically strong / socially absent.
+          <span class="pill">B</span> = process strong / technically wrong.
+          <span class="pill">C</span> = near-miss execution.
+          <span class="pill">D</span> = held-out: technically right / actively rude.</li>
+      </ul>
+
+      <footer>
+        Crucible — engineering reference · single-source companion to
+        <code>docs/ARCHITECTURE.md</code>
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    // Smooth-scroll active section highlight in the TOC.
+    const tocLinks = document.querySelectorAll('.toc a[href^="#"]');
+    const headings = Array.from(document.querySelectorAll('h2[id], h3[id]'));
+
+    function setActive() {
+      const fromTop = window.scrollY + 100;
+      let current = null;
+      for (const h of headings) {
+        if (h.offsetTop <= fromTop) current = h.id;
+      }
+      tocLinks.forEach((a) => {
+        const isActive = a.getAttribute('href') === '#' + current;
+        a.style.background = isActive ? 'var(--accent-soft)' : '';
+        a.style.color = isActive ? 'var(--text)' : '';
+        a.style.borderLeftColor = isActive ? 'var(--accent)' : 'transparent';
+      });
+    }
+    window.addEventListener('scroll', setActive, { passive: true });
+    setActive();
+  </script>
+</body>
+</html>
