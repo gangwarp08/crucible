@@ -50,7 +50,7 @@ function loadLayout(): number[] {
     if (!raw) return DEFAULT_SIZES;
     const parsed = JSON.parse(raw) as unknown;
     if (Array.isArray(parsed) && parsed.length === 3 && parsed.every((n) => typeof n === "number")) {
-      return parsed as number[];
+      return parsed;
     }
   } catch { /* fall through */ }
   return DEFAULT_SIZES;

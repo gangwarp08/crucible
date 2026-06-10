@@ -1,6 +1,6 @@
 "use client";
 import type { CSSProperties, ReactNode } from "react";
-import { color, font, radius } from "@/styles/tokens";
+import { color, font } from "@/styles/tokens";
 
 type Role = "self" | "other" | "system";
 
