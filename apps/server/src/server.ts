@@ -26,8 +26,13 @@ export async function buildServer() {
   });
 
   await server.register(fastifyHelmet);
+  const webOrigins = env.WEB_ORIGIN
+    ? env.WEB_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
+    : env.NODE_ENV === "production"
+      ? false
+      : ["http://localhost:3000"];
   await server.register(fastifyCors, {
-    origin: env.NODE_ENV === "production" ? false : ["http://localhost:3000"],
+    origin: webOrigins,
     // Without `methods`, the default Access-Control-Allow-Methods response
     // came back as GET,HEAD,POST — missing DELETE and PUT. The browser
     // blocked our DELETE /sessions/:id and PUT /file calls before they

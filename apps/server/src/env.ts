@@ -26,6 +26,10 @@ const EnvSchema = z.object({
 
   // JWT secret for server↔browser tokens — optional until auth slice is wired
   JWT_SECRET: z.string().min(32).optional(),
+
+  // Comma-separated list of allowed browser origins (e.g. https://crucible.vercel.app).
+  // Required in production; defaults to http://localhost:3000 in dev.
+  WEB_ORIGIN: z.string().optional(),
 });
 
 function loadEnv() {
