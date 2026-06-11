@@ -248,7 +248,6 @@ function ScenarioBody({
             {scenario.deliverable_components.map((d) => (
               <li key={d.key} style={{ marginBottom: 6 }}>
                 <strong style={{ color: color.text.primary, fontWeight: 600 }}>{d.label}</strong>
-                {d.what ? <span style={{ color: color.text.secondary }}> — {d.what}</span> : null}
               </li>
             ))}
           </ul>

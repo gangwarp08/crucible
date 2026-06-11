@@ -16,15 +16,14 @@ interface Props { sessionId: string; }
 interface Field {
   key: keyof DeliverableData;
   label: string;
-  hint: string;
   rows: number;
 }
 
 const FIELDS: Field[] = [
-  { key: "corrected_monthly_revenue", label: "Corrected monthly revenue (last 3 months)", hint: "A query or script that runs and reproduces the corrected figures for March, April, May 2026.", rows: 6 },
-  { key: "root_cause_finding",        label: "Root-cause finding",                         hint: "What was wrong and why. Identify the cause; quantify the rate + overstatement.",                 rows: 5 },
-  { key: "client_facing_summary",     label: "Board-ready client-facing summary",          hint: "One paragraph Dana can take to the board: corrected number, plain-English cause, recording bug.", rows: 6 },
-  { key: "decisions_and_tradeoffs",   label: "Key decisions and trade-offs",               hint: "How you handled refunds, timezone, dedup choice; upstream fix recommendation.",                  rows: 5 },
+  { key: "corrected_monthly_revenue", label: "Corrected monthly revenue (last 3 months)", rows: 6 },
+  { key: "root_cause_finding",        label: "Root-cause finding",                        rows: 5 },
+  { key: "client_facing_summary",     label: "Board-ready client-facing summary",         rows: 6 },
+  { key: "decisions_and_tradeoffs",   label: "Key decisions and trade-offs",              rows: 5 },
 ];
 
 const EMPTY_DATA: DeliverableData = {
@@ -148,9 +147,6 @@ export default function DeliverablePanel({ sessionId }: Props) {
             }}>
               {f.label}
             </label>
-            <div style={{ fontSize: 11, color: color.text.muted, marginBottom: 6, lineHeight: 1.5 }}>
-              {f.hint}
-            </div>
             <textarea
               value={data[f.key]}
               onChange={(e) => setData({ ...data, [f.key]: e.target.value })}
