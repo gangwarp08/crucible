@@ -116,6 +116,21 @@ export default function Workspace({ sessionId }: Props) {
       .catch(() => { /* server may be starting — workspace still usable */ });
   }, [sessionId, init, setStatus]);
 
+  // Warn the candidate before refresh / tab close while the session is live.
+  // The browser's native "Reload site?" dialog is the only available UX —
+  // custom messages are ignored. Skipped once status leaves "active" so Submit
+  // → EndScreen → refresh doesn't prompt. `hydrated` guards against a brief
+  // window where storeSessionId still belongs to a prior session.
+  useEffect(() => {
+    if (!hydrated || status !== "active") return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hydrated, status]);
+
   const handleFileSelect = useCallback(
     async (path: string) => {
       setSelectedPath(path);
