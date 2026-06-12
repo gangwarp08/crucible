@@ -8,6 +8,11 @@ import { supabase } from "../services/supabase.js";
 import { runAnalysisAgent, AnalysisError } from "../services/analysis-agent.js";
 
 const LIST_LIMIT = 100;
+// Cap for the per-table grouped-count scans below. Bigger than supabase-js's
+// 1000-row default so counts don't silently undercount once events/transcript
+// grow past a few hundred sessions' worth. Order of 100k is well under any
+// realistic single-deploy footprint for an MVP.
+const COUNT_QUERY_MAX_ROWS = 100_000;
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -59,23 +64,26 @@ export async function reviewRoutes(server: FastifyInstance) {
 
     // One grouped query per child table, fired in parallel.
     // We fetch only session_id and aggregate in JS — avoids the N+1 trap and
-    // doesn't require an RPC. For 100 sessions this is at most a few hundred
-    // rows per child query. Evaluations is the fourth parallel read: we want
-    // the LATEST per session (re-runs delete-then-insert but defence in depth
-    // against any stray duplicates — keep most-recent created_at per session).
+    // doesn't require an RPC. supabase-js caps select() at 1000 rows by
+    // default, so we explicitly request up to COUNT_QUERY_MAX_ROWS — once any
+    // child table grows past that, counts silently undercount and sessions
+    // start showing 0. TODO(option B): replace these scans with a Postgres
+    // RPC that returns (session_id, count) per child table.
     const [eventsRes, msgsRes, filesRes, evalsRes] = await Promise.all([
-      supabase.from("events").select("session_id").in("session_id", ids),
+      supabase.from("events").select("session_id").in("session_id", ids).range(0, COUNT_QUERY_MAX_ROWS - 1),
       supabase
         .from("transcript")
         .select("session_id")
         .in("session_id", ids)
-        .neq("role", "system"),
-      supabase.from("file_snapshots").select("session_id").in("session_id", ids),
+        .neq("role", "system")
+        .range(0, COUNT_QUERY_MAX_ROWS - 1),
+      supabase.from("file_snapshots").select("session_id").in("session_id", ids).range(0, COUNT_QUERY_MAX_ROWS - 1),
       supabase
         .from("evaluations")
         .select("session_id, overall_score, status, created_at")
         .in("session_id", ids)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .range(0, COUNT_QUERY_MAX_ROWS - 1),
     ]);
 
     for (const res of [eventsRes, msgsRes, filesRes, evalsRes]) {
