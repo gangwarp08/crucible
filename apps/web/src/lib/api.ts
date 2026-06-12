@@ -20,13 +20,23 @@ export interface CreateSessionResult {
 }
 
 export async function createSession(
-  opts?: { scenarioId?: string },
+  opts?: { scenarioId?: string; inviteCode?: string },
 ): Promise<CreateSessionResult> {
+  const body: Record<string, string> = {};
+  if (opts?.scenarioId) body["scenarioId"] = opts.scenarioId;
+  if (opts?.inviteCode) body["inviteCode"] = opts.inviteCode;
   const init: RequestInit = { method: "POST" };
-  if (opts?.scenarioId) {
-    init.body = JSON.stringify({ scenarioId: opts.scenarioId });
+  if (Object.keys(body).length > 0) {
+    init.body = JSON.stringify(body);
   }
-  return apiFetch<CreateSessionResult>("/sessions", init);
+  try {
+    return await apiFetch<CreateSessionResult>("/sessions", init);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("API error 401")) {
+      throw new Error("Invalid invite code");
+    }
+    throw err;
+  }
 }
 
 export interface ScenarioConstraints {

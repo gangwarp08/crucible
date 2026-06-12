@@ -21,6 +21,8 @@ const PostSessionBody = z
     // Dev/test only — overrides scenario.constraints.tokens for this session.
     // Used by the AI-assistant verifier to force token exhaustion in a few calls.
     tokenBudgetOverride: z.number().int().nonnegative().optional(),
+    // Shared invite code. Required only when env.INVITE_CODE is set.
+    inviteCode: z.string().optional(),
   })
   .optional();
 
@@ -33,6 +35,9 @@ export async function sessionRoutes(server: FastifyInstance) {
         error: "Invalid body",
         details: parsed.error.flatten().fieldErrors,
       });
+    }
+    if (env.INVITE_CODE && parsed.data?.inviteCode !== env.INVITE_CODE) {
+      return reply.status(401).send({ error: "Invalid invite code" });
     }
     const scenarioId = parsed.data?.scenarioId;
     const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;

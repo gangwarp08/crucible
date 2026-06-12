@@ -34,6 +34,7 @@ function fmtNum(n: number | null): string {
 export default function StartScreen({ slug }: Props) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const [inviteCode, setInviteCode] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +58,11 @@ export default function StartScreen({ slug }: Props) {
   async function begin(scenario: Scenario): Promise<void> {
     setPhase({ kind: "starting", scenario });
     try {
-      const { sessionId } = await createSession({ scenarioId: scenario.id });
+      const trimmedCode = inviteCode.trim();
+      const { sessionId } = await createSession({
+        scenarioId: scenario.id,
+        ...(trimmedCode ? { inviteCode: trimmedCode } : {}),
+      });
       router.push(`/session/${sessionId}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start the session";
@@ -115,6 +120,8 @@ export default function StartScreen({ slug }: Props) {
             scenario={phase.scenario}
             starting={phase.kind === "starting"}
             beginError={phase.kind === "starting-failed" ? phase.message : null}
+            inviteCode={inviteCode}
+            onInviteCodeChange={setInviteCode}
             onBegin={() => { void begin(phase.scenario); }}
           />
         )}
@@ -147,11 +154,13 @@ function Wordmark() {
 }
 
 function ScenarioBody({
-  scenario, starting, beginError, onBegin,
+  scenario, starting, beginError, inviteCode, onInviteCodeChange, onBegin,
 }: {
   scenario: Scenario;
   starting: boolean;
   beginError: string | null;
+  inviteCode: string;
+  onInviteCodeChange: (v: string) => void;
   onBegin: () => void;
 }) {
   const c = scenario.constraints;
@@ -259,6 +268,29 @@ function ScenarioBody({
         alignItems: "flex-start", gap: 14,
         paddingTop: 4,
       }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 12, color: color.text.muted }}>Invite code</span>
+          <input
+            type="text"
+            value={inviteCode}
+            onChange={(e) => onInviteCodeChange(e.target.value)}
+            disabled={starting}
+            placeholder="Paste the code from your invite"
+            autoComplete="off"
+            spellCheck={false}
+            style={{
+              width: 280,
+              background: color.bg.elevated,
+              border: `1px solid ${color.border.default}`,
+              borderRadius: radius.sm,
+              color: color.text.primary,
+              fontSize: 13,
+              padding: "8px 10px",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+          />
+        </label>
         <Button variant="primary" size="lg" disabled={starting} onClick={onBegin}>
           {starting ? "Starting…" : "Begin assessment"}
         </Button>

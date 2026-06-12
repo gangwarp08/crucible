@@ -30,6 +30,11 @@ const EnvSchema = z.object({
   // Comma-separated list of allowed browser origins (e.g. https://crucible.vercel.app).
   // Required in production; defaults to http://localhost:3000 in dev.
   WEB_ORIGIN: z.string().optional(),
+
+  // Shared invite code required to start a session. When unset, the gate is
+  // off (dev/preview). Set in production to keep stray URL hits from
+  // burning LiteLLM + E2B budget.
+  INVITE_CODE: z.string().min(1).optional(),
 });
 
 function loadEnv() {
