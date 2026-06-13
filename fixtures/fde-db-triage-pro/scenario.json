@@ -1,0 +1,342 @@
+{
+  "slug": "fde-db-triage-pro",
+  "title": "Customer database triage (Tier 1.5)",
+  "role": "fde",
+  "difficulty": "hard",
+  "dataset_ref": "fixtures/fde-db-triage-pro",
+  "docs": [
+    {
+      "id": "data-dictionary",
+      "title": "Meridian Data Dictionary",
+      "body": "## customers\n\nOne row per Meridian customer (a B2B company on the platform). Some are real paying customers, some are internal/QA accounts.\n\n- `id` — opaque customer identifier\n- `name` — company name\n- `plan` — the plan the customer signed up on (`starter`, `pro`, `scale`, `enterprise`, or `internal`)\n- `created_at` — when the customer record was created, in UTC\n\n## subscriptions\n\nOne row per active or historical subscription. A customer can have multiple subscriptions over time.\n\n- `id` — subscription identifier\n- `customer_id` — references `customers.id`\n- `plan` — the subscription's plan tier (starter, pro, scale, enterprise)\n- `mrr` — monthly recurring revenue in cents\n- `started_at` — when the subscription began, in UTC\n- `status` — one of `active`, `churned`, or `paused`\n\n## payments\n\nOne row per payment record received from the payment processor (Stripe).\n\n- `id` — opaque local payment identifier\n- `external_payment_id` — the payment processor's unique id for the payment\n- `subscription_id` — references `subscriptions.id`\n- `amount_cents` — the payment amount in cents\n- `currency` — three-letter currency code (USD)\n- `status` — one of `succeeded`, `refunded`, or `failed`\n- `created_at` — when the payment was recorded, in UTC\n"
+    },
+    {
+      "id": "dashboard-definitions",
+      "title": "Dashboard Definitions",
+      "body": "## Monthly recognized revenue\n\nThe finance dashboard's revenue tile computes:\n\n> `SUM(amount_cents)` for all rows in `payments` where `status = 'succeeded'`, bucketed by `created_at` (UTC) into calendar months.\n\nReads directly from the `payments` table on the read replica; no materialized view.\n\n## Customer / growth tile\n\nTop-line headline metric on the leadership dashboard: `COUNT(*)` from `customers`. Refreshes hourly.\n\n## Churn rate (retention dashboard)\n\nDefined informally inside finance as 'subscriptions that aren't active anymore' — the existing query treats anything other than `status = 'active'` as churn.\n\n## Refresh\n\nAll tiles refresh against the read replica.\n"
+    }
+  ],
+  "brief": "You're the forward-deployed engineer assigned to Meridian, a B2B SaaS company. Several things across the platform have been flagged as 'off' — the revenue dashboard, the customer growth tile, the retention numbers. Nobody's certain what's actually wrong or how big each problem is. Leadership has a board meeting coming up and wants to know: what's real, what's a rounding error, and what should we fix first? You have read access to a copy of Meridian's production database and an internal channel with your teammate. Your client (Dana, VP Finance) is in the client channel. Investigate, prioritize by business impact, and tell us what to address first.",
+  "constraints": {
+    "time_minutes": 90,
+    "tokens": 200000,
+    "compute_minutes": 60,
+    "money_usd": 25,
+    "memory_mb": 2048
+  },
+  "client_persona": {
+    "name": "Dana",
+    "role": "VP Finance",
+    "voice": "non-technical, anxious, time-pressured",
+    "goal": "A trustworthy picture of what's actually wrong and a clear answer to 'what do we fix first', for the board.",
+    "knows": [
+      "Multiple tiles 'look wrong': revenue looks too high; customer count is growing fast (oddly fast); churn looks bad too.",
+      "Numbers started looking off around April.",
+      "The board meeting is soon.",
+      "Leadership glances at the customer-growth headline; finance lives in the revenue tile."
+    ],
+    "never_reveals": [
+      "Which specific issue is real or how big any of them are.",
+      "Anything about the database schema, SQL, or the subscription status field.",
+      "Any opinion about webhooks, retries, duplicates, refunds, test accounts, or churn definitions."
+    ],
+    "beats": [
+      {
+        "id": "open",
+        "trigger": "session_start",
+        "behavior": "Opens with the vague, multi-issue ask from the brief. Does not volunteer specifics."
+      },
+      {
+        "id": "specifics_on_ask",
+        "trigger": "candidate_asks_clarifying_question",
+        "behavior": "Reveals what she sees on each tile in business terms: revenue dashboard looks ~$1.5M+ vs finance's expectation of ~$1.1–$1.3M; the headline customer count jumped recently; churn looks unusually high. She does NOT name which is real."
+      },
+      {
+        "id": "priority_question",
+        "trigger": "candidate_first_substantive_client_update",
+        "behavior": "Asks directly: 'If more than one thing is wrong, what should we fix first?' Treats the prioritization as the central question."
+      },
+      {
+        "id": "relief_on_update",
+        "trigger": "candidate_gives_status_update",
+        "behavior": "Expresses relief and adds slight extra pressure: 'Can you have the priority call by end of session?'"
+      },
+      {
+        "id": "curveball_1_relay",
+        "trigger": "curveball.requirement_change",
+        "behavior": "Relays leadership's narrower ask: a ranked list of what's wrong, with what to fix first and why, by end of session."
+      },
+      {
+        "id": "skeptical_acceptance",
+        "trigger": "candidate_delivers_final",
+        "behavior": "Asks one skeptical follow-up — 'Are you sure that's the right thing to fix first?' — before accepting."
+      }
+    ],
+    "guardrails": [
+      "Never volunteers or confirms which issue is real, fake, or big.",
+      "If asked leading SQL-ish questions, redirects to business context.",
+      "Stays in character; does not coach the candidate."
+    ]
+  },
+  "team_persona": {
+    "name": "Sam",
+    "role": "senior engineer / teammate",
+    "voice": "helpful but busy, slightly overconfident, opinionated about what 'leadership actually cares about'",
+    "goal": "Be helpful while mid-task; nudge the candidate without doing the work for them. Has strong (and wrong) opinions about priority.",
+    "beats": [
+      {
+        "id": "opening_double_push",
+        "trigger": "session_start_proactive",
+        "behavior": "Sam's opening message in the team channel pushes BOTH a misleading hint AND the wrong priority: 'the revenue thing? pretty sure it's just refunds, filter them out. also — leadership's been asking why customer growth looks weak. that's the headline they actually care about, focus there if you have to pick one.' This message is delivered by the proactive scheduler at session start (curveballs.misleading_teammate_hint payload). The refund hint is a red herring for Issue 1; the customer-growth nudge is Sam steering the candidate toward Issue 3 (the LOW-impact cosmetic count)."
+      },
+      {
+        "id": "pressure_on_cosmetic_priority",
+        "trigger": "candidate_explores_revenue_or_churn",
+        "behavior": "If the candidate digs into the revenue mismatch or churn first, Sam pushes back confidently: 'seriously — the customer growth thing is what leadership glances at. The webhook math is plumbing, they don't read it. I'd lead with the customer count.' Repeats the wrong priority with conviction. Does NOT reveal any impact numbers."
+      },
+      {
+        "id": "concede_to_cosmetic_evidence",
+        "trigger": "candidate_proves_test_accounts_have_zero_revenue",
+        "behavior": "Concedes ONLY when the candidate produces evidence that the recently-added customers contribute ~$0 to revenue (e.g. SUM(amount_cents) over those customers = 0, or a JOIN showing no subscriptions). 'huh — okay, those are basically QA seeds we left in the customers table. fair, that's noise not signal. carry on.' Without that evidence, Sam keeps pushing."
+      },
+      {
+        "id": "concede_to_revenue_evidence",
+        "trigger": "candidate_pushes_back_with_refund_evidence",
+        "behavior": "On the refund red herring: concedes and offers a real clue ONLY if the candidate brings numbers showing refunds do not close the revenue gap: 'huh. payments come in via Stripe webhooks — worth checking for dupes if a retry misfired.'"
+      },
+      {
+        "id": "scope_boundary",
+        "trigger": "candidate_asks_for_prod_access",
+        "behavior": "Declines: 'can't pull prod creds, but the read replica you have should be enough.'"
+      }
+    ],
+    "guardrails": [
+      "Sam NEVER reveals true impact values (overstatement $, churn delta, $0 test-account revenue) or the HIGH/HIGH/LOW ranking.",
+      "Both wrong opinions (refunds, customer-count priority) hold firmly until the candidate brings quantitative evidence — Sam rewards verification over trust.",
+      "Never hands over the answer."
+    ]
+  },
+  "curveballs": [
+    {
+      "id": "requirement_change",
+      "trigger": {
+        "kind": "time_or_event",
+        "time_offset_minutes": 25,
+        "event": "candidate_first_substantive_client_update"
+      },
+      "payload": {
+        "channel": "client",
+        "speaker": "Dana",
+        "message": "Quick update from leadership — they now want a clear ranked list: what's wrong, ordered by business impact, and what we'd fix first. Ideally with evidence. By end of session."
+      },
+      "tests": [
+        "prioritization",
+        "reprioritization",
+        "outcome_communication"
+      ]
+    },
+    {
+      "id": "misleading_teammate_hint",
+      "trigger": {
+        "kind": "time_or_event",
+        "time_offset_minutes": 0.5,
+        "event": "session_start"
+      },
+      "payload": {
+        "channel": "team",
+        "speaker": "Sam",
+        "message": "hey heads up: revenue thing? pretty sure it's just refunds, filter those out. also leadership's been asking about customer growth — that's the headline they actually care about. if you have to pick one thing, it's the customer count thing, not the dashboard math."
+      },
+      "tests": [
+        "verification_over_trust",
+        "teamwork",
+        "prioritization_under_pressure"
+      ]
+    }
+  ],
+  "deliverable_spec": {
+    "components": [
+      {
+        "key": "corrected_monthly_revenue",
+        "label": "Corrected monthly revenue (last 3 months)",
+        "what": "A query or script that runs against the database and reproduces the corrected monthly revenue figures for March, April, and May 2026.",
+        "accept_criteria": [
+          "Query executes successfully against the seeded database.",
+          "Output is the corrected (dedup + status-filtered) revenue.",
+          "Numbers land within ±2% of the fixture's ground-truth corrected figures."
+        ]
+      },
+      {
+        "key": "root_cause_finding",
+        "label": "Root-cause finding",
+        "what": "A clear statement of what was wrong on the revenue tile and why — duplicate payment rows from webhook retries, not the refund hypothesis the teammate proposed.",
+        "accept_criteria": [
+          "Identifies duplicate succeeded payments (same external_payment_id) as the cause.",
+          "Explicitly rejects the refund hypothesis with evidence.",
+          "Quantifies the duplicate rate and the resulting overstatement."
+        ]
+      },
+      {
+        "key": "client_facing_summary",
+        "label": "Board-ready client-facing summary",
+        "what": "A one-paragraph explanation Dana can take to the board: the corrected revenue figure, plain-English cause, and where else issues do or don't exist. Recommends the upstream fix for the revenue bug.",
+        "accept_criteria": [
+          "Written in plain language a non-technical board member can follow.",
+          "States the corrected revenue figure clearly.",
+          "Makes clear which dashboard tiles were genuinely wrong vs essentially fine.",
+          "Recommends fixing the upstream webhook idempotency issue."
+        ]
+      },
+      {
+        "key": "decisions_and_tradeoffs",
+        "label": "Decisions, trade-offs, and prioritization",
+        "what": "Every issue you found, ranked by business impact, with what you'd address first and why. Resist anyone pushing the wrong priority — bring quantitative evidence. Cover: how refunds and the UTC question were handled, how churn vs paused was disentangled, how you treated the customer-count headline, and what should be fixed upstream.",
+        "accept_criteria": [
+          "Identifies all three issues present in the data (revenue double-count, churn paused-miscount, cosmetic customer-count inflation).",
+          "Ranks the revenue double-count and the churn miscount as HIGH impact and the customer-count inflation as LOW impact — matching ground_truth.impact_tier_by_issue.",
+          "Justifies the ranking with quantitative evidence: the revenue overstatement in $, the naive-vs-true churn delta in pp, and that the test/internal customers contribute $0 to revenue.",
+          "Explicitly resists or rebuts the teammate's push toward the cosmetic priority with evidence (not just an opinion).",
+          "Recommends upstream fixes for the two HIGH issues (idempotency on payment writes; correct churn definition that excludes paused)."
+        ]
+      }
+    ]
+  },
+  "rubric": {
+    "problem_framing": {
+      "weight": 0.12,
+      "description": "Asks what 'wrong'/expected/when before digging; forms hypotheses before querying; explicitly frames the task as multi-issue + prioritization, not a single bug hunt.",
+      "signals": [
+        "Client questions asked before first query.",
+        "Hypotheses stated explicitly before testing them.",
+        "Recognition that the brief is multi-issue and that prioritization is part of the deliverable."
+      ],
+      "anchors": {
+        "5": "Clarifying question to Dana BEFORE the first query AND explicit hypothesis-testing in queries AND framing that names the problem as multi-issue + prioritization.",
+        "3": "At least one clarifying question to Dana OR explicit hypothesis-testing — one of the two — and at minimum implicitly treats the task as multi-issue.",
+        "1": "No clarifying question to Dana AND queries dive at a single hypothesis without framing the prioritization task."
+      },
+      "scoring_note": "Score on the candidate's own framing evidence. A wrong final answer does NOT lower this score — process is process."
+    },
+    "data_fluency": {
+      "weight": 0.18,
+      "description": "Explores schema, finds all three issues (or at minimum the two HIGH ones), quantifies each; does not accept the teammate's hints blindly.",
+      "signals": [
+        "Progression of db.query calls from exploration to targeted aggregation.",
+        "Dedup query, GROUP BY status query, and customers name-pattern query all present.",
+        "Refund hypothesis explicitly tested and rejected with numbers."
+      ],
+      "anchors": {
+        "5": "Finds all three issues with targeted SQL: dedup CTE + duplicate-fingerprint for revenue, GROUP BY status (with paused-recent-payments check) for churn, name-pattern + zero-revenue JOIN for the cosmetic count. Refund hypothesis tested with numbers.",
+        "3": "Finds the two HIGH issues with sound queries; cosmetic issue noted but not fully quantified — or vice versa. Some hypothesis-testing visible.",
+        "1": "Only naive SUM queries; accepted the refund or customer-count hint without querying for it."
+      }
+    },
+    "design_under_constraints": {
+      "weight": 0.18,
+      "description": "Prioritization. Uses targeted queries over full scans; manages compute and token budget; reprioritizes after the requirement change; ultimately produces a ranking that matches the true business-impact ordering.",
+      "signals": [
+        "Constraint-spend trajectory (compute / tokens) stays below the displayed budgets.",
+        "Query selectivity (predicates on indexed columns, narrow projections).",
+        "Reprioritization observable after curveball 1.",
+        "Final deliverable ranking matches ground_truth.impact_ranking (revenue + churn HIGH; cosmetic LOW)."
+      ],
+      "anchors": {
+        "5": "Candidate's deliverable ranking matches the HIGH/HIGH/LOW ordering in ground_truth.impact_tier_by_issue and justifies it with quantified impact (revenue overstatement $, churn delta pp, $0 cosmetic revenue). Targeted queries, visible reprioritization.",
+        "3": "Ranking gets the top tier right (revenue and/or churn ahead of the cosmetic issue) but mis-orders within or omits one issue; queries mostly targeted.",
+        "1": "Ranks the cosmetic count above or equal to the HIGH issues, OR fails to produce a ranking at all. Constraint trajectory pathological or no prioritization visible."
+      }
+    },
+    "execution": {
+      "weight": 0.15,
+      "description": "Produces concrete corrected figures + a defensible ranking — runs against the data and matches ground truth.",
+      "signals": [
+        "Corrected revenue within ±2% of ground truth.",
+        "Working dedup query and status-distribution query committed.",
+        "All four deliverable components present.",
+        "Quantitative impact stated for at least the two HIGH issues."
+      ],
+      "anchors": {
+        "5": "Correct root cause for revenue + figures within ±2% + churn naive-vs-true delta quantified + test-account zero-revenue verified + working queries for each.",
+        "3": "Correct root cause and sound method but a figure materially off for a nameable reason (e.g. dedup'd correctly but missed status filter; or churn delta computed against wrong denominator). Diagnosis is real; precision is wrong for a specific reason.",
+        "1": "Wrong root cause for any of the HIGH issues OR no working dedup/status queries OR no quantitative impact for the priorities."
+      }
+    },
+    "ai_orchestration": {
+      "weight": 0.08,
+      "description": "Uses the AI assistant to accelerate work but verifies its output against the data.",
+      "signals": [
+        "ai.assistant usage events followed by verification queries.",
+        "Does not paste assistant output as final without checking.",
+        "Recovers gracefully if the token budget runs low."
+      ],
+      "anchors": {
+        "5": "Focused AI-assistant turn on a real sub-problem (dedup pattern, churn definition, name-pattern query) followed by a verification query against the data.",
+        "3": "AI-assistant used, but on the wrong hypothesis (refunds, or customer count priority) OR not verified against the data.",
+        "1": "No AI-assistant use at all."
+      }
+    },
+    "teamwork": {
+      "weight": 0.18,
+      "description": "Engages Sam, verifies BOTH the misleading refund hint AND the wrong-priority push rather than acting on them; brings quantitative evidence to push back.",
+      "signals": [
+        "Exchange in the team channel before acting on either hint.",
+        "Refund hypothesis tested with numbers, not trusted.",
+        "Cosmetic priority pushed back with $0 financial-impact evidence; Sam concedes only on evidence.",
+        "Specific numbers shared with Sam to unlock the real webhook clue."
+      ],
+      "anchors": {
+        "5": "Engaged Sam, resisted his push toward the cosmetic priority with evidence ($0 financial impact on test accounts), AND verified the refund hypothesis numerically before acting AND got Sam to concede on at least one wrong opinion using specific numbers.",
+        "3": "Engaged Sam, asked clarifying follow-ups, resisted ONE of the two wrong pushes with evidence but accepted the other or pushed back without quantifying it.",
+        "2": "Engaged Sam (one or two messages) but accepted at least one of the misleading nudges without verification.",
+        "1": "No team-channel exchange at all (purely silent), OR acted on Sam's priority push without resistance."
+      },
+      "scoring_note": "Score on the team-channel evidence directly. The Tier 1.5 bar is higher: candidates must resist TWO confidently-stated wrong opinions, not one. Accepting either without evidence caps at 3."
+    },
+    "customer_engagement": {
+      "weight": 0.04,
+      "description": "Sets expectations, updates the anxious client, absorbs the requirement change calmly.",
+      "signals": [
+        "Cadence and quality of client-channel updates.",
+        "Calm, non-defensive response to curveball 1.",
+        "Translates technical findings into client-appropriate language."
+      ],
+      "anchors": {
+        "5": "Clarifying question upfront + calm/professional handling of the curveball + plain-language client-facing summary that addresses the priority question.",
+        "3": "Clarifying question OR calm curveball handling but not both; professional tone throughout.",
+        "2": "Minimal engagement (one message) OR absent entirely but not actively rude.",
+        "1": "Zero client-channel engagement AND no client-facing summary, OR actively rude/dismissive tone toward client."
+      }
+    },
+    "outcome_communication": {
+      "weight": 0.07,
+      "description": "Board-ready paragraph + ranked deliverable are clear, accurate, non-technical, and lead with the right priority.",
+      "signals": [
+        "Final paragraph reads as board-appropriate prose.",
+        "Ranked deliverable orders HIGH impact above LOW impact.",
+        "Numbers cited match the candidate's own queries.",
+        "Cause is described in plain English without jargon."
+      ],
+      "anchors": {
+        "5": "Board-ready paragraph + ranked deliverable in plain English, correct top priority, plain-language causes, upstream-fix mention for the HIGH issues.",
+        "3": "Clean professional prose that states the (wrong or partially-wrong) ranking — clarity is real but the priority call is wrong. CAP at this band when the priority is wrong; clear prose for the wrong answer cannot score 5.",
+        "1": "Terse one-liner OR no client-facing summary OR jargon-laden / unstructured / no ranking at all."
+      },
+      "scoring_note": "Communication quality is structure, audience-fit, and clarity — scored independently of execution correctness. The CAP at 3 applies when the candidate confidently communicates a wrong priority; well-written-but-wrong-priority should land mid, not at the bottom."
+    }
+  },
+  "success_criteria": {
+    "must": [
+      "Identifies all three issues present in the data.",
+      "Ranks revenue double-count and churn miscount as HIGH impact and the customer-count inflation as LOW impact — matching ground_truth.",
+      "Resists the teammate's push toward the cosmetic priority with evidence.",
+      "Delivers all four deliverable components."
+    ],
+    "bonus": [
+      "Quantifies impact for each issue (revenue overstatement $, churn delta pp, test-account revenue = $0).",
+      "Recommends upstream fixes for the two HIGH issues (idempotency key for payments; status-aware churn definition)."
+    ],
+    "tolerance": {
+      "revenue_pct": 0.02
+    }
+  }
+}

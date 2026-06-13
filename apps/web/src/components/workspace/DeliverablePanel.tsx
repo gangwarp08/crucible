@@ -23,7 +23,7 @@ const FIELDS: Field[] = [
   { key: "corrected_monthly_revenue", label: "Corrected monthly revenue (last 3 months)", rows: 6 },
   { key: "root_cause_finding",        label: "Root-cause finding",                        rows: 5 },
   { key: "client_facing_summary",     label: "Board-ready client-facing summary",         rows: 6 },
-  { key: "decisions_and_tradeoffs",   label: "Key decisions and trade-offs",              rows: 5 },
+  { key: "decisions_and_tradeoffs",   label: "Decisions, trade-offs, and prioritization", rows: 5 },
 ];
 
 const EMPTY_DATA: DeliverableData = {

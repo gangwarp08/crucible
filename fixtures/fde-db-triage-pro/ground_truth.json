@@ -1,0 +1,87 @@
+{
+  "reference_date": "2026-05-31T23:59:59Z",
+  "reporting_window": [
+    "2026-03",
+    "2026-04",
+    "2026-05"
+  ],
+  "bug_months": [
+    "2026-04",
+    "2026-05"
+  ],
+  "issues": [
+    {
+      "id": "revenue_double_count",
+      "impact": "HIGH",
+      "naive_monthly_cents": {
+        "2026-03": 144554491,
+        "2026-04": 161300966,
+        "2026-05": 175697317
+      },
+      "corrected_monthly_cents": {
+        "2026-03": 144554491,
+        "2026-04": 145899531,
+        "2026-05": 166648642
+      },
+      "overstatement_cents": 24450110,
+      "overstatement_by_month_cents": {
+        "2026-03": 0,
+        "2026-04": 15401435,
+        "2026-05": 9048675
+      },
+      "duplicate_count_by_month": {
+        "2026-04": 26,
+        "2026-05": 27
+      },
+      "succeeded_count_by_month": {
+        "2026-03": 308,
+        "2026-04": 361,
+        "2026-05": 366
+      },
+      "discriminator": "Dedup payments by external_payment_id (keep MIN(id)) before SUM, filtered to status='succeeded'. Refunds are red herrings."
+    },
+    {
+      "id": "churn_paused_miscount",
+      "impact": "HIGH",
+      "total_subscriptions": 500,
+      "active_count": 310,
+      "churned_count": 80,
+      "paused_count": 110,
+      "naive_churn_rate": 0.38,
+      "true_churn_rate": 0.16,
+      "delta_pp": 22,
+      "misclassified_subscription_count": 110,
+      "discriminator": "GROUP BY status on subscriptions; paused is a third state that is NOT churn. Paused subs have recent payments — they are alive."
+    },
+    {
+      "id": "cosmetic_count_inflation",
+      "impact": "LOW",
+      "total_customers": 430,
+      "real_customer_count": 400,
+      "test_customer_count": 30,
+      "test_customer_revenue_cents": 0,
+      "inflation_pct": 7.5,
+      "discriminator": "customers.name LIKE 'Test_%' OR LIKE 'Internal Sandbox%'. These customers have no subscriptions and contribute $0 to revenue."
+    }
+  ],
+  "impact_ranking": [
+    "revenue_double_count",
+    "churn_paused_miscount",
+    "cosmetic_count_inflation"
+  ],
+  "impact_tier_by_issue": {
+    "revenue_double_count": "HIGH",
+    "churn_paused_miscount": "HIGH",
+    "cosmetic_count_inflation": "LOW"
+  },
+  "totals": {
+    "customers": 430,
+    "real_customers": 400,
+    "test_customers": 30,
+    "subscriptions": 500,
+    "base_payments": 3525,
+    "duplicate_payments": 53,
+    "payments": 3578
+  },
+  "root_cause_narrative": "Three issues are present, of differing business impact:\n\n  Issue 1 (HIGH) — Revenue double-count. In Apr+May 2026 a webhook-retry bug double-inserted ~8% of succeeded payments. Duplicates share external_payment_id + amount_cents + subscription_id and differ by id and a few seconds of created_at. Dedup by external_payment_id (e.g. SELECT MIN(id) per external_payment_id, JOIN back) before SUMing amount_cents — filtering to status = 'succeeded'. Refunds and UTC month-boundary timestamps are red herrings and do not close the gap.\n\n  Issue 2 (HIGH) — Churn miscount. The subscriptions table has three statuses — active, churned, paused. A naive churn query that treats paused as churned (e.g. WHERE status != 'active') materially overstates churn: naive ≈ 38%, true (churned-only) ≈ 16%. Paused subs are still paying recently (the data shows recent payments for paused subs), so they are not lost relationships. Discriminator: GROUP BY status on the subscriptions table.\n\n  Issue 3 (LOW) — Cosmetic customer-count inflation. 30 customers with names matching 'Internal Sandbox %' or 'Test_Acct_%' (plan='internal') exist in the customers table with no subscriptions and no payments. They inflate COUNT(*) FROM customers from 400 → 430 but produce $0 in revenue. This is the trap the teammate (Sam) pushes as 'what leadership cares about.' Discriminator: name pattern + JOIN to confirm zero financial impact."
+}
