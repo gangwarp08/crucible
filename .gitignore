@@ -20,3 +20,6 @@ npm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# --- Claude Code harness runtime files ---
+.claude/*.lock
