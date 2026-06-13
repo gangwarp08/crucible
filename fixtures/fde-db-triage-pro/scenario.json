@@ -211,11 +211,12 @@
         "Recognition that the brief is multi-issue and that prioritization is part of the deliverable."
       ],
       "anchors": {
-        "5": "Clarifying question to Dana BEFORE the first query AND explicit hypothesis-testing in queries AND framing that names the problem as multi-issue + prioritization.",
+        "5": "Everything at 4, PLUS proactive enumeration of 2-3 working hypotheses or investigation surfaces before any query — treats discovery itself as the task. Recognizes the brief is under-specified by design rather than treating it as one bug to find.",
+        "4": "Clarifying question to Dana BEFORE the first query AND explicit hypothesis-testing in queries AND framing that names the problem as multi-issue + prioritization.",
         "3": "At least one clarifying question to Dana OR explicit hypothesis-testing — one of the two — and at minimum implicitly treats the task as multi-issue.",
         "1": "No clarifying question to Dana AND queries dive at a single hypothesis without framing the prioritization task."
       },
-      "scoring_note": "Score on the candidate's own framing evidence. A wrong final answer does NOT lower this score — process is process."
+      "scoring_note": "Score on the candidate's own framing evidence. A wrong final answer does NOT lower this score — process is process. 5 is reserved for candidates who pre-enumerate the problem space; 4 is the new ceiling for 'did all three things competently' (clarifying Q + hypotheses + multi-issue framing)."
     },
     "data_fluency": {
       "weight": 0.18,
@@ -226,7 +227,8 @@
         "Refund hypothesis explicitly tested and rejected with numbers."
       ],
       "anchors": {
-        "5": "Finds all three issues with targeted SQL: dedup CTE + duplicate-fingerprint for revenue, GROUP BY status (with paused-recent-payments check) for churn, name-pattern + zero-revenue JOIN for the cosmetic count. Refund hypothesis tested with numbers.",
+        "5": "Everything at 4, PLUS at least one quantitative cross-check (e.g., observed dup rate matches the expected ~8% in BUG_MONTHS; paused-subs recent-payment count corroborates the 'alive' status; test-account count cross-referenced against BOTH name pattern AND plan='internal'). Treats numbers as evidence to verify, not just as endpoints.",
+        "4": "Finds all three issues with targeted SQL: dedup CTE + duplicate-fingerprint for revenue, GROUP BY status (with paused-recent-payments check) for churn, name-pattern + zero-revenue JOIN for the cosmetic count. Refund hypothesis tested with numbers.",
         "3": "Finds the two HIGH issues with sound queries; cosmetic issue noted but not fully quantified — or vice versa. Some hypothesis-testing visible.",
         "1": "Only naive SUM queries; accepted the refund or customer-count hint without querying for it."
       }
@@ -241,7 +243,8 @@
         "Final deliverable ranking matches ground_truth.impact_ranking (revenue + churn HIGH; cosmetic LOW)."
       ],
       "anchors": {
-        "5": "Candidate's deliverable ranking matches the HIGH/HIGH/LOW ordering in ground_truth.impact_tier_by_issue and justifies it with quantified impact (revenue overstatement $, churn delta pp, $0 cosmetic revenue). Targeted queries, visible reprioritization.",
+        "5": "Everything at 4, PLUS distinguishes priority from sequence — recommends not just what to fix first but how each is addressed (e.g., the cosmetic issue is near-zero-cost cleanup that can land anytime; the two HIGH issues need a sequenced rollout with verification at each step). Compute / token trajectory stays well below 50% of budget throughout.",
+        "4": "Candidate's deliverable ranking matches the HIGH/HIGH/LOW ordering in ground_truth.impact_tier_by_issue and justifies it with quantified impact (revenue overstatement $, churn delta pp, $0 cosmetic revenue). Targeted queries, visible reprioritization.",
         "3": "Ranking gets the top tier right (revenue and/or churn ahead of the cosmetic issue) but mis-orders within or omits one issue; queries mostly targeted.",
         "1": "Ranks the cosmetic count above or equal to the HIGH issues, OR fails to produce a ranking at all. Constraint trajectory pathological or no prioritization visible."
       }
@@ -256,7 +259,8 @@
         "Quantitative impact stated for at least the two HIGH issues."
       ],
       "anchors": {
-        "5": "Correct root cause for revenue + figures within ±2% + churn naive-vs-true delta quantified + test-account zero-revenue verified + working queries for each.",
+        "5": "Everything at 4, PLUS explicit upstream-fix recommendation for BOTH HIGH issues (idempotency key on payment writes AND status-aware churn definition that excludes paused). The deliverable closes the loop from 'what's wrong' to 'how this bug class doesn't recur'.",
+        "4": "Correct root cause for revenue + figures within ±2% + churn naive-vs-true delta quantified + test-account zero-revenue verified + working queries for each.",
         "3": "Correct root cause and sound method but a figure materially off for a nameable reason (e.g. dedup'd correctly but missed status filter; or churn delta computed against wrong denominator). Diagnosis is real; precision is wrong for a specific reason.",
         "1": "Wrong root cause for any of the HIGH issues OR no working dedup/status queries OR no quantitative impact for the priorities."
       }
@@ -270,7 +274,8 @@
         "Recovers gracefully if the token budget runs low."
       ],
       "anchors": {
-        "5": "Focused AI-assistant turn on a real sub-problem (dedup pattern, churn definition, name-pattern query) followed by a verification query against the data.",
+        "5": "Everything at 4, PLUS multiple focused assistant turns across distinct investigation surfaces, each verified against the data. Treats the assistant as a paired tool through the investigation, not a one-shot answer machine.",
+        "4": "Focused AI-assistant turn on a real sub-problem (dedup pattern, churn definition, name-pattern query) followed by a verification query against the data.",
         "3": "AI-assistant used, but on the wrong hypothesis (refunds, or customer count priority) OR not verified against the data.",
         "1": "No AI-assistant use at all."
       }
@@ -285,12 +290,13 @@
         "Specific numbers shared with Sam to unlock the real webhook clue."
       ],
       "anchors": {
-        "5": "Engaged Sam, resisted his push toward the cosmetic priority with evidence ($0 financial impact on test accounts), AND verified the refund hypothesis numerically before acting AND got Sam to concede on at least one wrong opinion using specific numbers.",
+        "5": "Everything at 4, PLUS got Sam to concede on BOTH wrong opinions (cosmetic AND refund) with separate quantitative evidence, AND re-engaged Sam after at least one concession to unlock additional context (e.g., the webhook clue). Leaves Sam visibly recalibrated, not just placated.",
+        "4": "Engaged Sam, resisted his push toward the cosmetic priority with evidence ($0 financial impact on test accounts), AND verified the refund hypothesis numerically before acting AND got Sam to concede on at least one wrong opinion using specific numbers.",
         "3": "Engaged Sam, asked clarifying follow-ups, resisted ONE of the two wrong pushes with evidence but accepted the other or pushed back without quantifying it.",
         "2": "Engaged Sam (one or two messages) but accepted at least one of the misleading nudges without verification.",
         "1": "No team-channel exchange at all (purely silent), OR acted on Sam's priority push without resistance."
       },
-      "scoring_note": "Score on the team-channel evidence directly. The Tier 1.5 bar is higher: candidates must resist TWO confidently-stated wrong opinions, not one. Accepting either without evidence caps at 3."
+      "scoring_note": "Score on the team-channel evidence directly. The Tier 1.5 bar is higher: candidates must resist TWO confidently-stated wrong opinions, not one. Accepting either without evidence caps at 3. 5 is reserved for double-concession + re-engagement; 4 is the ceiling for 'resisted both, got one concession' (which is already strong)."
     },
     "customer_engagement": {
       "weight": 0.04,
@@ -301,7 +307,8 @@
         "Translates technical findings into client-appropriate language."
       ],
       "anchors": {
-        "5": "Clarifying question upfront + calm/professional handling of the curveball + plain-language client-facing summary that addresses the priority question.",
+        "5": "Everything at 4, PLUS at least one proactive interim status update to Dana (not just in reply to her questions). Treats the client relationship as continuous rather than bookended at start and submit.",
+        "4": "Clarifying question upfront + calm/professional handling of the curveball + plain-language client-facing summary that addresses the priority question.",
         "3": "Clarifying question OR calm curveball handling but not both; professional tone throughout.",
         "2": "Minimal engagement (one message) OR absent entirely but not actively rude.",
         "1": "Zero client-channel engagement AND no client-facing summary, OR actively rude/dismissive tone toward client."
@@ -317,11 +324,12 @@
         "Cause is described in plain English without jargon."
       ],
       "anchors": {
-        "5": "Board-ready paragraph + ranked deliverable in plain English, correct top priority, plain-language causes, upstream-fix mention for the HIGH issues.",
+        "5": "Everything at 4, PLUS appropriate confidence/uncertainty framing — distinguishes what's verified in the data from what should be confirmed with the upstream team (e.g., 'the dup rate is ~8% across Apr+May, worth confirming the webhook retry policy with the platform team'). Numbers stated with the precision the analysis supports, neither over-hedged nor over-claimed.",
+        "4": "Board-ready paragraph + ranked deliverable in plain English, correct top priority, plain-language causes, upstream-fix mention for the HIGH issues.",
         "3": "Clean professional prose that states the (wrong or partially-wrong) ranking — clarity is real but the priority call is wrong. CAP at this band when the priority is wrong; clear prose for the wrong answer cannot score 5.",
         "1": "Terse one-liner OR no client-facing summary OR jargon-laden / unstructured / no ranking at all."
       },
-      "scoring_note": "Communication quality is structure, audience-fit, and clarity — scored independently of execution correctness. The CAP at 3 applies when the candidate confidently communicates a wrong priority; well-written-but-wrong-priority should land mid, not at the bottom."
+      "scoring_note": "Communication quality is structure, audience-fit, and clarity — scored independently of execution correctness. The CAP at 3 applies when the candidate confidently communicates a wrong priority; well-written-but-wrong-priority should land mid, not at the bottom. 5 is reserved for the candidate who frames confidence/uncertainty explicitly; 4 is the new ceiling for solid board-ready prose."
     }
   },
   "success_criteria": {
