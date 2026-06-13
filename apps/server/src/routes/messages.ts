@@ -14,6 +14,7 @@ import { z } from "zod";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { enqueueCandidateMessage, type OutboundMessage } from "../services/messaging.js";
+import { supabase } from "../services/supabase.js";
 
 const InboundSchema = z.object({
   channel: z.enum(["client", "team"]),
@@ -85,6 +86,61 @@ export async function messageRoutes(server: FastifyInstance) {
       socket.on("close", () => {
         entry.messagingSockets.delete(socket);
       });
+    },
+  );
+
+  // ─── History fetch — used by the workspace to hydrate on mount/refresh ──
+  //
+  // Returns the persisted persona+candidate messages for this session, both
+  // channels, in chronological order. Shape matches the WS Outbound payload
+  // so the client can union the historical batch with live WS pushes
+  // directly. Chat lives in the events table — type LIKE 'message.%' with
+  // payload.text — so this is a single grouped read.
+  server.get<{ Params: { sessionId: string } }>(
+    "/api/sessions/:sessionId/messages",
+    async (request, reply) => {
+      const { sessionId } = request.params;
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const { data, error } = await supabase
+        .from("events")
+        .select("type, ts, payload, seq")
+        .eq("session_id", sessionId)
+        .like("type", "message.%")
+        .order("seq", { ascending: true })
+        .range(0, 9_999); // generous cap; supabase-js defaults cap silently
+      if (error) {
+        return reply.status(500).send({ error: "history fetch failed", message: error.message });
+      }
+
+      interface EventRow {
+        type: string;
+        ts: string;
+        payload: { text?: string; persona_name?: string };
+      }
+      const rows = (data ?? []) as EventRow[];
+      const messages = rows
+        .map((r) => {
+          // type shape: `message.${channel}.${role}` — e.g. message.client.candidate
+          const parts = r.type.split(".");
+          if (parts.length !== 3) return null;
+          const channel = parts[1];
+          const role = parts[2];
+          if (channel !== "client" && channel !== "team") return null;
+          if (role !== "candidate" && role !== "persona") return null;
+          const text = r.payload?.text;
+          if (typeof text !== "string") return null;
+          return {
+            channel,
+            role,
+            persona_name: role === "persona" ? r.payload.persona_name ?? null : null,
+            text,
+            ts: r.ts,
+          };
+        })
+        .filter((m): m is NonNullable<typeof m> => m !== null);
+      return reply.send({ messages });
     },
   );
 }

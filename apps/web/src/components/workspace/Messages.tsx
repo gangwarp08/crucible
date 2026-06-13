@@ -5,6 +5,7 @@ import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
 import Bubble from "@/components/ui/Bubble";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
+import { getMessageHistory } from "@/lib/api";
 
 interface Props { sessionId: string; }
 
@@ -67,6 +68,43 @@ export default function Messages({ sessionId }: Props) {
     r.current?.scrollIntoView({ behavior: "smooth" });
   }, [active, threads]);
 
+  // Hydrate persisted message history on mount/refresh, THEN open the WS.
+  // Dedup guard: if a WS persona reply lands during the history fetch and
+  // the same row was already persisted to events, we'd render it twice.
+  // Keep a per-channel set of `${ts}|${textHead}` keys for the in-flight
+  // window and skip WS pushes that match.
+  const seenKeysRef = useRef<Record<Channel, Set<string>>>({
+    client: new Set(),
+    team:   new Set(),
+  });
+  function msgKey(channel: Channel, m: { text: string; ts: string }): string {
+    return `${m.ts}|${m.text.slice(0, 64)}`;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    seenKeysRef.current = { client: new Set(), team: new Set() };
+    // Hydrate first.
+    getMessageHistory(sessionId)
+      .then((items) => {
+        if (cancelled) return;
+        const next: Record<Channel, PersonaMessage[]> = { client: [], team: [] };
+        for (const it of items) {
+          const msg: PersonaMessage = {
+            role: it.role,
+            text: it.text,
+            ts: it.ts,
+            ...(it.persona_name ? { personaName: it.persona_name } : {}),
+          };
+          next[it.channel].push(msg);
+          seenKeysRef.current[it.channel].add(msgKey(it.channel, it));
+        }
+        setThreads(next);
+      })
+      .catch(() => { /* tolerate — fall back to empty + WS-only */ });
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
   useEffect(() => {
     const wsBase = SERVER_URL.replace(/^http/, "ws");
     const ws = new WebSocket(`${wsBase}/messages/${sessionId}`);
@@ -82,6 +120,13 @@ export default function Messages({ sessionId }: Props) {
         setAwaiting({ client: false, team: false });
         return;
       }
+      const key = msgKey(parsed.channel, { text: parsed.text, ts: parsed.ts });
+      if (seenKeysRef.current[parsed.channel].has(key)) {
+        // history hydration already covered this row — skip dup.
+        setAwaiting((prev) => ({ ...prev, [parsed.channel]: false }));
+        return;
+      }
+      seenKeysRef.current[parsed.channel].add(key);
       setThreads((prev) => ({
         ...prev,
         [parsed.channel]: [

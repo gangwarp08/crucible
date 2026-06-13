@@ -130,6 +130,25 @@ export async function getSession(sessionId: string): Promise<SessionInfo> {
   return apiFetch<SessionInfo>(`/sessions/${sessionId}`);
 }
 
+export interface MessageHistoryItem {
+  channel: "client" | "team";
+  role: "candidate" | "persona";
+  persona_name: string | null;
+  text: string;
+  ts: string;
+}
+/** Hydrate the workspace messaging panes after a refresh. Returns the
+ *  persisted candidate + persona messages across both channels, ordered
+ *  oldest → newest. */
+export async function getMessageHistory(
+  sessionId: string,
+): Promise<MessageHistoryItem[]> {
+  const r = await apiFetch<{ messages: MessageHistoryItem[] }>(
+    `/api/sessions/${sessionId}/messages`,
+  );
+  return r.messages;
+}
+
 export interface ChatResponse {
   reply: string;
   spend: number;
