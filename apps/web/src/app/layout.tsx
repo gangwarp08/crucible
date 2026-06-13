@@ -1,32 +1,34 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
 // UI font — loaded once, exposed as a CSS var consumed by tokens.font.sans
-// across every component. Removes the four font-stack variants previously
-// hard-coded inline.
-const inter = Inter({
+// across every component.
+const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
   display: "swap",
   variable: "--font-sans",
 });
 
-// Monospace — used by the editor, terminal, data-explorer table, and any
-// numerics that benefit from tabular-nums (token counts, durations, etc).
-const mono = JetBrains_Mono({
+// Monospace — used for headlines, labels, editor, terminal, and any numerics
+// that benefit from tabular-nums. The crucible design system leans heavily
+// on Plex Mono for headings and structural copy.
+const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
   variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
-  title: "Crucible",
-  description: "AI-conducted coding assessment platform",
+  title: "crucible. — measure what matters",
+  description: "Real-work capability assessment simulation sandbox",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
+    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
       <body>{children}</body>
     </html>
   );

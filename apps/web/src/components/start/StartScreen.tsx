@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import {
   createSession, getScenarioBySlug, ScenarioNotFoundError, type Scenario,
 } from "@/lib/api";
-import { color, radius } from "@/styles/tokens";
+import { color, radius, font } from "@/styles/tokens";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Button from "@/components/ui/Button";
 import SectionLabel from "@/components/ui/SectionLabel";
 import Stat from "@/components/ui/Stat";
+import Wordmark from "@/components/ui/Wordmark";
 
 interface Props { slug: string; }
 
@@ -130,29 +131,6 @@ export default function StartScreen({ slug }: Props) {
   );
 }
 
-function Wordmark() {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10,
-    }}>
-      <div style={{
-        width: 22, height: 22, borderRadius: radius.sm,
-        background: `linear-gradient(135deg, ${color.accent.base} 0%, ${color.persona.assistant} 100%)`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#fff", fontWeight: 700, fontSize: 12, letterSpacing: "-0.5px",
-      }}>
-        C
-      </div>
-      <div style={{
-        fontSize: 12, fontWeight: 600, letterSpacing: "0.16em",
-        color: color.text.secondary, textTransform: "uppercase",
-      }}>
-        Crucible
-      </div>
-    </div>
-  );
-}
-
 function ScenarioBody({
   scenario, starting, beginError, inviteCode, onInviteCodeChange, onBegin,
 }: {
@@ -166,18 +144,23 @@ function ScenarioBody({
   const c = scenario.constraints;
   return (
     <div>
-      <div style={{
-        display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-        gap: 16, marginBottom: 28,
-      }}>
+      <div style={{ marginBottom: 36 }}>
+        <SectionLabel tone="eyebrow">
+          Real work capability assessment
+        </SectionLabel>
         <h1 style={{
-          fontSize: 28, color: color.text.primary,
-          margin: 0, fontWeight: 600, letterSpacing: "-0.4px",
-          lineHeight: 1.2,
+          fontFamily: font.mono,
+          fontSize: "clamp(2rem, 4.6vw, 3.4rem)",
+          color: color.text.primary,
+          margin: "20px 0 0",
+          fontWeight: 600,
+          letterSpacing: "-0.04em",
+          lineHeight: 1.02,
+          textWrap: "balance",
         }}>
           {scenario.title}
         </h1>
-        <div style={{ marginTop: 4 }}>
+        <div style={{ marginTop: 18 }}>
           <Pill tone={scenario.difficulty === "mid" ? "warn" : "neutral"} size="md">
             {[scenario.role, scenario.difficulty].filter(Boolean).join(" · ")}
           </Pill>

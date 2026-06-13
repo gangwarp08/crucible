@@ -7,13 +7,34 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #0c0c10;
-  color: #e6e6ea;
-  font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  background: #000000;
+  color: #f4f2ee;
+  font-family: var(--font-sans, 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif);
   font-size: 13px;
-  line-height: 1.5;
+  font-weight: 400;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Fire-themed text selection. Matches the design's :: selection rule. */
+::selection { background: #ff6a00; color: #140a00; }
+
+/* Flaming-cube wordmark glyph animation. The flame above the cube gently
+ * flickers using a scaleY/scaleX pulse — used in any logo lockup. */
+.cru-glyph { filter: drop-shadow(0 0 5px rgba(255, 120, 0, 0.45)); }
+.cru-glyph .flm {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: emberFlick 1.5s ease-in-out infinite;
+}
+@keyframes emberFlick {
+  0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.9; }
+  50%      { transform: scaleY(1.15) scaleX(0.9); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cru-glyph .flm { animation: none; }
 }
 
 a { color: inherit; text-decoration: none; }
@@ -22,9 +43,9 @@ button { font-family: inherit; }
 /* Focus ring — visible only on keyboard navigation. */
 :focus { outline: none; }
 :focus-visible {
-  outline: 2px solid #7c7fff;
+  outline: 2px solid #ff6a00;
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 /* Interactive row hover. Components opt in by setting data-hover on the
@@ -32,8 +53,8 @@ button { font-family: inherit; }
 [data-hover] {
   transition: background-color 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
-[data-hover]:hover { background-color: #1f1f28; }
-[data-hover][data-selected="true"] { background-color: #22222e; }
+[data-hover]:hover { background-color: #100e0b; }
+[data-hover][data-selected="true"] { background-color: #15110d; }
 
 /* All buttons get a subtle background/border transition for cleanliness. */
 :where(button, [role="button"]) {
@@ -42,12 +63,128 @@ button { font-family: inherit; }
               color 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
+/* Fire-themed primary + ghost buttons. Inline styles set the static look;
+ * these classes own the :hover / :active behavior (transforms + glow). */
+.btn-fire-primary,
+.btn-fire-ghost {
+  transition: transform 250ms cubic-bezier(0.2, 0.7, 0.2, 1),
+              box-shadow 350ms ease,
+              background 300ms ease,
+              border-color 300ms ease,
+              color 300ms ease;
+}
+.btn-fire-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 40px -8px rgba(255, 106, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 150, 0, 0.40);
+}
+.btn-fire-ghost:hover:not(:disabled) {
+  border-color: #ff6a00 !important;
+  box-shadow: 0 0 30px -10px rgba(255, 106, 0, 0.45);
+}
+.btn-fire-primary:active:not(:disabled),
+.btn-fire-ghost:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Interactive cards (marketing / clickable). Inline base style sets the look;
+ * this class owns the hover lift + glow + the bottom accent rule. */
+.card-fire-interactive::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ff6a00, transparent);
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+.card-fire-interactive:hover {
+  border-color: rgba(245, 242, 238, 0.20) !important;
+  transform: translateY(-3px);
+  box-shadow: 0 24px 60px -30px rgba(255, 106, 0, 0.50);
+}
+.card-fire-interactive:hover::after { opacity: 1; }
+
+/* ────────────────────────────────────────────────────────────────
+ * Landing-page only — flaming cube stage + ambient page setup.
+ * The FlameCube component composes a CSS-3D wireframe cube under a
+ * canvas fire layer. These rules style the cube itself.
+ * ──────────────────────────────────────────────────────────────── */
+.cube-glow {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 106, 0, 0.45),
+    rgba(255, 61, 0, 0.12) 38%,
+    transparent 70%
+  );
+  filter: blur(6px);
+  pointer-events: none;
+}
+.cube-flame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.cube-3d {
+  animation: cube-spin 22s linear infinite;
+}
+.cube-face {
+  border: 1px solid rgba(245, 242, 238, 0.82);
+  background: linear-gradient(180deg, rgba(255, 150, 30, 0.015), rgba(255, 80, 0, 0.05));
+  box-shadow: inset 0 0 24px rgba(255, 120, 0, 0.08);
+}
+.cube-foot {
+  position: absolute;
+  left: 50%;
+  bottom: -2%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 106, 0, 0.5), transparent 80%);
+  filter: blur(4px);
+}
+@keyframes cube-spin {
+  from { transform: rotateX(-22deg) rotateY(0deg); }
+  to   { transform: rotateX(-22deg) rotateY(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cube-3d { animation: none; }
+}
+
+/* Landing-page vignette layered above the ember canvas. */
+.landing-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 120%, rgba(255, 106, 0, 0.10), transparent 55%),
+    radial-gradient(100% 60% at 50% -10%, rgba(255, 180, 80, 0.05), transparent 60%);
+}
+
+/* Headline gradient text — applied to a single keyword in a display title. */
+.fire-text {
+  background: linear-gradient(100deg, #ffcc00, #ff9500 40%, #ff6a00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 /* Themed thin scrollbars (Chromium + Firefox). */
-* { scrollbar-width: thin; scrollbar-color: #2a2a36 transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(245, 242, 238, 0.10) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: #2a2a36; border-radius: 999px; }
-*::-webkit-scrollbar-thumb:hover { background: #3a3a48; }
+*::-webkit-scrollbar-thumb { background: rgba(245, 242, 238, 0.10); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(245, 242, 238, 0.20); }
 
 /* react-resizable-panels handle styling. The library renders a 1px-tall
  * dragger; we widen the hit area without inflating the visual line. */
@@ -63,7 +200,7 @@ button { font-family: inherit; }
 }
 [data-panel-resize-handle-enabled][data-resize-handle-active="true"],
 [data-panel-resize-handle-enabled]:hover {
-  background-color: #7c7fff;
+  background-color: #ff6a00;
 }
 [data-panel-resize-handle-enabled][data-panel-group-direction="horizontal"] {
   width: 1px;

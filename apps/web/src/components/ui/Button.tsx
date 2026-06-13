@@ -1,6 +1,6 @@
 "use client";
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
-import { color, radius, size as fontSize, font } from "@/styles/tokens";
+import { color, radius, size as fontSize, font, gradient } from "@/styles/tokens";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
@@ -14,16 +14,33 @@ interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "size"> {
 }
 
 const SIZE_STYLE: Record<Size, CSSProperties> = {
-  sm: { padding: "5px 10px", fontSize: 12, height: 26, gap: 6 },
-  md: { padding: "7px 14px", fontSize: 13, height: 32, gap: 8 },
-  lg: { padding: "10px 22px", fontSize: 14, height: 40, gap: 10 },
+  sm: { padding: "6px 12px", fontSize: 11.5, height: 28, gap: 8 },
+  md: { padding: "9px 16px", fontSize: 12, height: 36, gap: 8 },
+  lg: { padding: "13px 22px", fontSize: 12.5, height: 44, gap: 10 },
 };
 
 function variantStyle(variant: Variant, disabled: boolean): CSSProperties {
   if (variant === "primary") {
-    return disabled
-      ? { background: color.bg.elevated, color: color.text.muted, border: `1px solid ${color.border.default}` }
-      : { background: color.accent.base, color: "#ffffff", border: `1px solid ${color.accent.base}` };
+    if (disabled) {
+      return {
+        background: color.bg.elevated,
+        color: color.text.muted,
+        border: `1px solid ${color.border.default}`,
+        fontFamily: font.mono,
+        fontWeight: 600,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+      };
+    }
+    return {
+      background: gradient.fire,
+      color: color.text.inverse,
+      border: "1px solid transparent",
+      fontFamily: font.mono,
+      fontWeight: 600,
+      letterSpacing: "0.12em",
+      textTransform: "uppercase",
+    };
   }
   if (variant === "secondary") {
     return disabled
@@ -35,10 +52,27 @@ function variantStyle(variant: Variant, disabled: boolean): CSSProperties {
       ? { background: color.bg.elevated, color: color.text.muted, border: `1px solid ${color.border.default}` }
       : { background: color.error.soft, color: color.error.base, border: `1px solid ${color.error.base}` };
   }
-  // ghost
-  return disabled
-    ? { background: "transparent", color: color.text.muted, border: "1px solid transparent" }
-    : { background: "transparent", color: color.text.secondary, border: "1px solid transparent" };
+  // ghost — uses the fire-button typographic system to pair with primary
+  if (disabled) {
+    return {
+      background: "transparent",
+      color: color.text.muted,
+      border: `1px solid ${color.border.subtle}`,
+      fontFamily: font.mono,
+      fontWeight: 500,
+      letterSpacing: "0.12em",
+      textTransform: "uppercase",
+    };
+  }
+  return {
+    background: "transparent",
+    color: color.text.primary,
+    border: `1px solid ${color.border.strong}`,
+    fontFamily: font.mono,
+    fontWeight: 500,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  };
 }
 
 export default function Button({
@@ -50,6 +84,7 @@ export default function Button({
   disabled,
   style,
   children,
+  className,
   ...rest
 }: Props): React.ReactElement {
   const merged: CSSProperties = {
@@ -67,8 +102,15 @@ export default function Button({
     ...variantStyle(variant, !!disabled),
     ...style,
   };
+  // Variant-specific classes drive hover behavior (glow + lift) from
+  // globals.css — inline styles can't express :hover.
+  const variantClass =
+    variant === "primary" ? "btn-fire-primary"
+    : variant === "ghost" ? "btn-fire-ghost"
+    : "";
+  const cls = [variantClass, className].filter(Boolean).join(" ");
   return (
-    <button {...rest} disabled={disabled} style={merged}>
+    <button {...rest} disabled={disabled} style={merged} className={cls || undefined}>
       {leadingIcon && <span style={{ display: "inline-flex" }}>{leadingIcon}</span>}
       {children !== undefined && children !== null && children !== false && (
         <span style={{ display: "inline-flex" }}>{children}</span>

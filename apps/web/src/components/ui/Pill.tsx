@@ -1,6 +1,6 @@
 "use client";
 import type { CSSProperties, ReactNode } from "react";
-import { color, radius } from "@/styles/tokens";
+import { color, radius, font } from "@/styles/tokens";
 
 export type PillTone = "neutral" | "accent" | "success" | "warn" | "error";
 
@@ -31,9 +31,10 @@ export default function Pill({
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
+    fontFamily: font.mono,
     fontSize: size === "sm" ? 10 : 11,
-    fontWeight: 600,
-    letterSpacing: "0.06em",
+    fontWeight: 500,
+    letterSpacing: "0.18em",
     textTransform: "uppercase",
     color: c.fg,
     background: variant === "soft" ? c.bg : "transparent",

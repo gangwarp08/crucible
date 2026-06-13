@@ -1,23 +1,55 @@
 "use client";
 import type { CSSProperties, ReactNode } from "react";
-import { color } from "@/styles/tokens";
+import { color, font } from "@/styles/tokens";
 
 interface Props {
   children: ReactNode;
-  tone?: "default" | "subtle";
+  /** default: secondary muted micro-header.
+   *  subtle:  even quieter (very muted).
+   *  eyebrow: brand "eyebrow" — mono, amber, with a leading rule.
+   *           Use above hero headlines and section openers. */
+  tone?: "default" | "subtle" | "eyebrow";
   style?: CSSProperties;
 }
 
-/** Canonical uppercase-letter-spaced micro-header used as a section divider.
- *  Replaces 20+ variants of this pattern with inconsistent letter-spacing,
- *  font-size, and color. */
+/** Canonical uppercase-letter-spaced micro-header used as a section divider
+ *  (and, with tone="eyebrow", as a brand eyebrow above hero headlines). */
 export default function SectionLabel({
   children, tone = "default", style,
 }: Props): React.ReactElement {
+  if (tone === "eyebrow") {
+    return (
+      <span
+        style={{
+          fontFamily: font.mono,
+          fontSize: 11.5,
+          fontWeight: 500,
+          letterSpacing: "0.28em",
+          textTransform: "uppercase",
+          color: color.accent.amber,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 12,
+          ...style,
+        }}
+      >
+        <span
+          style={{
+            width: 22,
+            height: 1,
+            background: color.accent.base,
+            flex: "none",
+          }}
+        />
+        {children}
+      </span>
+    );
+  }
   const styles: CSSProperties = {
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: "0.08em",
+    fontFamily: font.mono,
+    fontSize: 11,
+    fontWeight: 500,
+    letterSpacing: "0.22em",
     textTransform: "uppercase",
     color: tone === "subtle" ? color.text.muted : color.text.secondary,
     ...style,
