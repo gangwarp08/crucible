@@ -9,7 +9,7 @@ import FileTree from "./FileTree";
 import ConstraintHUD from "./ConstraintHUD";
 import BriefPanel from "./BriefPanel";
 import EndScreen from "./EndScreen";
-import { readFile, getSession } from "@/lib/api";
+import { readFile, getSession, getAssistantHistory } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
 import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
@@ -67,7 +67,7 @@ export default function Workspace({ sessionId }: Props) {
   const [layout, setLayout] = useState<number[]>(DEFAULT_SIZES);
   const [layoutReady, setLayoutReady] = useState(false);
 
-  const { init, setStatus, status, scenario } = useSessionStore();
+  const { init, setStatus, status, scenario, setMessages } = useSessionStore();
   // The store's sessionId, distinct from the prop. Used to suppress UI from
   // a PRIOR session (EndScreen overlay especially) while the new session is
   // still hydrating. `hydrated` flips true once the store matches the route.
@@ -112,9 +112,29 @@ export default function Workspace({ sessionId }: Props) {
         else if (s.scenarioTokensRemaining !== null && s.scenarioTokensRemaining <= 0) {
           setStatus("token_exhausted");
         }
+
+        // Hydrate the AI assistant pane (ChatHUD reads sessionStore.messages)
+        // from the transcript table. Chained AFTER `init` so the init's
+        // messages=[] reset can't clobber the hydrated array. Failure mode
+        // tolerable: pane just renders empty, candidate can re-ask.
+        //
+        // Race guards:
+        //  1. sessionId still matches — drop if the user navigated mid-fetch.
+        //  2. messages still empty — if the candidate started chatting before
+        //     hydration returned, their optimistic addMessage wins; we don't
+        //     clobber a live turn with stale history.
+        getAssistantHistory(sessionId)
+          .then((items) => {
+            if (items.length === 0) return;
+            const state = useSessionStore.getState();
+            if (state.sessionId !== sessionId) return;
+            if (state.messages.length > 0) return;
+            setMessages(items);
+          })
+          .catch(() => { /* tolerate */ });
       })
       .catch(() => { /* server may be starting — workspace still usable */ });
-  }, [sessionId, init, setStatus]);
+  }, [sessionId, init, setStatus, setMessages]);
 
   // Warn the candidate before refresh / tab close while the session is live.
   // The browser's native "Reload site?" dialog is the only available UX —

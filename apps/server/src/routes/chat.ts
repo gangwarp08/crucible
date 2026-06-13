@@ -16,6 +16,7 @@ import {
   logEvent,
 } from "../services/telemetry.js";
 import { env } from "../env.js";
+import { supabase } from "../services/supabase.js";
 
 const ChatBodySchema = z.object({
   sessionId: z.string().min(1),
@@ -192,4 +193,35 @@ export async function chatRoutes(server: FastifyInstance) {
       return reply.status(500).send({ error: "Chat completion failed" });
     }
   });
+
+  // ─── History fetch — used by Workspace to hydrate the AI assistant pane
+  //
+  // Returns the user/assistant turns from the transcript table in seq order.
+  // Skips system rows so the candidate-visible chat doesn't surface the
+  // system prompt. Mirrors the persona /api/sessions/:id/messages route in
+  // shape; uses transcript instead of events because that's where
+  // recordTranscriptTurn writes the AI conversation.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/transcript",
+    async (request, reply) => {
+      const sessionId = request.params.id;
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const { data, error } = await supabase
+        .from("transcript")
+        .select("role, content, seq")
+        .eq("session_id", sessionId)
+        .in("role", ["user", "assistant"])
+        .order("seq", { ascending: true })
+        .range(0, 9_999); // generous cap; supabase-js defaults cap silently
+      if (error) {
+        return reply.status(500).send({ error: "transcript fetch failed", message: error.message });
+      }
+      interface TranscriptRow { role: "user" | "assistant"; content: string }
+      const rows = (data ?? []) as TranscriptRow[];
+      const messages = rows.map((r) => ({ role: r.role, text: r.content }));
+      return reply.send({ messages });
+    },
+  );
 }

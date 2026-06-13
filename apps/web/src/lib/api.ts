@@ -149,6 +149,22 @@ export async function getMessageHistory(
   return r.messages;
 }
 
+export interface AssistantHistoryItem {
+  role: "user" | "assistant";
+  text: string;
+}
+/** Hydrate the AI assistant pane after a refresh. Returns persisted
+ *  user + assistant turns from the transcript table in chronological order.
+ *  System rows are excluded server-side so they don't surface to the UI. */
+export async function getAssistantHistory(
+  sessionId: string,
+): Promise<AssistantHistoryItem[]> {
+  const r = await apiFetch<{ messages: AssistantHistoryItem[] }>(
+    `/api/sessions/${sessionId}/transcript`,
+  );
+  return r.messages;
+}
+
 export interface ChatResponse {
   reply: string;
   spend: number;

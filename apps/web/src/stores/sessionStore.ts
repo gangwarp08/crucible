@@ -44,6 +44,11 @@ interface SessionState {
     scenario: ScenarioPresentation,
   ) => void;
   addMessage: (msg: Message) => void;
+  /** Bulk replace the AI assistant message log. Used by Workspace's mount
+   *  effect to hydrate the pane from the transcript table on refresh.
+   *  Distinct from addMessage so a stray hydrate after a fresh turn can't
+   *  duplicate. */
+  setMessages: (messages: Message[]) => void;
   setSpendBudget: (spend: number, budget: number) => void;
   setTokensRemaining: (tokensRemaining: number | null) => void;
   setComputeMinutesRemaining: (computeMinutesRemaining: number | null) => void;
@@ -84,6 +89,8 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   addMessage: (msg) =>
     set((s) => ({ messages: [...s.messages, msg] })),
+
+  setMessages: (messages) => set({ messages }),
 
   setSpendBudget: (spend, budget) => set({ spend, budget }),
 
