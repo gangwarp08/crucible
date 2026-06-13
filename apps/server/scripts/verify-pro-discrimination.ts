@@ -28,10 +28,9 @@
 //   BASELINE_PRO_CAVES_ID
 //   BASELINE_PRO_RPWE_ID
 //   BASELINE_PRO_HELDOUT_ID
-//   SKIP                                letters in {S,W,C,R,H} — re-fetch
+//   BASELINE_PRO_SCF_ID                 STRONG-CHURN-FIRST (within-tier reorder)
+//   SKIP                                letters in {S,W,C,R,H,F} — re-fetch
 //                                       baselines instead of running
-//   SKIP_TIER_CHECK=1                   skip the optional within-tier swap
-//                                       Re-evaluate side-check
 
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
@@ -62,9 +61,14 @@ const BASELINE_WEAK_ID    = process.env.BASELINE_PRO_WEAK_ID    ?? "";
 const BASELINE_CAVES_ID   = process.env.BASELINE_PRO_CAVES_ID   ?? "";
 const BASELINE_RPWE_ID    = process.env.BASELINE_PRO_RPWE_ID    ?? "";
 const BASELINE_HELDOUT_ID = process.env.BASELINE_PRO_HELDOUT_ID ?? "";
+// STRONG-CHURN-FIRST: identical to STRONG but ranks churn above revenue in
+// the deliverable. Both still HIGH, cosmetic still LOW — a defensible
+// within-tier reordering. Used to test whether the judge grades impact
+// TIERS (HIGH/HIGH/LOW) vs strict order.
+const BASELINE_SCF_ID     = process.env.BASELINE_PRO_SCF_ID     ?? "";
 
+// SKIP letters: S=STRONG, W=WEAK, C=CAVES, R=RPWE, H=HELDOUT, F=SCF.
 const SKIP = (process.env.SKIP ?? "").toUpperCase();
-const SKIP_TIER_CHECK = process.env.SKIP_TIER_CHECK === "1";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -428,6 +432,38 @@ function strongDeliverable(): DeliverableData {
   };
 }
 
+/** Identical to strongDeliverable() in every field EXCEPT decisions_and_tradeoffs:
+ *  ranks churn above revenue (both still HIGH; cosmetic still LOW). Defensible
+ *  reasoning given in the body. Used to test tier vs strict-order grading. */
+function strongChurnFirstDeliverable(): DeliverableData {
+  const base = strongDeliverable();
+  return {
+    ...base,
+    decisions_and_tradeoffs:
+      `All three issues found and ranked by business impact:\n\n` +
+      `1. Churn paused-miscount — HIGH impact. The naive churn query (status != 'active') counts ` +
+      `${G_CHURN.paused_count} paused subscriptions as churned, overstating churn by ${G_CHURN.delta_pp}pp ` +
+      `(${(G_CHURN.naive_churn_rate * 100).toFixed(0)}% naive vs ${(G_CHURN.true_churn_rate * 100).toFixed(0)}% true). ` +
+      `Paused subs are still paying — verified ~138 successful Apr+May payments from paused subs. ` +
+      `I'd lead with this for the board because a 22pp swing on a retention number is a single ` +
+      `headline statistic that frames the whole quarter — bigger narrative impact than a one-time ` +
+      `revenue correction. Fix: redefine churn as status='churned' only in the retention dashboard.\n\n` +
+      `2. Revenue double-count — HIGH impact. ${fmtUsd(G_REV.overstatement_cents)} overstatement across ` +
+      `Apr+May 2026. Webhook retries duplicated ~8% of succeeded payment rows; deduping by ` +
+      `external_payment_id and filtering status='succeeded' produces the corrected figures within ±2%. ` +
+      `Refund hypothesis tested numerically (refunds ~10% normal distribution, doesn't close the gap). ` +
+      `Upstream fix: idempotency key on the Stripe webhook ingest.\n\n` +
+      `3. Customer-count inflation — LOW impact. ${G_COSMETIC.test_customer_count} customers matching ` +
+      `'Internal Sandbox %' or 'Test_Acct_%' (plan='internal') exist in customers with no subscriptions ` +
+      `and $0 in payments. They inflate COUNT(*) from 400→${400 + G_COSMETIC.test_customer_count} but ` +
+      `contribute nothing financially — verified by JOIN-summing payments for those rows = 0. Sam ` +
+      `pushed this as the top priority; the evidence is that it's noise, not signal.\n\n` +
+      `Trade-offs: ordering churn ahead of revenue is a judgment call — both are HIGH-impact and ` +
+      `should be fixed; I'd lead with churn for board framing, but a different lead with revenue is ` +
+      `equally defensible. Cosmetic count fixed last. UTC bucketing checked and ruled out.`,
+  };
+}
+
 function wrongChurn() {
   // RPWE makes a different mistake — uses the WRONG denominator on the churn delta.
   // We report the inflated "delta" so the judge can see numbers are off.
@@ -648,6 +684,95 @@ async function runStrong(scenarioId: string): Promise<PlayResult> {
   console.log(`  [strong] session DELETEd`);
   const eval0 = await pollForEval(sessionId, 120_000, null);
   return { label: "STRONG", sessionId, evaluation: eval0 };
+}
+
+// ─── PROFILE: STRONG-CHURN-FIRST (tier-vs-strict-order side-check) ────────
+//
+// Identical to STRONG in every observable behavior — same Sam/Dana
+// engagement, same SQL, same AI assistant turn, same client_facing_summary —
+// EXCEPT the decisions_and_tradeoffs ranks churn above revenue (both HIGH;
+// cosmetic still LOW). If the judge grades tiers (HIGH/HIGH/LOW), SCF should
+// score essentially the same as STRONG on design_under_constraints + overall.
+// If SCF drops sharply, the anchor copy is over-strict on order vs tier.
+async function runStrongChurnFirst(scenarioId: string): Promise<PlayResult> {
+  const sessionId = await createSession(scenarioId, {
+    misleading_teammate_hint: 3_000,
+    requirement_change:       30_000,
+  });
+  const startedAt = Date.now();
+  console.log(`  [scf] session ${sessionId} created`);
+  const bus = await openMessagingWs(sessionId);
+
+  try {
+    const m = await awaitMsg(bus, (x) => x.channel === "team", 25_000, "Sam proactive");
+    console.log(`  [scf] Sam proactive (T+${Date.now() - startedAt}ms): "${m.text.slice(0, 60)}…"`);
+  } catch {/* tolerate */}
+
+  sendBus(bus, JSON.stringify({
+    channel: "client",
+    text: "Before I dig in — you mentioned multiple things look off: revenue, customer growth, and churn. Are all three real concerns you've validated, or is one of them the headline issue and the others just noise? Also: what range did you expect on the revenue tile?",
+  }));
+  try {
+    await awaitMsg(bus, (x) => x.channel === "client", 60_000, "Dana reply");
+  } catch {/* tolerate */}
+
+  await viewDoc(sessionId, "data-dictionary");
+  await viewDoc(sessionId, "dashboard-definitions");
+
+  await runSql(sessionId, SQL_NAIVE_REVENUE);
+  await runSql(sessionId, SQL_DEDUP_REVENUE);
+  await runSql(sessionId, SQL_DUP_FINGERPRINT);
+  await runSql(sessionId, `SELECT status, COUNT(*), SUM(amount_cents) FROM payments WHERE substr(created_at,1,7) IN ('2026-04','2026-05') GROUP BY status`);
+
+  sendBus(bus, JSON.stringify({
+    channel: "team",
+    text: `re refunds: I ran the numbers — refunds are ~10% of payments evenly distributed across the year, not concentrated in Apr/May. Filtering them out reduces revenue by ~10% but the dashboard is overstated by way more than that, so refunds aren't the cause. Found duplicate external_payment_ids (HAVING COUNT(*)>1 returns dozens in Apr+May only). That's the actual bug.`,
+  }));
+  try {
+    await awaitMsg(bus, (x) => x.channel === "team", 40_000, "Sam concede on revenue");
+  } catch {/* tolerate */}
+
+  await runSql(sessionId, SQL_STATUS_SPLIT);
+  await runSql(sessionId, SQL_NAIVE_CHURN);
+  await runSql(sessionId, SQL_TRUE_CHURN);
+  await runSql(sessionId, SQL_PAUSED_RECENT);
+
+  await runSql(sessionId, SQL_TEST_CUSTOMER_COUNT);
+  await runSql(sessionId, SQL_TEST_CUSTOMER_REVENUE);
+
+  sendBus(bus, JSON.stringify({
+    channel: "team",
+    text: `on the customer-count thing — checked it. There are 30 customers named like 'Internal Sandbox %' or 'Test_Acct_%', all on plan='internal', with NO subscriptions and $0 in succeeded payments (SUM is literally 0). They inflate COUNT(*) from 400 to 430 but they're QA seeds, not real growth. I wouldn't lead the board with that — the real bugs are the churn definition and the revenue dedup. Pushing those as priority instead.`,
+  }));
+  try {
+    await awaitMsg(bus, (x) => x.channel === "team", 40_000, "Sam concede on cosmetic");
+  } catch {/* tolerate */}
+
+  await aiAssist(sessionId, "Two sentences max: in SQLite, what's the canonical pattern for deduping rows by an external id (keep MIN(id) per group) and joining back to compute SUM(amount_cents) filtered by status='succeeded'?");
+
+  try {
+    const curve = await awaitMsg(
+      bus,
+      (x) => x.channel === "client" && /priority|rank|leadership|board/i.test(x.text),
+      60_000,
+      "Dana curveball",
+    );
+    console.log(`  [scf] curveball: "${curve.text.slice(0, 60)}…"`);
+    await sleep(2_000);
+    sendBus(bus, JSON.stringify({
+      channel: "client",
+      text: "got it. Ranked list coming — both churn definition and revenue dedup are the big two; customer-count is noise.",
+    }));
+  } catch {/* tolerate */}
+
+  closeBus(bus);
+
+  const ok = await submitDeliverable(sessionId, strongChurnFirstDeliverable());
+  console.log(`  [scf] deliverable submitted: ${ok}`);
+  await endSession(sessionId);
+  console.log(`  [scf] session DELETEd`);
+  const eval0 = await pollForEval(sessionId, 120_000, null);
+  return { label: "SCF", sessionId, evaluation: eval0 };
 }
 
 // ─── PROFILE: WEAK ────────────────────────────────────────────────────────
@@ -928,11 +1053,12 @@ function printReport(
   caves: PlayResult,
   rpwe: PlayResult,
   heldout: PlayResult,
+  scf: PlayResult,
 ): CalibrationVerdict {
   console.log("\n═══ FDE-DB-TRIAGE-PRO DISCRIMINATION MATRIX ═══\n");
 
-  const cols = [strong, weak, caves, rpwe, heldout];
-  const labels = ["STRONG", "WEAK", "CAVES", "RPWE", "HELDOUT"];
+  const cols = [strong, weak, caves, rpwe, heldout, scf];
+  const labels = ["STRONG", "WEAK", "CAVES", "RPWE", "HELDOUT", "SCF"];
   const source = cols.find((p) => p.evaluation && p.evaluation.items.length > 0) ?? strong;
   const wKey = weightByKey(source);
   const ordered = [...COMP_ORDER].sort((x, y) => (wKey.get(y) ?? 0) - (wKey.get(x) ?? 0));
@@ -990,37 +1116,31 @@ function printReport(
   ok((tHeldout ?? 0) >= 2, `HELDOUT.teamwork ≥ 2 (low engagement; should NOT collapse to 1)`);
   // WEAK can land at 1 — purely silent + accepted everything.
 
-  // ─── (3) TIER vs STRICT ORDER (side-check) ───────────────────────────────
-  console.log("\n─── (3) TIER vs STRICT ORDER (within-tier swap side-check) ───");
-  if (SKIP_TIER_CHECK) {
-    console.log(`  SKIPPED (SKIP_TIER_CHECK=1)`);
-  } else if (!strong.evaluation || (designStrong ?? 0) < 4) {
-    console.log(`  SKIPPED — STRONG didn't pass the prioritization bar, swap test isn't meaningful`);
+  // ─── (3) TIER vs STRICT ORDER (STRONG vs STRONG-CHURN-FIRST) ─────────────
+  console.log("\n─── (3) TIER vs STRICT ORDER — STRONG vs SCF (within-tier reorder) ───");
+  const designSCF = get(scoreMaps[5]!, "design_under_constraints");
+  const overallStrong = strong.evaluation?.overall_score;
+  const overallSCF    = scf.evaluation?.overall_score;
+  console.log(`  STRONG.design=${designStrong ?? "—"}, SCF.design=${designSCF ?? "—"}`);
+  console.log(`  STRONG.overall=${overallStrong?.toFixed(2) ?? "—"}, SCF.overall=${overallSCF?.toFixed(2) ?? "—"}`);
+  if (designStrong === undefined || designSCF === undefined ||
+      overallStrong === undefined || overallSCF === undefined) {
+    console.log(`  SKIPPED — missing evaluation data for STRONG or SCF`);
   } else {
-    console.log(`  Submitting STRONG deliverable with churn ranked ABOVE revenue (within-tier swap)`);
-    const swapped = strongDeliverable();
-    swapped.decisions_and_tradeoffs = swapped.decisions_and_tradeoffs
-      .replace(/^1\. Revenue/, "1. Churn-paused-miscount — HIGH impact (defensibly leading: a 22pp churn ovestatement gets read by the board immediately, whereas the revenue correction is one number).\n\n2. Revenue")
-      .replace(/2\. Churn paused-miscount.*?\n\n/s, "");
-    submitDeliverable(strong.sessionId, swapped).then(async (ok2) => {
-      if (!ok2) { console.log(`    swap submit failed; skipping`); return; }
-      console.log(`    Re-evaluating STRONG with swapped order…`);
-      const e = await reEvaluate(strong.sessionId);
-      const newScore = e?.items.find((i) => i.competency === "design_under_constraints")?.score;
-      if (newScore === undefined) console.log(`    re-eval returned no design score`);
-      else {
-        const diff = newScore - (designStrong ?? newScore);
-        console.log(`    design_under_constraints: ${designStrong} → ${newScore} (Δ ${diff > 0 ? "+" : ""}${diff})`);
-        if (diff <= -1) {
-          console.log(`    FLAG: judge penalized a within-tier swap by ≥1 point — anchor copy may be over-strict on order vs tier`);
-          notes.push(`tier-vs-order: design dropped ${diff} on within-tier swap`);
-        } else {
-          console.log(`    PASS: judge tolerated within-tier swap (Δ ${diff})`);
-        }
-      }
-    }).catch((e) => console.log(`    swap side-check threw: ${(e as Error).message.slice(0, 80)}`));
-    // Don't await — keep report flowing; the printed result lands after.
-    // (Caller can re-read STRONG eval if it cares.)
+    const designDelta  = designSCF - designStrong;
+    const overallDelta = overallSCF - overallStrong;
+    console.log(`  Δdesign=${designDelta > 0 ? "+" : ""}${designDelta}, Δoverall=${overallDelta > 0 ? "+" : ""}${overallDelta.toFixed(2)}`);
+    // "Essentially the same" thresholds per the calibration ask: judge grades
+    // tier (HIGH/HIGH/LOW), not strict order. Allow ±1 on the integer design
+    // score AND ±0.5 on overall.
+    const tierGraded = Math.abs(designDelta) <= 1 && Math.abs(overallDelta) <= 0.5;
+    if (tierGraded) {
+      console.log(`    PASS: judge grades tiers — within-tier swap tolerated (|Δdesign|≤1, |Δoverall|≤0.5)`);
+    } else {
+      console.log(`    FAIL: judge penalized a defensible within-tier reorder — anchors are strict-order, must be loosened to tier-level`);
+      notes.push(`tier-vs-order: SCF.design=${designSCF} (vs STRONG=${designStrong}, Δ${designDelta}), overall Δ${overallDelta.toFixed(2)}`);
+      pass = false;
+    }
   }
 
   // ─── (4) INDEPENDENCE / GRADIENT ────────────────────────────────────────
@@ -1034,7 +1154,7 @@ function printReport(
   ok((rFluency ?? 0) >= 3, `RPWE.data_fluency ≥ 3 (investigation real, even with figure bug)`);
   ok((rExec ?? 5) <= 3, `RPWE.execution ≤ 3 (figures off → low execution)`);
 
-  // Gradient/binarity check across all 5 × 8 cells.
+  // Gradient/binarity check across all 6 × 8 cells.
   const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   let totalItems = 0;
   for (const p of cols) for (const it of p.evaluation?.items ?? []) {
@@ -1082,6 +1202,7 @@ async function fetchPriorOrRun(
   const caves   = await fetchPriorOrRun("CAVES",   "C", BASELINE_CAVES_ID,   runCaves,   scenarioId);
   const rpwe    = await fetchPriorOrRun("RPWE",    "R", BASELINE_RPWE_ID,    runRPWE,    scenarioId);
   const heldout = await fetchPriorOrRun("HELDOUT", "H", BASELINE_HELDOUT_ID, runHeldout, scenarioId);
+  const scf     = await fetchPriorOrRun("SCF",     "F", BASELINE_SCF_ID,     runStrongChurnFirst, scenarioId);
 
   console.log(`\nSession IDs (export as BASELINE_PRO_*_ID to re-fetch on next run):`);
   console.log(`  BASELINE_PRO_STRONG_ID=${strong.sessionId}`);
@@ -1089,8 +1210,9 @@ async function fetchPriorOrRun(
   console.log(`  BASELINE_PRO_CAVES_ID=${caves.sessionId}`);
   console.log(`  BASELINE_PRO_RPWE_ID=${rpwe.sessionId}`);
   console.log(`  BASELINE_PRO_HELDOUT_ID=${heldout.sessionId}`);
+  console.log(`  BASELINE_PRO_SCF_ID=${scf.sessionId}`);
 
-  const verdict = printReport(strong, weak, caves, rpwe, heldout);
+  const verdict = printReport(strong, weak, caves, rpwe, heldout, scf);
 
   console.log("\n═══ ASSESSMENT ═══");
   if (verdict.pass) {
