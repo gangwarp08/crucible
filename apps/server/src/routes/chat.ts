@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import {
   chatCompletion,
   BudgetExceededError,
@@ -29,7 +30,7 @@ export async function chatRoutes(server: FastifyInstance) {
     }
     const { sessionId, prompt } = parsed.data;
 
-    const entry = sessionRegistry.get(sessionId);
+    const entry = await getOrRehydrateSession(sessionId);
     if (!entry) {
       return reply.status(404).send({ error: "Session not found" });
     }

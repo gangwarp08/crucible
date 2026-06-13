@@ -12,6 +12,7 @@ import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { z } from "zod";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { enqueueCandidateMessage, type OutboundMessage } from "../services/messaging.js";
 
 const InboundSchema = z.object({
@@ -36,7 +37,7 @@ export async function messageRoutes(server: FastifyInstance) {
     { websocket: true },
     async (socket, request) => {
       const { sessionId } = request.params;
-      const entry = sessionRegistry.get(sessionId);
+      const entry = await getOrRehydrateSession(sessionId);
 
       if (!entry) {
         socket.close(1008, "Session not found");

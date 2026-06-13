@@ -69,6 +69,82 @@ export async function loadSessionRow(
   }
 }
 
+/** Full row read used by getOrRehydrateSession. Includes the mutable fields
+ *  (spend_usd, scenario_state, deadline) needed to reconstruct a live
+ *  in-memory SessionEntry after a server restart. */
+export interface SessionRowFull extends SessionRowMinimal {
+  spend_usd:         number | string;
+  deadline:          string;
+  scenario_state:    Record<string, unknown> | null;
+}
+export async function loadSessionRowFull(
+  sessionId: string,
+): Promise<SessionRowFull | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("sessions")
+      .select(
+        "id, sandbox_id, scenario_id, litellm_key_alias, status, created_at, " +
+          "spend_usd, deadline, scenario_state",
+      )
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (error) {
+      console.error("[db] loadSessionRowFull failed", error.message);
+      return null;
+    }
+    return (data as SessionRowFull | null) ?? null;
+  } catch (err) {
+    console.error("[db] loadSessionRowFull unexpected error", err);
+    return null;
+  }
+}
+
+/** MAX(seq) helpers used by rehydrate to avoid PK clashes in the events and
+ *  transcript tables when the in-memory counters are lost. */
+export async function loadNextEventSeq(sessionId: string): Promise<number> {
+  if (!supabase) return 1;
+  try {
+    const { data, error } = await supabase
+      .from("events")
+      .select("seq")
+      .eq("session_id", sessionId)
+      .order("seq", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("[db] loadNextEventSeq failed", error.message);
+      return 1;
+    }
+    return ((data?.seq as number | undefined) ?? 0) + 1;
+  } catch (err) {
+    console.error("[db] loadNextEventSeq unexpected error", err);
+    return 1;
+  }
+}
+
+export async function loadNextTranscriptSeq(sessionId: string): Promise<number> {
+  if (!supabase) return 1;
+  try {
+    const { data, error } = await supabase
+      .from("transcript")
+      .select("seq")
+      .eq("session_id", sessionId)
+      .order("seq", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error("[db] loadNextTranscriptSeq failed", error.message);
+      return 1;
+    }
+    return ((data?.seq as number | undefined) ?? 0) + 1;
+  } catch (err) {
+    console.error("[db] loadNextTranscriptSeq unexpected error", err);
+    return 1;
+  }
+}
+
 /** Update mutable fields (spend, status) — called on each spend change. */
 export async function persistSessionUpdate(
   sessionId: string,

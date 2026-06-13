@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { logEvent } from "../services/telemetry.js";
 import { persistScenarioStatePatch } from "../services/db.js";
 
@@ -34,7 +35,7 @@ export async function deliverableRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>(
     "/sessions/:id/deliverable",
     async (request, reply) => {
-      const entry = sessionRegistry.get(request.params.id);
+      const entry = await getOrRehydrateSession(request.params.id);
       if (!entry) return reply.status(404).send({ error: "Session not found" });
       const current = (entry.scenarioState["deliverable"] ?? null) as PersistedDeliverable | null;
       return reply.send({ deliverable: current });
@@ -56,7 +57,7 @@ export async function deliverableRoutes(server: FastifyInstance) {
       const { status, data } = parsed.data;
 
       const sessionId = request.params.id;
-      const entry = sessionRegistry.get(sessionId);
+      const entry = await getOrRehydrateSession(sessionId);
       if (!entry) return reply.status(404).send({ error: "Session not found" });
       if (entry.status === "completed") {
         return reply.status(410).send({ error: "session_ended" });

@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { loadScenarioById } from "../services/scenarios.js";
 import { logEvent } from "../services/telemetry.js";
 
@@ -21,7 +22,7 @@ interface ScenarioDoc {
 const DocViewBody = z.object({}).optional();
 
 async function loadDocs(sessionId: string): Promise<ScenarioDoc[] | null> {
-  const entry = sessionRegistry.get(sessionId);
+  const entry = await getOrRehydrateSession(sessionId);
   if (!entry?.scenarioId) return null;
   const scenario = await loadScenarioById(entry.scenarioId);
   if (!scenario) return null;
@@ -39,7 +40,7 @@ async function loadDocs(sessionId: string): Promise<ScenarioDoc[] | null> {
 export async function docsRoutes(server: FastifyInstance) {
   server.get<{ Params: { id: string } }>("/sessions/:id/docs", async (request, reply) => {
     const sessionId = request.params.id;
-    const entry = sessionRegistry.get(sessionId);
+    const entry = await getOrRehydrateSession(sessionId);
     if (!entry) return reply.status(404).send({ error: "Session not found" });
 
     const docs = await loadDocs(sessionId);
@@ -58,7 +59,7 @@ export async function docsRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: parsed.error.flatten() });
       }
 
-      const entry = sessionRegistry.get(sessionId);
+      const entry = await getOrRehydrateSession(sessionId);
       if (!entry) return reply.status(404).send({ error: "Session not found" });
       if (entry.status === "completed") {
         return reply.status(410).send({ error: "session_ended" });

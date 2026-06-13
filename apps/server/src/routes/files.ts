@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { recordFileSnapshot } from "../services/telemetry.js";
 
 const SessionQuerySchema = z.object({
@@ -14,8 +15,8 @@ const WriteBodySchema = z.object({
   content: z.string(),
 });
 
-function requireSession(sessionId: string, reply: FastifyReply) {
-  const entry = sessionRegistry.get(sessionId);
+async function requireSession(sessionId: string, reply: FastifyReply) {
+  const entry = await getOrRehydrateSession(sessionId);
   if (!entry) {
     reply.status(404).send({ error: "Session not found" });
     return null;
@@ -31,7 +32,7 @@ export async function fileRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
     const { sessionId, path } = parsed.data;
-    const entry = requireSession(sessionId, reply);
+    const entry = await requireSession(sessionId, reply);
     if (!entry) return;
 
     const entries = await entry.sandbox.files.list(path);
@@ -53,7 +54,7 @@ export async function fileRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
     const { sessionId, path } = parsed.data;
-    const entry = requireSession(sessionId, reply);
+    const entry = await requireSession(sessionId, reply);
     if (!entry) return;
 
     const content = await entry.sandbox.files.read(path);
@@ -67,7 +68,7 @@ export async function fileRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
     const { sessionId, path, content } = parsed.data;
-    const entry = requireSession(sessionId, reply);
+    const entry = await requireSession(sessionId, reply);
     if (!entry) return;
 
     await entry.sandbox.files.write(path, content);

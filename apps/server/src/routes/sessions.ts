@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createSandbox, destroySandbox } from "../services/sandbox.js";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { env } from "../env.js";
 
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
@@ -54,7 +55,7 @@ export async function sessionRoutes(server: FastifyInstance) {
 
   // GET /sessions/:id — session metadata including live budget/status for the HUD.
   server.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
-    const entry = sessionRegistry.get(request.params.id);
+    const entry = await getOrRehydrateSession(request.params.id);
     if (!entry) return reply.status(404).send({ error: "Session not found" });
     const hasScenario = entry.scenarioId !== null;
     const initial = (entry.scenarioState["budget_initial"] ??

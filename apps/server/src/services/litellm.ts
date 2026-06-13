@@ -29,7 +29,25 @@ export class BudgetExceededError extends Error {
 }
 
 /** Mint a short-lived, budget-capped LiteLLM key for one session. */
-export async function mintSessionKey(sessionId: string): Promise<string> {
+export interface MintSessionKeyOpts {
+  /** Override the alias suffix. Used by session rehydration to avoid the
+   *  unique-alias collision on re-mint after a server restart. Defaults
+   *  to plain `session-${sessionId}`. */
+  aliasOverride?: string;
+  /** Override the max_budget. Used by session rehydration to cap the new
+   *  key at SESSION_BUDGET_USD - already_spent so the candidate doesn't get
+   *  a fresh full budget after a restart. Defaults to env.SESSION_BUDGET_USD. */
+  maxBudgetUsd?: number;
+  /** Override the duration. Defaults to env.SESSION_TIMEOUT_MIN. */
+  durationMinutes?: number;
+}
+export async function mintSessionKey(
+  sessionId: string,
+  opts: MintSessionKeyOpts = {},
+): Promise<string> {
+  const alias = opts.aliasOverride ?? `session-${sessionId}`;
+  const maxBudget = opts.maxBudgetUsd ?? env.SESSION_BUDGET_USD;
+  const duration = opts.durationMinutes ?? env.SESSION_TIMEOUT_MIN;
   const res = await fetch(`${env.LITELLM_BASE_URL}/key/generate`, {
     method: "POST",
     headers: {
@@ -37,10 +55,10 @@ export async function mintSessionKey(sessionId: string): Promise<string> {
       Authorization: `Bearer ${env.LITELLM_MASTER_KEY}`,
     },
     body: JSON.stringify({
-      key_alias: `session-${sessionId}`,
-      max_budget: env.SESSION_BUDGET_USD,
+      key_alias: alias,
+      max_budget: maxBudget,
       models: ["gemini-flash"],
-      duration: `${env.SESSION_TIMEOUT_MIN}m`,
+      duration: `${duration}m`,
       metadata: { sessionId },
     }),
   });

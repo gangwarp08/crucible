@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { CommandHandle } from "e2b";
 import { sessionRegistry } from "../services/registry.js";
+import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { appendPtyData, flushAllPtyBuffers } from "../services/telemetry.js";
 import { deductComputeMinutes } from "../services/compute-tracker.js";
 import { env } from "../env.js";
@@ -19,7 +20,7 @@ export async function ptyRoutes(server: FastifyInstance) {
     { websocket: true },
     async (socket, request) => {
       const { sessionId } = request.params;
-      const entry = sessionRegistry.get(sessionId);
+      const entry = await getOrRehydrateSession(sessionId);
 
       if (!entry) {
         socket.close(1008, "Session not found");
