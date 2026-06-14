@@ -184,6 +184,23 @@ export async function getScenarioBySlug(
   return res.json() as Promise<Scenario>;
 }
 
+export interface ScenarioCatalogItem {
+  slug:       string;
+  title:      string;
+  role:       string;
+  difficulty: string | null;
+  created_at: string;
+}
+/** Public catalog list. Returns minimal metadata only (no brief / no
+ *  rubric); per-scenario detail still requires the invite code via
+ *  getScenarioBySlug. */
+export async function listScenarios(): Promise<ScenarioCatalogItem[]> {
+  const res = await fetch(`${SERVER_URL}/api/scenarios`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  const body = (await res.json()) as { scenarios: ScenarioCatalogItem[] };
+  return body.scenarios;
+}
+
 export async function getSession(sessionId: string): Promise<SessionInfo> {
   return apiFetch<SessionInfo>(`/sessions/${sessionId}`, { sessionId });
 }

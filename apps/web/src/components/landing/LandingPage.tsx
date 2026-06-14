@@ -13,9 +13,10 @@ const FlameCube = dynamic(() => import("./FlameCube"), { ssr: false });
 
 const MAXW = 1180;
 
-// Where the "Start the assessment" CTA points. The route already exists and
-// is the only scenario we ship today; swap to a catalog page when more land.
-const ASSESSMENT_HREF = "/start/fde-db-triage";
+// Where every "Start the assessment" CTA on the landing page points. The
+// catalog lists every scenario; the per-scenario start screen is one click
+// further in.
+const ASSESSMENT_HREF = "/scenarios";
 
 const WRAP_STYLE = {
   width: "100%",

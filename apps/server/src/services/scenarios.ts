@@ -53,3 +53,27 @@ export function loadScenarioById(id: string): Promise<Scenario | null> {
 export function loadScenarioBySlug(slug: string): Promise<Scenario | null> {
   return loadOne("slug", slug);
 }
+
+/** Catalog row — minimal metadata for the public scenarios list. Does NOT
+ *  expose the brief, rubric, personas, or curveballs (those stay gated
+ *  behind the per-scenario invite-coded route). */
+export interface ScenarioCatalogRow {
+  slug:       string;
+  title:      string;
+  role:       string;
+  difficulty: string | null;
+  created_at: string;
+}
+
+export async function listScenarios(): Promise<ScenarioCatalogRow[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("scenarios")
+    .select("slug, title, role, difficulty, created_at")
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.error("[scenarios] list failed", error.message);
+    return [];
+  }
+  return (data as unknown as ScenarioCatalogRow[]) ?? [];
+}

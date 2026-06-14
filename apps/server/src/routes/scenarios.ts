@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { loadScenarioBySlug } from "../services/scenarios.js";
+import { loadScenarioBySlug, listScenarios } from "../services/scenarios.js";
 import { env } from "../env.js";
 
 const ParamsSchema = z.object({ slug: z.string().min(1).max(120) });
@@ -23,6 +23,17 @@ interface DeliverableComponent {
 }
 
 export async function scenariosRoutes(server: FastifyInstance) {
+  // GET /api/scenarios — catalog list.
+  //
+  // Public on purpose: the candidate-facing catalog page needs to render
+  // titles/roles/difficulty without the invite code (the invite-gated
+  // detail route /api/scenarios/:slug carries the actual IP — brief,
+  // constraints, deliverable shape — and stays behind the gate).
+  server.get("/", async (_request, reply) => {
+    const rows = await listScenarios();
+    return reply.send({ scenarios: rows });
+  });
+
   server.get<{ Params: { slug: string } }>("/:slug", async (request, reply) => {
     const parsed = ParamsSchema.safeParse(request.params);
     if (!parsed.success) {
