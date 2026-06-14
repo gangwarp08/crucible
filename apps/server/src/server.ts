@@ -39,7 +39,7 @@ export async function buildServer() {
     // ever reached the server, surfacing as "Failed to fetch" in the UI.
     // Explicit allow-list per the actual route methods we use.
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Invite-Code"],
   });
   await server.register(fastifyRateLimit, {
     max: 100,
