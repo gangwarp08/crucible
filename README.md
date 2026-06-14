@@ -1,0 +1,178 @@
+# Crucible
+
+An AI-conducted coding assessment platform. Candidates solve real work
+in a sandboxed dev environment while an AI interviewer observes;
+recruiters review the session afterward with a structured scorecard.
+
+The pitch: résumés lie, portfolios are borrowed, AI writes the rest.
+Crucible drops candidates into 90 minutes of the actual job — real
+tools, live context — and scores what they truly do, not what they
+claim to do.
+
+## What it does
+
+- Presents a scenario (e.g. "Meridian SaaS revenue dashboard looks off,
+  board meeting in 90 minutes — figure out what's wrong, prioritize,
+  and brief the VP Finance").
+- Spins up a per-candidate sandbox (E2B microVM) with a SQLite copy of
+  Meridian's "production" data, file tree, terminal, SQL data explorer.
+- Runs two AI personas the candidate can talk to: **Dana** (VP Finance,
+  the client) and **Sam** (senior engineer teammate — helpful but
+  confidently wrong about priority).
+- Tracks every action — query, message, file write, AI assistant turn —
+  as structured telemetry.
+- Grades the session against an 8-competency rubric with anchor-driven
+  scoring. Recruiters see overall score plus per-competency breakdown
+  with evidence citations.
+
+## Architecture (data flow)
+
+```
+Browser (Next.js)
+  │
+  ├──► Stateful server (Fastify) ──► E2B sandbox     (candidate code, isolated)
+  │        │                   ──► LiteLLM gateway (only path to models)
+  │        │                   ──► Supabase        (sessions, telemetry, evals)
+  │        │                   ──► Redis           (app-side rate-limit state)
+  │
+  └──► (never talks to LiteLLM / E2B / Supabase service-role directly)
+```
+
+Hard rules enforced everywhere:
+
+- **No direct provider calls.** Anthropic / OpenAI / Gemini keys live
+  only on the LiteLLM gateway on Railway, never in this app.
+- **No browser exposure of secrets.** Only `NEXT_PUBLIC_*` env vars
+  may reach the client. Service-role key, LiteLLM master key, E2B
+  key, JWT secret all server-only.
+- **Sandbox isolation.** Candidate code runs only in E2B microVMs;
+  the server never execs candidate-provided commands.
+- **Cost + time caps per session.** `SESSION_BUDGET_USD` and
+  `SESSION_TIMEOUT_MIN` bound every session at the server and
+  enforced again at LiteLLM via per-session keys.
+- **Per-session JWT auth.** Every protected route and both
+  WebSocket handshakes require a server-signed bearer token bound
+  to the session. A leaked URL is useless without the token.
+
+Full operating contract: see `CLAUDE.md`.
+
+## Stack
+
+- **Frontend**: Next.js (app router), Zustand, react-resizable-panels,
+  Monaco editor, xterm.js
+- **Backend**: Fastify, Zod, `@fastify/rate-limit`, `@fastify/jwt`,
+  `@fastify/websocket`
+- **AI gateway**: LiteLLM (hosted on Railway) — provider-agnostic
+- **Sandbox**: E2B microVMs (`@e2b/code-interpreter`)
+- **Data**: Supabase (Postgres + RLS); Redis for app-side state
+- **TypeScript everywhere**; pnpm workspaces via Turbo
+- **Deployment**: Vercel (web), Railway (server + LiteLLM)
+
+## Project structure
+
+```
+apps/
+  web/          Next.js — candidate UI, landing page, review UI
+  server/       Fastify — session lifecycle, persona-agent, analysis-agent
+fixtures/
+  fde-db-triage/        Tier 1 scenario — synthetic dataset + ground truth
+  fde-db-triage-pro/    Tier 1.5 — multi-issue + prioritization + Sam pushes wrong priority
+infra/
+  e2b/          Sandbox template definition
+packages/
+  shared/       Cross-app types
+supabase/
+  migrations/   DDL + scenario-content migrations
+docs/           Architecture reference, scenario specs
+.github/
+  workflows/    CI (typecheck + build) + daily cost alert cron
+```
+
+## Quick start
+
+Prerequisites: Node 20+, pnpm 9, Supabase project, LiteLLM gateway
+deployed, E2B API key, Railway account (for production deploy).
+
+```bash
+# Install
+pnpm install
+
+# Copy env template and fill in real values
+cp .env.example .env
+# Edit .env — at minimum: SUPABASE_PROJECT_REF, SUPABASE_SERVICE_ROLE_KEY,
+# LITELLM_BASE_URL, LITELLM_MASTER_KEY, E2B_API_KEY, JWT_SECRET (>=32 chars).
+# Generate the JWT secret: openssl rand -hex 32
+
+# Apply migrations to your Supabase project
+# (Either via supabase CLI or by running the migrations/ files manually.)
+
+# Run the server (port 3001 by default)
+pnpm --filter @crucible/server dev
+
+# In another terminal, run the web app (port 3000)
+pnpm --filter @crucible/web dev
+
+# Open http://localhost:3000
+```
+
+## Useful commands
+
+```bash
+pnpm typecheck                                          # both workspaces
+pnpm build                                              # both workspaces
+pnpm --filter @crucible/server dev                      # server with tsx watch
+pnpm --filter @crucible/web dev                         # next dev
+
+# Regenerate the Tier 1.5 fixture (deterministic)
+pnpm exec tsx fixtures/fde-db-triage-pro/generate.ts
+
+# Push a scenario row update to Supabase
+pnpm exec tsx apps/server/scripts/encode-fde-db-triage-pro.ts
+
+# Daily cost rollup against cost_ledger
+pnpm --filter @crucible/server exec tsx scripts/check-daily-cost.ts
+
+# Calibration verifiers (run against a live server)
+pnpm --filter @crucible/server exec tsx scripts/verify-rehydrate.ts
+pnpm --filter @crucible/server exec tsx scripts/verify-pro-discrimination.ts
+```
+
+## Deployment
+
+- **Web**: auto-deploys to Vercel from `main`. Required env vars:
+  `NEXT_PUBLIC_SERVER_URL` (the Railway URL),
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- **Server**: auto-deploys to Railway from `main`. Build command:
+  `pnpm install --frozen-lockfile && pnpm --filter @crucible/server build`.
+  Start: `pnpm --filter @crucible/server start`. Needs all server-only
+  env vars from `.env.example` (excluding any `NEXT_PUBLIC_*`).
+- **LiteLLM gateway**: hosted on Railway as a separate service.
+  Provider keys (Anthropic / Gemini / OpenAI) live here only.
+- **Supabase**: hosted (any tier with RLS support). Apply migrations
+  in `supabase/migrations/` in numerical order on a fresh project.
+
+## CI
+
+GitHub Actions runs typecheck + build for both workspaces on every PR
+and push to `main`. A daily cron at 09:00 UTC sums the previous day's
+`cost_ledger` rows; the workflow fails (and GitHub emails you) if total
+LiteLLM spend exceeds a threshold (`COST_ALERT_THRESHOLD_USD`, default
+$10/day). Repo secrets required for the cron:
+`SUPABASE_PROJECT_REF`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Status
+
+MVP. Tier 1.5 scenario (`fde-db-triage-pro`) is calibrated — the
+discrimination matrix passes all four checks (prioritization,
+stakeholder-resistance, tier vs strict order, independence/gradient)
+with a healthy score distribution. Operational resilience is wired:
+sessions survive server restarts (E2B reconnect + LiteLLM re-mint),
+the workspace fully hydrates on refresh, costs are alerted daily.
+
+Not yet shipped: per-candidate one-time invite codes (currently a
+shared secret), audit log table, stricter Helmet CSP, multi-scenario
+catalog UI.
+
+## License
+
+Private project. See `CLAUDE.md` for the operating contract.
