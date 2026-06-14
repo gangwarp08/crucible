@@ -1,0 +1,59 @@
+name: CI
+
+# Catch what Vercel/Railway would catch on deploy — typecheck and build
+# both workspaces on every PR and on main. Stops "discover via failed
+# deploy" for the lint/type stuff that bit us several times this build
+# cycle (Turbo 1 globalDotEnv, unused imports, redundant `as` casts, etc.).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Stub env vars so the server's env.ts Zod schema passes at build time.
+    # Build-time validation only checks presence + shape; nothing here is
+    # ever used to call real Supabase / LiteLLM / E2B. Values are fake by
+    # design — they let `tsc` and `next build` succeed without secrets.
+    env:
+      SUPABASE_PROJECT_REF: ci-stub
+      SUPABASE_SERVICE_ROLE_KEY: ci-stub-service-role-key-aaaaaaaaaaaaaa
+      LITELLM_BASE_URL: https://ci-stub.invalid
+      LITELLM_MASTER_KEY: ci-stub-master-key
+      E2B_API_KEY: ci-stub-e2b-key
+      JWT_SECRET: ci-stub-jwt-secret-at-least-32-characters-long-padding
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-stub.invalid
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-stub-anon-key
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (turbo)
+        run: pnpm typecheck
+
+      - name: Build server
+        run: pnpm --filter @crucible/server build
+
+      - name: Build web
+        run: pnpm --filter @crucible/web build
