@@ -9,6 +9,7 @@ import FileTree from "./FileTree";
 import ConstraintHUD from "./ConstraintHUD";
 import BriefPanel from "./BriefPanel";
 import EndScreen from "./EndScreen";
+import WorkspaceTour, { tourHasBeenSeen } from "./WorkspaceTour";
 import { readFile, getSession, getAssistantHistory } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
@@ -66,6 +67,7 @@ export default function Workspace({ sessionId }: Props) {
   const [rightTab, setRightTab] = useState<RightTab>("brief");
   const [layout, setLayout] = useState<number[]>(DEFAULT_SIZES);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
   const { init, setStatus, status, scenario, setMessages } = useSessionStore();
   // The store's sessionId, distinct from the prop. Used to suppress UI from
@@ -79,6 +81,13 @@ export default function Workspace({ sessionId }: Props) {
   useEffect(() => {
     setLayout(loadLayout());
     setLayoutReady(true);
+  }, []);
+
+  // First-load workspace tour. Runs once per browser (gated by localStorage
+  // crucible.workspace.toured.v1). Read on mount so a returning candidate
+  // never sees it twice.
+  useEffect(() => {
+    if (!tourHasBeenSeen()) setShowTour(true);
   }, []);
 
   // On mount: eagerly reset the store with empty defaults for the NEW
@@ -320,6 +329,13 @@ export default function Workspace({ sessionId }: Props) {
           singleton). `hydrated` flips true once the store's sessionId
           matches the route prop. */}
       {hydrated && status === "ended" && <EndScreen />}
+
+      {/* One-shot workspace orientation overlay. Gated on hydrated so it
+          doesn't flash during the brief boot window, and suppressed when the
+          session has already ended (nothing to orient toward). */}
+      {showTour && hydrated && status !== "ended" && (
+        <WorkspaceTour onDismiss={() => setShowTour(false)} />
+      )}
     </div>
   );
 }
