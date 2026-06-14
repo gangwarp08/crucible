@@ -1,3 +1,4 @@
+// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Calibration step 1 — discrimination check.
 //
 // Runs two SCRIPTED playthroughs of fde-db-triage end to end, lets each

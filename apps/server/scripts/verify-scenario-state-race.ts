@@ -1,3 +1,4 @@
+// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Verifier for the scenario_state write-race fix (Week 4.10).
 //
 // Three phases:

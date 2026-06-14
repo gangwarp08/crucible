@@ -1,12 +1,47 @@
 // All calls go to our own Fastify server — never to LiteLLM / E2B / Supabase directly.
-const SERVER_URL = process.env["NEXT_PUBLIC_SERVER_URL"] ?? "http://localhost:3001";
+export const SERVER_URL = process.env["NEXT_PUBLIC_SERVER_URL"] ?? "http://localhost:3001";
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+// Per-session JWT minted on POST /sessions. Stored in sessionStorage so it
+// survives a tab refresh but not a tab close (a closed-tab candidate has to
+// re-enter the invite code anyway — better than localStorage where an XSS
+// could lift the token). Key includes the sessionId so concurrent sessions
+// in different tabs don't trample each other.
+const TOKEN_KEY_PREFIX = "crucible.session.token.";
+
+function tokenKey(sessionId: string): string { return `${TOKEN_KEY_PREFIX}${sessionId}`; }
+
+export function storeSessionToken(sessionId: string, token: string): void {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.setItem(tokenKey(sessionId), token); } catch { /* ignore */ }
+}
+
+export function getSessionToken(sessionId: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(tokenKey(sessionId)); } catch { return null; }
+}
+
+/** Build `Authorization: Bearer <token>` for a given session. Returns an empty
+ *  object when no token is stored — callers don't need to special-case. */
+function authHeader(sessionId: string | null | undefined): Record<string, string> {
+  if (!sessionId) return {};
+  const token = getSessionToken(sessionId);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+interface ApiFetchOpts extends RequestInit {
+  /** Session ID to look up the bearer token for. Omit for unauthenticated
+   *  calls (e.g. POST /sessions, GET /api/scenarios). */
+  sessionId?: string;
+}
+
+async function apiFetch<T>(path: string, init?: ApiFetchOpts): Promise<T> {
+  const { sessionId, ...rest } = init ?? {};
   const res = await fetch(`${SERVER_URL}${path}`, {
-    ...init,
+    ...rest,
     headers: {
-      ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
+      ...(rest.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...authHeader(sessionId),
+      ...rest.headers,
     },
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
@@ -17,6 +52,10 @@ export interface CreateSessionResult {
   sessionId: string;
   deadline: string;
   scenarioId: string | null;
+  /** Per-session JWT — must be sent as `Authorization: Bearer …` on every
+   *  protected route, and as the `bearer.<token>` subprotocol on every WS
+   *  connection. Stored automatically by createSession into sessionStorage. */
+  token: string;
 }
 
 export async function createSession(
@@ -25,12 +64,14 @@ export async function createSession(
   const body: Record<string, string> = {};
   if (opts?.scenarioId) body["scenarioId"] = opts.scenarioId;
   if (opts?.inviteCode) body["inviteCode"] = opts.inviteCode;
-  const init: RequestInit = { method: "POST" };
+  const init: ApiFetchOpts = { method: "POST" };
   if (Object.keys(body).length > 0) {
     init.body = JSON.stringify(body);
   }
   try {
-    return await apiFetch<CreateSessionResult>("/sessions", init);
+    const result = await apiFetch<CreateSessionResult>("/sessions", init);
+    storeSessionToken(result.sessionId, result.token);
+    return result;
   } catch (err) {
     if (err instanceof Error && err.message.startsWith("API error 401")) {
       throw new Error("Invalid invite code");
@@ -127,7 +168,15 @@ export async function getScenarioBySlug(slug: string): Promise<Scenario> {
 }
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {
-  return apiFetch<SessionInfo>(`/sessions/${sessionId}`);
+  return apiFetch<SessionInfo>(`/sessions/${sessionId}`, { sessionId });
+}
+
+/** Manual session end. The server runs the shared teardown + auto-eval. */
+export async function endSession(sessionId: string): Promise<void> {
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${getSessionToken(sessionId) ?? ""}` },
+  });
 }
 
 export interface MessageHistoryItem {
@@ -145,6 +194,7 @@ export async function getMessageHistory(
 ): Promise<MessageHistoryItem[]> {
   const r = await apiFetch<{ messages: MessageHistoryItem[] }>(
     `/api/sessions/${sessionId}/messages`,
+    { sessionId },
   );
   return r.messages;
 }
@@ -161,6 +211,7 @@ export async function getAssistantHistory(
 ): Promise<AssistantHistoryItem[]> {
   const r = await apiFetch<{ messages: AssistantHistoryItem[] }>(
     `/api/sessions/${sessionId}/transcript`,
+    { sessionId },
   );
   return r.messages;
 }
@@ -190,7 +241,10 @@ export async function sendChat(
 ): Promise<ChatResponse | ChatError> {
   const res = await fetch(`${SERVER_URL}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader(sessionId),
+    },
     body: JSON.stringify({ sessionId, prompt }),
   });
   return res.json() as Promise<ChatResponse | ChatError>;
@@ -208,13 +262,13 @@ export async function listFiles(
   path: string,
 ): Promise<FileEntry[]> {
   const params = new URLSearchParams({ sessionId, path });
-  const data = await apiFetch<{ entries: FileEntry[] }>(`/files?${params.toString()}`);
+  const data = await apiFetch<{ entries: FileEntry[] }>(`/files?${params.toString()}`, { sessionId });
   return data.entries;
 }
 
 export async function readFile(sessionId: string, path: string): Promise<string> {
   const params = new URLSearchParams({ sessionId, path });
-  const data = await apiFetch<{ content: string }>(`/file?${params.toString()}`);
+  const data = await apiFetch<{ content: string }>(`/file?${params.toString()}`, { sessionId });
   return data.content;
 }
 
@@ -225,6 +279,7 @@ export async function writeFile(
 ): Promise<void> {
   await apiFetch("/file", {
     method: "PUT",
+    sessionId,
     body: JSON.stringify({ sessionId, path, content }),
   });
 }
@@ -258,6 +313,7 @@ export async function runQuery(
 ): Promise<QueryResult> {
   return apiFetch<QueryResult>(`/api/sessions/${sessionId}/query`, {
     method: "POST",
+    sessionId,
     body: JSON.stringify({ sql }),
   });
 }
@@ -273,6 +329,7 @@ export interface ScenarioDoc {
 export async function listScenarioDocs(sessionId: string): Promise<ScenarioDoc[]> {
   const data = await apiFetch<{ docs: ScenarioDoc[] }>(
     `/api/sessions/${sessionId}/docs`,
+    { sessionId },
   );
   return data.docs;
 }
@@ -280,6 +337,7 @@ export async function listScenarioDocs(sessionId: string): Promise<ScenarioDoc[]
 export async function recordDocView(sessionId: string, docId: string): Promise<void> {
   await apiFetch(`/api/sessions/${sessionId}/docs/${encodeURIComponent(docId)}/view`, {
     method: "POST",
+    sessionId,
     body: JSON.stringify({}),
   });
 }
@@ -289,6 +347,7 @@ export async function recordDocView(sessionId: string, docId: string): Promise<v
 export async function getDeliverable(sessionId: string): Promise<Deliverable | null> {
   const data = await apiFetch<{ deliverable: Deliverable | null }>(
     `/api/sessions/${sessionId}/deliverable`,
+    { sessionId },
   );
   return data.deliverable;
 }
@@ -299,7 +358,7 @@ export async function saveDeliverable(
 ): Promise<Deliverable> {
   const res = await apiFetch<{ deliverable: Deliverable }>(
     `/api/sessions/${sessionId}/deliverable`,
-    { method: "POST", body: JSON.stringify(body) },
+    { method: "POST", sessionId, body: JSON.stringify(body) },
   );
   return res.deliverable;
 }

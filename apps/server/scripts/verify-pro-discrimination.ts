@@ -151,10 +151,21 @@ interface MessageBus {
   closed: boolean;
 }
 
+// Per-session JWTs minted on POST /sessions. createSession stashes them
+// here; every other helper attaches `Authorization: Bearer <token>` (HTTP)
+// or `bearer.<token>` as a WS subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 function openMessagingWs(sessionId: string): Promise<MessageBus> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     const bus: MessageBus = { ws, buffer: [], waiters: [], closed: false };
     ws.on("message", (raw: WS.RawData) => {
       let parsed: Inbound;
@@ -299,7 +310,9 @@ async function createSession(scenarioId: string, beats: Record<string, number>):
     body: JSON.stringify({ scenarioId, beatTimingOverridesMs: beats }),
   });
   if (!r.ok) throw new Error(`session create failed: ${r.status} ${await r.text()}`);
-  return ((await r.json()) as { sessionId: string }).sessionId;
+  const body = (await r.json()) as { sessionId: string; token?: string };
+  if (body.token) tokens.set(body.sessionId, body.token);
+  return body.sessionId;
 }
 
 async function getScenarioId(): Promise<string> {
@@ -311,21 +324,25 @@ async function getScenarioId(): Promise<string> {
 
 async function runSql(sessionId: string, sql: string): Promise<void> {
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql }),
   });
 }
 
 async function viewDoc(sessionId: string, docId: string): Promise<void> {
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
+    body: "{}",
   });
 }
 
 async function aiAssist(sessionId: string, prompt: string): Promise<void> {
   try {
     await fetch(`${SERVER_URL}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({ sessionId, prompt }),
     });
   } catch { /* tolerate quota / network */ }
@@ -339,14 +356,18 @@ interface DeliverableData {
 }
 async function submitDeliverable(sessionId: string, data: DeliverableData): Promise<boolean> {
   const r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ status: "submitted", data }),
   });
   return r.ok;
 }
 
 async function endSession(sessionId: string): Promise<void> {
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: authHeaders(sessionId),
+  });
 }
 
 // ─── Common SQL ───────────────────────────────────────────────────────────

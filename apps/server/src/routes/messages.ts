@@ -15,6 +15,7 @@ import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { enqueueCandidateMessage, type OutboundMessage } from "../services/messaging.js";
 import { supabase } from "../services/supabase.js";
+import { requireSessionToken, verifyWsToken } from "../services/session-token.js";
 
 const InboundSchema = z.object({
   channel: z.enum(["client", "team"]),
@@ -38,6 +39,16 @@ export async function messageRoutes(server: FastifyInstance) {
     { websocket: true },
     async (socket, request) => {
       const { sessionId } = request.params;
+
+      // Verify the per-session JWT carried as a WS subprotocol. Browser
+      // clients pass `bearer.<token>` in `Sec-WebSocket-Protocol`; a
+      // missing or mismatching token closes the socket before we touch
+      // the session registry.
+      if (!verifyWsToken(request.raw, sessionId)) {
+        socket.close(1008, "Unauthorized");
+        return;
+      }
+
       const entry = await getOrRehydrateSession(sessionId);
 
       if (!entry) {
@@ -98,6 +109,9 @@ export async function messageRoutes(server: FastifyInstance) {
   // payload.text — so this is a single grouped read.
   server.get<{ Params: { sessionId: string } }>(
     "/api/sessions/:sessionId/messages",
+    {
+      preHandler: [requireSessionToken((req) => (req.params as { sessionId?: string }).sessionId)],
+    },
     async (request, reply) => {
       const { sessionId } = request.params;
       if (!supabase) {

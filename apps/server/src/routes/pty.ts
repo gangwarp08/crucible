@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { CommandHandle } from "e2b";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { verifyWsToken } from "../services/session-token.js";
 import { appendPtyData, flushAllPtyBuffers } from "../services/telemetry.js";
 import { deductComputeMinutes } from "../services/compute-tracker.js";
 import { env } from "../env.js";
@@ -20,6 +21,14 @@ export async function ptyRoutes(server: FastifyInstance) {
     { websocket: true },
     async (socket, request) => {
       const { sessionId } = request.params;
+
+      // Verify the per-session JWT carried as a WS subprotocol before any
+      // registry / sandbox access. Matches the messages WS route.
+      if (!verifyWsToken(request.raw, sessionId)) {
+        socket.close(1008, "Unauthorized");
+        return;
+      }
+
       const entry = await getOrRehydrateSession(sessionId);
 
       if (!entry) {

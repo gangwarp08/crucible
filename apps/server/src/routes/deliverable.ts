@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { requireSessionToken } from "../services/session-token.js";
 import { logEvent } from "../services/telemetry.js";
 import { persistScenarioStatePatch } from "../services/db.js";
 
@@ -32,8 +33,11 @@ interface PersistedDeliverable {
 }
 
 export async function deliverableRoutes(server: FastifyInstance) {
+  const requireToken = requireSessionToken((req) => (req.params as { id?: string }).id);
+
   server.get<{ Params: { id: string } }>(
     "/sessions/:id/deliverable",
+    { preHandler: [requireToken] },
     async (request, reply) => {
       const entry = await getOrRehydrateSession(request.params.id);
       if (!entry) return reply.status(404).send({ error: "Session not found" });
@@ -48,6 +52,7 @@ export async function deliverableRoutes(server: FastifyInstance) {
       // Drafts may auto-save frequently; 60/min is comfortable for a 1-2
       // saves-per-minute cadence with headroom.
       config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+      preHandler: [requireToken],
     },
     async (request, reply) => {
       const parsed = DeliverableBodySchema.safeParse(request.body);

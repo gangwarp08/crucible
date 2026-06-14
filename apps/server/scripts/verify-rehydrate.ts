@@ -36,6 +36,15 @@ async function getScenarioId(slug: string): Promise<string> {
   return j.id;
 }
 
+// Per-session JWTs minted on POST /sessions and stored here so the rest of
+// the verifier can attach `Authorization: Bearer <token>` to every request.
+const tokens = new Map<string, string>();
+
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 async function createSession(scenarioId: string): Promise<string> {
   const r = await fetch(`${SERVER_URL}/sessions`, {
     method: "POST",
@@ -46,15 +55,20 @@ async function createSession(scenarioId: string): Promise<string> {
     }),
   });
   if (!r.ok) throw new Error(`session create failed: ${r.status} ${await r.text()}`);
-  return ((await r.json()) as { sessionId: string }).sessionId;
+  const body = (await r.json()) as { sessionId: string; token?: string };
+  if (body.token) tokens.set(body.sessionId, body.token);
+  return body.sessionId;
 }
 
 async function getSession(sessionId: string): Promise<Response> {
-  return fetch(`${SERVER_URL}/sessions/${sessionId}`);
+  return fetch(`${SERVER_URL}/sessions/${sessionId}`, { headers: authHeaders(sessionId) });
 }
 
 async function endSession(sessionId: string): Promise<void> {
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: authHeaders(sessionId),
+  });
 }
 
 (async () => {
@@ -83,10 +97,15 @@ async function endSession(sessionId: string): Promise<void> {
   // ─── Phase 2: rehydrate proof (manual restart required) ────────────────
   if (TEST_RESTART) {
     console.log("\n[phase 2] rehydrate proof");
+    const baselineToken = process.env.BASELINE_LIVE_SESSION_TOKEN ?? "";
     if (!BASELINE_LIVE_SESSION_ID) {
       console.error("  CRUCIBLE_TEST_RESTART=1 but BASELINE_LIVE_SESSION_ID not set; skip");
       console.log("  (Create a live session, restart the server, then re-run with the env set.)");
+    } else if (!baselineToken) {
+      console.error("  BASELINE_LIVE_SESSION_TOKEN not set; route is now JWT-gated.");
+      console.log("  Capture the token from the POST /sessions response in phase 1 first.");
     } else {
+      tokens.set(BASELINE_LIVE_SESSION_ID, baselineToken);
       console.log(`  expecting registry MISS → rehydrate on ${BASELINE_LIVE_SESSION_ID}`);
       const res2 = await getSession(BASELINE_LIVE_SESSION_ID);
       console.log(`  GET /sessions/:id → ${res2.status}`);

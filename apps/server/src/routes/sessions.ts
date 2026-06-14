@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createSandbox, destroySandbox } from "../services/sandbox.js";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { signToken, requireSessionToken } from "../services/session-token.js";
 import { env } from "../env.js";
 
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
@@ -46,15 +47,22 @@ export async function sessionRoutes(server: FastifyInstance) {
     const sessionId = randomUUID();
     await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride);
     const entry = sessionRegistry.get(sessionId)!;
+    // Mint a session-bound JWT. The token is the ONLY thing that lets the
+    // candidate use the protected routes — a leaked session UUID alone can
+    // no longer drive chat / SQL / personas.
+    const token = signToken(sessionId, entry.deadline.getTime());
     return reply.status(201).send({
       sessionId,
       deadline: entry.deadline.toISOString(),
       scenarioId: entry.scenarioId,
+      token,
     });
   });
 
   // GET /sessions/:id — session metadata including live budget/status for the HUD.
-  server.get<{ Params: { id: string } }>("/:id", async (request, reply) => {
+  server.get<{ Params: { id: string } }>("/:id", {
+    preHandler: [requireSessionToken((req) => (req.params as { id?: string }).id)],
+  }, async (request, reply) => {
     const entry = await getOrRehydrateSession(request.params.id);
     if (!entry) return reply.status(404).send({ error: "Session not found" });
     const hasScenario = entry.scenarioId !== null;
@@ -104,7 +112,9 @@ export async function sessionRoutes(server: FastifyInstance) {
   });
 
   // DELETE /sessions/:id — manual end: clear timer + run shared teardown.
-  server.delete<{ Params: { id: string } }>("/:id", async (request, reply) => {
+  server.delete<{ Params: { id: string } }>("/:id", {
+    preHandler: [requireSessionToken((req) => (req.params as { id?: string }).id)],
+  }, async (request, reply) => {
     await destroySandbox(request.params.id);
     return reply.status(204).send();
   });

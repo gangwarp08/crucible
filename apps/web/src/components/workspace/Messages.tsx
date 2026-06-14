@@ -5,7 +5,7 @@ import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
 import Bubble from "@/components/ui/Bubble";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
-import { getMessageHistory } from "@/lib/api";
+import { getMessageHistory, getSessionToken } from "@/lib/api";
 
 interface Props { sessionId: string; }
 
@@ -107,7 +107,11 @@ export default function Messages({ sessionId }: Props) {
 
   useEffect(() => {
     const wsBase = SERVER_URL.replace(/^http/, "ws");
-    const ws = new WebSocket(`${wsBase}/messages/${sessionId}`);
+    // Pass the per-session JWT as a WS subprotocol — the server's handshake
+    // verifies it before the socket is accepted (services/session-token.ts).
+    const token = getSessionToken(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WebSocket(`${wsBase}/messages/${sessionId}`, protocols);
     wsRef.current = ws;
 
     ws.addEventListener("open", () => { setConnected(true); setError(null); });

@@ -4,6 +4,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { AttachAddon } from "@xterm/addon-attach";
 import "@xterm/xterm/css/xterm.css";
+import { getSessionToken } from "@/lib/api";
 
 interface Props {
   sessionId: string;
@@ -47,7 +48,12 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
     fitAddon.fit();
 
     const wsBase = SERVER_URL.replace(/^http/, "ws");
-    const ws = new WebSocket(`${wsBase}/pty/${sessionId}`);
+    // Pass the per-session JWT as a WS subprotocol — same shape as the
+    // messages WS. Server's pty handshake closes with 1008 if the token
+    // is missing or doesn't match :sessionId.
+    const token = getSessionToken(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WebSocket(`${wsBase}/pty/${sessionId}`, protocols);
     ws.binaryType = "arraybuffer";
 
     const attachAddon = new AttachAddon(ws);

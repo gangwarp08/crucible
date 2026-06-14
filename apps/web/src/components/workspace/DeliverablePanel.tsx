@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  getDeliverable, saveDeliverable,
+  getDeliverable, saveDeliverable, endSession,
   type DeliverableData, type DeliverableStatus,
 } from "@/lib/api";
 import { color, font, radius } from "@/styles/tokens";
@@ -98,10 +98,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
       return;
     }
     try {
-      const res = await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        throw new Error(`DELETE returned ${res.status}`);
-      }
+      await endSession(sessionId);
       // Flip the global status synchronously so EndScreen renders without
       // waiting for the PTY WS close to bounce back.
       setSessionStatus("ended");

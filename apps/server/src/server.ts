@@ -45,10 +45,11 @@ export async function buildServer() {
     max: 100,
     timeWindow: "1 minute",
   });
-  // JWT only registered once the secret is configured
-  if (env.JWT_SECRET) {
-    await server.register(fastifyJwt, { secret: env.JWT_SECRET });
-  }
+  // @fastify/jwt is no longer used for session tokens — services/session-token.ts
+  // signs/verifies HS256 by hand against env.JWT_SECRET. Register stays so the
+  // plugin's request decorators are still available if any future route opts
+  // in via reply.jwtSign / request.jwtVerify (e.g. a recruiter auth slice).
+  await server.register(fastifyJwt, { secret: env.JWT_SECRET });
   await server.register(fastifyWebsocket);
 
   await server.register(healthRoutes);

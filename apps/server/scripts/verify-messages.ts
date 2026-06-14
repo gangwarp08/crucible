@@ -1,3 +1,4 @@
+// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.5 — persona messaging channels.
 //
 // Creates a fresh fde-db-triage session, drives a 6-message conversation over

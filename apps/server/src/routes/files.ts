@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { requireSessionToken } from "../services/session-token.js";
 import { recordFileSnapshot } from "../services/telemetry.js";
 
 const SessionQuerySchema = z.object({
@@ -25,8 +26,18 @@ async function requireSession(sessionId: string, reply: FastifyReply) {
 }
 
 export async function fileRoutes(server: FastifyInstance) {
+  // The three file routes all carry sessionId either in the query string
+  // (GET) or the body (PUT). The extractor reads from both — preHandler
+  // runs before the per-route Zod parse, so we accept whichever is present.
+  const sessionIdFromReq = (req: { query?: unknown; body?: unknown }): string | undefined => {
+    const fromQuery = (req.query as { sessionId?: string } | undefined)?.sessionId;
+    const fromBody  = (req.body  as { sessionId?: string } | undefined)?.sessionId;
+    return fromQuery ?? fromBody;
+  };
+  const requireToken = requireSessionToken(sessionIdFromReq);
+
   // GET /files?sessionId=&path= — list a directory
-  server.get("/files", async (request, reply) => {
+  server.get("/files", { preHandler: [requireToken] }, async (request, reply) => {
     const parsed = SessionQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -48,7 +59,7 @@ export async function fileRoutes(server: FastifyInstance) {
   });
 
   // GET /file?sessionId=&path= — read a file
-  server.get("/file", async (request, reply) => {
+  server.get("/file", { preHandler: [requireToken] }, async (request, reply) => {
     const parsed = SessionQuerySchema.safeParse(request.query);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -62,7 +73,7 @@ export async function fileRoutes(server: FastifyInstance) {
   });
 
   // PUT /file — write a file
-  server.put("/file", async (request, reply) => {
+  server.put("/file", { preHandler: [requireToken] }, async (request, reply) => {
     const parsed = WriteBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });

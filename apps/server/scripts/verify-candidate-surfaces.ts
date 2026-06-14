@@ -1,3 +1,4 @@
+// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.8 — docs + deliverable + compute HUD.
 //
 // Creates an fde-db-triage session, asserts:

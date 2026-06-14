@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { requireSessionToken } from "../services/session-token.js";
 import { loadScenarioById } from "../services/scenarios.js";
 import { logEvent } from "../services/telemetry.js";
 
@@ -38,7 +39,11 @@ async function loadDocs(sessionId: string): Promise<ScenarioDoc[] | null> {
 }
 
 export async function docsRoutes(server: FastifyInstance) {
-  server.get<{ Params: { id: string } }>("/sessions/:id/docs", async (request, reply) => {
+  const requireToken = requireSessionToken((req) => (req.params as { id?: string }).id);
+
+  server.get<{ Params: { id: string } }>("/sessions/:id/docs", {
+    preHandler: [requireToken],
+  }, async (request, reply) => {
     const sessionId = request.params.id;
     const entry = await getOrRehydrateSession(sessionId);
     if (!entry) return reply.status(404).send({ error: "Session not found" });
@@ -50,6 +55,7 @@ export async function docsRoutes(server: FastifyInstance) {
 
   server.post<{ Params: { id: string; docId: string } }>(
     "/sessions/:id/docs/:docId/view",
+    { preHandler: [requireToken] },
     async (request, reply) => {
       const { id: sessionId, docId } = request.params;
 

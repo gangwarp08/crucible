@@ -1,3 +1,4 @@
+// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Calibration step 2 — gradient + independence check.
 //
 // Step 1 (verify-discrimination.ts) showed clean separation between a

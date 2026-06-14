@@ -24,8 +24,10 @@ const EnvSchema = z.object({
   SESSION_BUDGET_USD: z.coerce.number().positive().default(1.0),
   SESSION_TIMEOUT_MIN: z.coerce.number().int().positive().default(60),
 
-  // JWT secret for server↔browser tokens — optional until auth slice is wired
-  JWT_SECRET: z.string().min(32).optional(),
+  // JWT secret for server↔browser session tokens. REQUIRED — the server
+  // refuses to boot without it once per-session JWTs are enforced on the
+  // protected routes (services/session-token.ts).
+  JWT_SECRET: z.string().min(32),
 
   // Comma-separated list of allowed browser origins (e.g. https://crucible.vercel.app).
   // Required in production; defaults to http://localhost:3000 in dev.

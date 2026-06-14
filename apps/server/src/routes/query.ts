@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { requireSessionToken } from "../services/session-token.js";
 import { runSqliteQuery } from "../services/query-runner.js";
 import { logEvent } from "../services/telemetry.js";
 import { deductComputeMinutes } from "../services/compute-tracker.js";
@@ -42,6 +43,7 @@ export async function queryRoutes(server: FastifyInstance) {
           },
         },
       },
+      preHandler: [requireSessionToken((req) => (req.params as { id?: string }).id)],
     },
     async (request, reply) => {
       const sessionId = request.params.id;

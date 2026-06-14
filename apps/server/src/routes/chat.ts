@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { requireSessionToken } from "../services/session-token.js";
 import {
   chatCompletion,
   BudgetExceededError,
@@ -42,6 +43,9 @@ export async function chatRoutes(server: FastifyInstance) {
           },
         },
       },
+      preHandler: [
+        requireSessionToken((req) => (req.body as { sessionId?: string } | undefined)?.sessionId),
+      ],
     },
     async (request, reply) => {
     const parsed = ChatBodySchema.safeParse(request.body);
@@ -223,6 +227,9 @@ export async function chatRoutes(server: FastifyInstance) {
   // recordTranscriptTurn writes the AI conversation.
   server.get<{ Params: { id: string } }>(
     "/sessions/:id/transcript",
+    {
+      preHandler: [requireSessionToken((req) => (req.params as { id?: string }).id)],
+    },
     async (request, reply) => {
       const sessionId = request.params.id;
       if (!supabase) {
