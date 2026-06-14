@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   FileText, BookOpen, MessageSquare, Database, TerminalSquare, Sparkles, Send,
+  HelpCircle,
 } from "lucide-react";
 import FileTree from "./FileTree";
 import ConstraintHUD from "./ConstraintHUD";
@@ -238,6 +239,36 @@ export default function Workspace({ sessionId }: Props) {
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }} />
+        <button
+          type="button"
+          onClick={() => setShowTour(true)}
+          aria-label="Workspace orientation"
+          title="Workspace orientation"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 28,
+            padding: "0 10px",
+            background: "transparent",
+            border: `1px solid ${color.border.default}`,
+            borderRadius: 3,
+            color: color.text.secondary,
+            cursor: "pointer",
+            gap: 6,
+            marginRight: 12,
+          }}
+        >
+          <HelpCircle size={14} />
+          <span style={{
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+          }}>
+            Orientation
+          </span>
+        </button>
         <ConstraintHUD />
       </header>
 
