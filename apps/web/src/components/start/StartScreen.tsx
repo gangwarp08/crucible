@@ -180,32 +180,82 @@ function ScenarioBody({
       )}
 
       <section style={{ marginBottom: 28 }}>
-        <SectionLabel>How this works</SectionLabel>
+        <SectionLabel>How to approach this</SectionLabel>
         <ul style={{
           color: color.text.primary,
           fontSize: 14, lineHeight: 1.7,
           margin: 0, marginTop: 12, paddingLeft: 20,
         }}>
           <li style={{ marginBottom: 4 }}>
-            You&apos;ll work in a sandboxed dev environment with files, a
-            terminal, a SQL data explorer, and a deliverable panel.
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Investigate before you trust</strong>{" "}
+            — including this brief and anyone you talk to. Verify with the data,
+            not with the loudest opinion in the room.
           </li>
           <li style={{ marginBottom: 4 }}>
-            Your client and a teammate will reach you in the{" "}
-            <strong style={{ color: color.text.primary }}>Messages</strong>{" "}
-            tab — sometimes unprompted. Reply when you have something to say.
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Expect more than one thing might be wrong.</strong>{" "}
+            If so, rank what you find by business impact and lead with what to
+            fix first.
           </li>
           <li style={{ marginBottom: 4 }}>
-            The <strong style={{ color: color.text.primary }}>Assistant</strong>{" "}
-            tab is an AI helper. Token usage counts against your budget.
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>When someone pushes a hypothesis at you with confidence</strong>,
+            bring evidence before you accept or reject it. Numbers beat
+            assertions.
           </li>
           <li style={{ marginBottom: 4 }}>
-            The session is timed. The Time indicator at the top counts down.
-            Submit your deliverable before time runs out — you can iterate.
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Communicate as you go.</strong>{" "}
+            Your client is in the room and wants to know what you&apos;re
+            seeing. Translate the technical into the business.
           </li>
           <li>
-            When the session ends, your work is automatically captured for
-            review.
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>We score how you work, not just what you ship.</strong>{" "}
+            Process counts. So does &ldquo;I don&apos;t know yet, here&apos;s
+            how I&apos;ll find out.&rdquo;
+          </li>
+        </ul>
+      </section>
+
+      <section style={{ marginBottom: 28 }}>
+        <SectionLabel>What we score</SectionLabel>
+        <div style={{ color: color.text.secondary, fontSize: 12, marginTop: 8, marginBottom: 14, lineHeight: 1.6 }}>
+          Eight dimensions, weighted by what the role demands. Anchors are
+          principle-based — there&apos;s no checklist to game.
+        </div>
+        <ul style={{
+          color: color.text.primary,
+          fontSize: 13, lineHeight: 1.65,
+          margin: 0, paddingLeft: 20,
+        }}>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Problem framing</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— how well you set up the question before chasing answers.</span>
+          </li>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Data fluency</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— exploration, verification, and the queries you choose to write.</span>
+          </li>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Design under constraints</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— prioritization, budget discipline, what you choose not to do.</span>
+          </li>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Execution</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— does it actually run, and does it match what you said it would.</span>
+          </li>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>AI orchestration</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— using the assistant as a tool, not a crutch. Verify its output.</span>
+          </li>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Teamwork</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— engaging your teammate, pushing back when warranted, with evidence.</span>
+          </li>
+          <li style={{ marginBottom: 4 }}>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Customer engagement</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— keeping your stakeholder in the loop, absorbing change calmly.</span>
+          </li>
+          <li>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Outcome communication</strong>{" "}
+            <span style={{ color: color.text.secondary }}>— clarity, structure, and audience-fit for a non-technical reader.</span>
           </li>
         </ul>
       </section>
