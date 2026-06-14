@@ -2,7 +2,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  createSession, getScenarioBySlug, ScenarioNotFoundError, type Scenario,
+  createSession, getScenarioBySlug,
+  ScenarioNotFoundError, ScenarioInviteRequiredError,
+  type Scenario,
 } from "@/lib/api";
 import { color, radius, font } from "@/styles/tokens";
 import Card from "@/components/ui/Card";
@@ -18,6 +20,10 @@ type Phase =
   | { kind: "loading" }
   | { kind: "not-found" }
   | { kind: "error"; message: string }
+  // Server returned 401 — INVITE_CODE is set and the probe was un-coded.
+  // Candidate is shown the invite prompt. `inviteError` carries the failed-
+  // submit message; `submitting` is true while the refetch is in flight.
+  | { kind: "invite-required"; inviteError: string | null; submitting: boolean }
   | { kind: "ready"; scenario: Scenario }
   | { kind: "starting"; scenario: Scenario }
   | { kind: "starting-failed"; scenario: Scenario; message: string };
@@ -36,7 +42,14 @@ export default function StartScreen({ slug }: Props) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [inviteCode, setInviteCode] = useState("");
+  // Invite code the candidate already used to unlock the scenario. Reused on
+  // Begin so we don't ask twice. null when the server isn't gating.
+  const [validatedInviteCode, setValidatedInviteCode] = useState<string | null>(null);
 
+  // Probe the server for the scenario without an invite code. Two outcomes:
+  //   - 200 → server not gating (or already valid) → render the scenario.
+  //   - 401 → INVITE_CODE is set on the server → flip to invite-required UI
+  //          and let the candidate enter the code before the brief loads.
   useEffect(() => {
     let cancelled = false;
     setPhase({ kind: "loading" });
@@ -48,6 +61,8 @@ export default function StartScreen({ slug }: Props) {
         if (cancelled) return;
         if (err instanceof ScenarioNotFoundError) {
           setPhase({ kind: "not-found" });
+        } else if (err instanceof ScenarioInviteRequiredError) {
+          setPhase({ kind: "invite-required", inviteError: null, submitting: false });
         } else {
           const message = err instanceof Error ? err.message : "Failed to load assessment";
           setPhase({ kind: "error", message });
@@ -56,10 +71,36 @@ export default function StartScreen({ slug }: Props) {
     return () => { cancelled = true; };
   }, [slug]);
 
+  async function submitInvite(code: string): Promise<void> {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setPhase({ kind: "invite-required", inviteError: "Enter the invite code.", submitting: false });
+      return;
+    }
+    setPhase({ kind: "invite-required", inviteError: null, submitting: true });
+    try {
+      const scenario = await getScenarioBySlug(slug, trimmed);
+      setValidatedInviteCode(trimmed);
+      setPhase({ kind: "ready", scenario });
+    } catch (err) {
+      if (err instanceof ScenarioInviteRequiredError) {
+        setPhase({ kind: "invite-required", inviteError: "That code didn't work. Check it and try again.", submitting: false });
+      } else if (err instanceof ScenarioNotFoundError) {
+        setPhase({ kind: "not-found" });
+      } else {
+        const message = err instanceof Error ? err.message : "Failed to load assessment";
+        setPhase({ kind: "error", message });
+      }
+    }
+  }
+
   async function begin(scenario: Scenario): Promise<void> {
     setPhase({ kind: "starting", scenario });
     try {
-      const trimmedCode = inviteCode.trim();
+      // Reuse the code that already passed the scenario gate (when set);
+      // fall back to whatever the candidate has typed (covers the case
+      // where INVITE_CODE is unset and the field is just decorative).
+      const trimmedCode = (validatedInviteCode ?? inviteCode).trim();
       const { sessionId } = await createSession({
         scenarioId: scenario.id,
         ...(trimmedCode ? { inviteCode: trimmedCode } : {}),
@@ -116,6 +157,62 @@ export default function StartScreen({ slug }: Props) {
           </Card>
         )}
 
+        {phase.kind === "invite-required" && (
+          <Card padding={6}>
+            <SectionLabel tone="eyebrow">Invite required</SectionLabel>
+            <div style={{ fontSize: 22, color: color.text.primary, fontWeight: 600, marginTop: 14, marginBottom: 8 }}>
+              Enter your invite code
+            </div>
+            <div style={{ color: color.text.secondary, fontSize: 13, marginBottom: 18, lineHeight: 1.6 }}>
+              This assessment is gated. Paste the code from your invite to load the brief.
+            </div>
+            <form
+              onSubmit={(e) => { e.preventDefault(); void submitInvite(inviteCode); }}
+              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+            >
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontSize: 12, color: color.text.muted }}>Invite code</span>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  disabled={phase.submitting}
+                  autoFocus
+                  placeholder="Paste the code from your invite"
+                  autoComplete="off"
+                  spellCheck={false}
+                  style={{
+                    width: 320,
+                    background: color.bg.elevated,
+                    border: `1px solid ${color.border.default}`,
+                    borderRadius: radius.sm,
+                    color: color.text.primary,
+                    fontSize: 13,
+                    padding: "8px 10px",
+                    outline: "none",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </label>
+              {phase.inviteError && (
+                <p style={{ color: color.error.base, fontSize: 12, margin: "2px 0 4px" }}>
+                  {phase.inviteError}
+                </p>
+              )}
+              <div>
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={phase.submitting || inviteCode.trim().length === 0}
+                  onClick={() => void submitInvite(inviteCode)}
+                >
+                  {phase.submitting ? "Checking…" : "Load assessment"}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        )}
+
         {(phase.kind === "ready" || phase.kind === "starting" || phase.kind === "starting-failed") && (
           <ScenarioBody
             scenario={phase.scenario}
@@ -123,6 +220,7 @@ export default function StartScreen({ slug }: Props) {
             beginError={phase.kind === "starting-failed" ? phase.message : null}
             inviteCode={inviteCode}
             onInviteCodeChange={setInviteCode}
+            hideInviteField={validatedInviteCode !== null}
             onBegin={() => { void begin(phase.scenario); }}
           />
         )}
@@ -132,13 +230,16 @@ export default function StartScreen({ slug }: Props) {
 }
 
 function ScenarioBody({
-  scenario, starting, beginError, inviteCode, onInviteCodeChange, onBegin,
+  scenario, starting, beginError, inviteCode, onInviteCodeChange, hideInviteField, onBegin,
 }: {
   scenario: Scenario;
   starting: boolean;
   beginError: string | null;
   inviteCode: string;
   onInviteCodeChange: (v: string) => void;
+  /** When true, the invite code was already validated on the scenario fetch
+   *  (the gated path). No need to ask again on Begin — hide the field. */
+  hideInviteField: boolean;
   onBegin: () => void;
 }) {
   const c = scenario.constraints;
@@ -301,29 +402,31 @@ function ScenarioBody({
         alignItems: "flex-start", gap: 14,
         paddingTop: 4,
       }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 12, color: color.text.muted }}>Invite code</span>
-          <input
-            type="text"
-            value={inviteCode}
-            onChange={(e) => onInviteCodeChange(e.target.value)}
-            disabled={starting}
-            placeholder="Paste the code from your invite"
-            autoComplete="off"
-            spellCheck={false}
-            style={{
-              width: 280,
-              background: color.bg.elevated,
-              border: `1px solid ${color.border.default}`,
-              borderRadius: radius.sm,
-              color: color.text.primary,
-              fontSize: 13,
-              padding: "8px 10px",
-              outline: "none",
-              fontFamily: "inherit",
-            }}
-          />
-        </label>
+        {!hideInviteField && (
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, color: color.text.muted }}>Invite code</span>
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(e) => onInviteCodeChange(e.target.value)}
+              disabled={starting}
+              placeholder="Paste the code from your invite"
+              autoComplete="off"
+              spellCheck={false}
+              style={{
+                width: 280,
+                background: color.bg.elevated,
+                border: `1px solid ${color.border.default}`,
+                borderRadius: radius.sm,
+                color: color.text.primary,
+                fontSize: 13,
+                padding: "8px 10px",
+                outline: "none",
+                fontFamily: "inherit",
+              }}
+            />
+          </label>
+        )}
         <Button variant="primary" size="lg" disabled={starting} onClick={onBegin}>
           {starting ? "Starting…" : "Begin assessment"}
         </Button>

@@ -12,6 +12,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { loadScenarioBySlug } from "../services/scenarios.js";
+import { env } from "../env.js";
 
 const ParamsSchema = z.object({ slug: z.string().min(1).max(120) });
 
@@ -27,6 +28,22 @@ export async function scenariosRoutes(server: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid slug" });
     }
+
+    // Invite-code gate. Same shared-secret pattern as POST /sessions so
+    // competitors can't dump the brief / constraints / deliverable shape
+    // by hitting the URL directly. Gate is off when env.INVITE_CODE is
+    // unset (local dev / preview) — backward-compatible.
+    if (env.INVITE_CODE) {
+      const provided = request.headers["x-invite-code"];
+      const code = Array.isArray(provided) ? provided[0] : provided;
+      if (code !== env.INVITE_CODE) {
+        return reply.status(401).send({
+          error: "invite_required",
+          message: "This assessment requires an invite code.",
+        });
+      }
+    }
+
     const scenario = await loadScenarioBySlug(parsed.data.slug);
     if (!scenario) {
       return reply.status(404).send({ error: "Scenario not found" });

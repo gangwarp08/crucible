@@ -9,8 +9,6 @@ import { useSessionStore } from "@/stores/sessionStore";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 
-const SERVER_URL = process.env["NEXT_PUBLIC_SERVER_URL"] ?? "http://localhost:3001";
-
 interface Props { sessionId: string; }
 
 interface Field {

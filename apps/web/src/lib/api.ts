@@ -157,12 +157,29 @@ export class ScenarioNotFoundError extends Error {
   }
 }
 
+export class ScenarioInviteRequiredError extends Error {
+  constructor(slug: string) {
+    super(`Scenario "${slug}" requires an invite code`);
+    this.name = "ScenarioInviteRequiredError";
+  }
+}
+
 /** Fetch a scenario's candidate-safe metadata (brief, constraints, deliverable
- *  components). Throws ScenarioNotFoundError on 404 so the caller can render
- *  a clean "not found" state distinct from other failures. */
-export async function getScenarioBySlug(slug: string): Promise<Scenario> {
-  const res = await fetch(`${SERVER_URL}/api/scenarios/${encodeURIComponent(slug)}`);
+ *  components). Pass `inviteCode` if the server's INVITE_CODE gate is on; the
+ *  Start screen probes once without one and only prompts the candidate if a
+ *  401 comes back (so dev/preview without INVITE_CODE keeps zero-friction UX).
+ *
+ *  Throws ScenarioNotFoundError on 404, ScenarioInviteRequiredError on 401,
+ *  generic Error on anything else. */
+export async function getScenarioBySlug(
+  slug: string,
+  inviteCode?: string,
+): Promise<Scenario> {
+  const headers: Record<string, string> = {};
+  if (inviteCode) headers["X-Invite-Code"] = inviteCode;
+  const res = await fetch(`${SERVER_URL}/api/scenarios/${encodeURIComponent(slug)}`, { headers });
   if (res.status === 404) throw new ScenarioNotFoundError(slug);
+  if (res.status === 401) throw new ScenarioInviteRequiredError(slug);
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json() as Promise<Scenario>;
 }
