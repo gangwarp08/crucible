@@ -24,7 +24,26 @@ const ChatBodySchema = z.object({
 });
 
 export async function chatRoutes(server: FastifyInstance) {
-  server.post("/chat", async (request, reply) => {
+  server.post(
+    "/chat",
+    {
+      // Per-SESSION rate limit (not per-IP). A candidate sharing one IP behind
+      // a corporate NAT shouldn't be rate-limited by their colleagues. A bot
+      // with a leaked session ID still can't drain the per-session LiteLLM
+      // budget faster than 60 calls/min. Falls back to IP if no sessionId is
+      // in the body (malformed request — the handler will 400 anyway).
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: "1 minute",
+          keyGenerator: (req) => {
+            const body = req.body as { sessionId?: string } | undefined;
+            return body?.sessionId ? `chat:session:${body.sessionId}` : `chat:ip:${req.ip}`;
+          },
+        },
+      },
+    },
+    async (request, reply) => {
     const parsed = ChatBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -192,7 +211,8 @@ export async function chatRoutes(server: FastifyInstance) {
       server.log.error({ err, sessionId }, "chat completion failed");
       return reply.status(500).send({ error: "Chat completion failed" });
     }
-  });
+  },
+  );
 
   // ─── History fetch — used by Workspace to hydrate the AI assistant pane
   //

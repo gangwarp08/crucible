@@ -28,10 +28,20 @@ export async function queryRoutes(server: FastifyInstance) {
   server.post<{ Params: { id: string } }>(
     "/sessions/:id/query",
     {
-      // First per-route rate-limit override in the codebase. Roomy enough for
-      // a candidate sustaining ~2 queries/sec; tight enough to catch a
-      // runaway client loop.
-      config: { rateLimit: { max: 120, timeWindow: "1 minute" } },
+      // Per-SESSION rate limit (not per-IP). Roomy enough for a candidate
+      // sustaining ~2 queries/sec; tight enough to catch a runaway client
+      // loop on a leaked session ID. Keys on the URL :id since that's
+      // always present (no body parsing race like /api/chat).
+      config: {
+        rateLimit: {
+          max: 120,
+          timeWindow: "1 minute",
+          keyGenerator: (req) => {
+            const params = req.params as { id?: string };
+            return params.id ? `query:session:${params.id}` : `query:ip:${req.ip}`;
+          },
+        },
+      },
     },
     async (request, reply) => {
       const sessionId = request.params.id;
