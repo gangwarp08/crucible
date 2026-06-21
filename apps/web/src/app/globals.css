@@ -179,6 +179,39 @@ button { font-family: inherit; }
   color: transparent;
 }
 
+/* ────────────────────────────────────────────────────────────────
+ * tula. landing page — buttons + responsive chrome.
+ * Inline styles set the static look; these own :hover and small-screen
+ * behavior (which inline styles can't express).
+ * ──────────────────────────────────────────────────────────────── */
+.tula-primary,
+.tula-ghost {
+  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+              box-shadow 300ms ease,
+              background 200ms ease,
+              border-color 200ms ease,
+              color 200ms ease;
+}
+.tula-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 36px -10px rgba(255, 90, 31, 0.6);
+}
+.tula-ghost:hover {
+  border-color: #ff5a1f !important;
+  color: #ffffff !important;
+}
+.tula-primary:active,
+.tula-ghost:active {
+  transform: translateY(1px);
+}
+/* Compact nav chrome on narrow screens. */
+.nav-cta-short { display: none; }
+@media (max-width: 560px) {
+  .tula-preseed { display: none; }
+  .nav-cta-full { display: none; }
+  .nav-cta-short { display: inline; }
+}
+
 /* Themed thin scrollbars (Chromium + Firefox). */
 * { scrollbar-width: thin; scrollbar-color: rgba(245, 242, 238, 0.10) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
