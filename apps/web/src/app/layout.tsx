@@ -22,8 +22,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "tula. — measure what matters",
-  description: "The simulation-based assessment for AI engineers — replacing fake signals with real evidence.",
+  title: "crucible. — measure what matters",
+  description: "Real-work capability assessment simulation sandbox",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
