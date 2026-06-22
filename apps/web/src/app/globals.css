@@ -179,6 +179,13 @@ button { font-family: inherit; }
   color: transparent;
 }
 
+/* Landing nav links + hover. Hidden on narrow screens to keep the bar clean. */
+.nav-links a { transition: color 120ms cubic-bezier(0.2, 0, 0.2, 1); }
+.nav-links a:hover { color: #f4f2ee; }
+@media (max-width: 720px) {
+  .nav-links { display: none !important; }
+}
+
 /* Themed thin scrollbars (Chromium + Firefox). */
 * { scrollbar-width: thin; scrollbar-color: rgba(245, 242, 238, 0.10) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }

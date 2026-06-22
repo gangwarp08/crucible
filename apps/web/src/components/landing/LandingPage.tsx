@@ -17,6 +17,7 @@ const MAXW = 1180;
 // catalog lists every scenario; the per-scenario start screen is one click
 // further in.
 const ASSESSMENT_HREF = "/scenarios";
+const CONTACT_HREF = "mailto:hello@crucible.dev";
 
 const WRAP_STYLE = {
   width: "100%",
@@ -38,6 +39,8 @@ export default function LandingPage(): React.ReactElement {
         <Problem />
         <Thesis />
         <Method />
+        <Product />
+        <Scorecard />
         <SignalVsNoise />
         <CTABand />
         <Footer />
@@ -49,6 +52,11 @@ export default function LandingPage(): React.ReactElement {
 /* ─────────────────────────────────────────────────────────────── Nav */
 
 function Nav() {
+  const links = [
+    { href: "#method", label: "How it works" },
+    { href: "#product", label: "The simulation" },
+    { href: "#scorecard", label: "The signal" },
+  ];
   return (
     <nav
       style={{
@@ -63,11 +71,29 @@ function Nav() {
     >
       <div style={{ ...WRAP_STYLE, display: "flex", alignItems: "center", justifyContent: "space-between", height: 68 }}>
         <Wordmark size={22} />
-        <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-          <Button variant="primary" size="md">
-            Start the assessment
-          </Button>
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+          <div className="nav-links" style={{ display: "flex", alignItems: "center", gap: 26 }}>
+            {links.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                style={{
+                  fontFamily: font.mono,
+                  fontSize: 12,
+                  letterSpacing: "0.04em",
+                  color: color.text.secondary,
+                }}
+              >
+                {l.label}
+              </a>
+            ))}
+          </div>
+          <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
+            <Button variant="primary" size="md">
+              Start the assessment
+            </Button>
+          </Link>
+        </div>
       </div>
     </nav>
   );
@@ -100,7 +126,7 @@ function Hero() {
             color: color.accent.amber,
             display: "inline-block",
           }}>
-            real work capability assessment simulation sandbox
+            the real-work assessment for ai engineers
           </span>
           <h1 style={{
             fontFamily: font.mono,
@@ -117,19 +143,19 @@ function Hero() {
             color: color.text.secondary,
             fontSize: "clamp(1rem, 1.35vw, 1.18rem)",
             lineHeight: 1.65,
-            maxWidth: "56ch",
+            maxWidth: "58ch",
             margin: "26px auto 0",
           }}>
-            Résumés lie, portfolios are borrowed, and AI writes the rest.
-            crucible. drops candidates into 90 minutes of the actual job —
-            real tools, live context — and scores what they truly do.
+            Résumés lie, portfolios are borrowed, and AI writes the rest. crucible. drops
+            candidates into 90 minutes of the actual job — real tools, live context, AI in
+            the loop — and shows you how they truly work.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 36 }}>
             <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
               <Button variant="primary" size="lg">Try the simulation →</Button>
             </Link>
             <a href="#method" style={{ textDecoration: "none" }}>
-              <Button variant="ghost" size="lg">See the method</Button>
+              <Button variant="ghost" size="lg">See how it works</Button>
             </a>
           </div>
           <HeroMeta />
@@ -140,7 +166,7 @@ function Hero() {
 }
 
 function HeroMeta() {
-  const items = ["90 min", "real tools", "behavioral telemetry", "multi-parameter signal"];
+  const items = ["90 minutes", "real tools", "AI in the loop", "evidence you can audit"];
   return (
     <div style={{
       display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center",
@@ -168,7 +194,7 @@ function Problem() {
     { ix: "/ take-home", t: "take-home", p: "Completed by the assistant, not the applicant. The artifact is real; the author is a question mark." },
   ];
   return (
-    <section id="signal" style={{ padding: SECTION_PAD }}>
+    <section id="problem" style={{ padding: SECTION_PAD }}>
       <div style={WRAP_STYLE}>
         <div style={{ marginBottom: 44, maxWidth: 760 }}>
           <SectionLabel tone="eyebrow">02 — the problem</SectionLabel>
@@ -176,11 +202,12 @@ function Problem() {
             Hiring was broken.<br />AI made it <span className="fire-text">worse</span>.
           </h2>
           <p style={leadStyle({ marginTop: 22 })}>
-            Every proxy we trusted is now synthetic. You are not screening people anymore —
-            you are screening prompts.
+            Every proxy we trusted is now synthetic. Candidates use AI to apply, companies
+            use AI to filter, and real talent gets lost in the middle. You are not screening
+            people anymore — you are screening prompts.
           </p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
           {items.map((it) => (
             <div key={it.t} className="card-fire-interactive" style={{
               border: `1px solid ${color.border.default}`,
@@ -224,7 +251,7 @@ function Thesis() {
     <section style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
       <div style={WRAP_STYLE}>
         <div style={{ maxWidth: 940 }}>
-          <SectionLabel tone="eyebrow">03 — the thesis</SectionLabel>
+          <SectionLabel tone="eyebrow">03 — why now</SectionLabel>
           <p style={{
             fontFamily: font.mono,
             fontWeight: 600,
@@ -235,10 +262,10 @@ function Thesis() {
             color: color.text.primary,
             textWrap: "balance",
           }}>
-            Definition of Work is evolving faster than ever.<br />
-            The job is now a human <span className="fire-text">directing tools</span> — reasoning,
-            delegating, judging, shipping with AI in the loop. So stop testing whether
-            someone can work{" "}
+            The AI engineer already exists. The job is now a human{" "}
+            <span className="fire-text">directing tools</span> — reasoning, delegating,
+            judging, and shipping with AI in the loop. So stop testing whether someone can
+            work{" "}
             <span style={{ color: color.text.muted, textDecoration: "line-through", textDecorationColor: color.accent.ember }}>
               without
             </span>{" "}
@@ -254,17 +281,17 @@ function Thesis() {
 
 function Method() {
   const steps = [
-    { n: "01", t: "The real environment", p: "IDE, AI assistant, documentation, and live business context — the same surface the role touches on day one. No whiteboard abstractions." },
-    { n: "02", t: "Role-specific simulation", p: "Not puzzles. The actual work the role demands, drawn from real scenarios and scoped to 90 focused minutes." },
-    { n: "03", t: "Behavioral telemetry", p: "We capture how they work — every decision, iteration, dead-end, and recovery — not just the final artifact they hand in." },
-    { n: "04", t: "Multi-parameter signal", p: "Scored across the dimensions that actually predict on-the-job performance, weighted to the role you are filling." },
+    { n: "01", t: "The real environment", p: "IDE, terminal, AI assistant, documentation, and live business context — the same surface the role touches on day one. No whiteboard abstractions." },
+    { n: "02", t: "Role-specific work", p: "Not puzzles. The actual work the role demands, drawn from real scenarios and scoped to 90 focused minutes. Generated fresh every time, so nothing leaks." },
+    { n: "03", t: "We watch how they work", p: "Every decision, prompt, iteration, dead-end, and recovery — not just the final artifact. The process is where the signal lives." },
+    { n: "04", t: "A signal you can defend", p: "Scored across the dimensions that predict on-the-job performance, weighted to your role, with every score linked to what actually happened." },
   ];
   return (
     <section id="method" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
       <div style={WRAP_STYLE}>
         <div style={{ marginBottom: 44, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
           <div style={{ maxWidth: 620 }}>
-            <SectionLabel tone="eyebrow">04 — the method</SectionLabel>
+            <SectionLabel tone="eyebrow">04 — how it works</SectionLabel>
             <h2 style={sectionTitleStyle()}>
               90 minutes inside<br />the <span className="fire-text">real job</span>.
             </h2>
@@ -275,7 +302,7 @@ function Method() {
           </p>
         </div>
         <div style={{
-          display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 1,
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 1,
           background: color.border.default,
           border: `1px solid ${color.border.default}`,
           borderRadius: radius.md, overflow: "hidden",
@@ -301,6 +328,111 @@ function Method() {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────── Product */
+
+function Product() {
+  const features = [
+    { t: "A real IDE & terminal", p: "A full editor, shell, and runnable project. Candidates build, run, and debug exactly like any normal working day." },
+    { t: "AI assistant on tap", p: "The same copilots they would use at work. We watch how they prompt, verify, and push back — not whether they used it." },
+    { t: "Live context to navigate", p: "Docs, a database, and a product brief with real ambiguity. They have to ask the right questions, not just answer a self-contained puzzle." },
+    { t: "People in the loop", p: "A client and a teammate to align with and update. Communication is part of the job, so it is part of the assessment." },
+    { t: "Real constraints", p: "Time, tokens, and compute are finite. You see how a candidate prioritizes when they can't do everything at once." },
+    { t: "Dynamic & proctored", p: "Every scenario is generated fresh and identity-verified — leak-proof, and impossible to ghost-write your way through." },
+  ];
+  return (
+    <section id="product" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
+      <div style={WRAP_STYLE}>
+        <div style={{ marginBottom: 44, maxWidth: 760 }}>
+          <SectionLabel tone="eyebrow">05 — inside the simulation</SectionLabel>
+          <h2 style={sectionTitleStyle()}>
+            One workspace.<br />The <span className="fire-text">whole job</span>.
+          </h2>
+          <p style={leadStyle({ marginTop: 22 })}>
+            Candidates work in a real, sandboxed dev environment — not a whiteboard.
+            Everything the role touches on day one is one tab away.
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+          {features.map((f) => (
+            <div key={f.t} style={{
+              border: `1px solid ${color.border.default}`,
+              background: color.bg.panel,
+              padding: "26px 26px 28px",
+              borderRadius: radius.md,
+            }}>
+              <div style={{
+                width: 7, height: 7, background: color.accent.base, marginBottom: 18,
+              }} />
+              <h3 style={{
+                fontFamily: font.mono, fontWeight: 600, fontSize: "1.15rem",
+                letterSpacing: "-0.02em", margin: "0 0 10px", color: color.text.primary,
+              }}>{f.t}</h3>
+              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.96rem", lineHeight: 1.6 }}>{f.p}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────── Scorecard */
+
+function Scorecard() {
+  const points = [
+    {
+      t: "A multi-parameter score",
+      p: "Not a single number, and never pass/fail. Candidates are scored across the dimensions that actually predict performance — problem framing, execution, judgment, collaboration — weighted to the role you are filling.",
+    },
+    {
+      t: "Linked to the evidence",
+      p: "Every score traces back to the exact moments that earned it. No black box: click through to what the candidate actually did, said, and shipped.",
+    },
+    {
+      t: "An AI-fluency read",
+      p: "See where each person lands — leaning on AI, working with it, or truly orchestrating it: catching its mistakes, knowing when not to use it, and multiplying their own output.",
+    },
+  ];
+  return (
+    <section id="scorecard" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
+      <div style={WRAP_STYLE}>
+        <div style={{ marginBottom: 44, maxWidth: 760 }}>
+          <SectionLabel tone="eyebrow">06 — the signal</SectionLabel>
+          <h2 style={sectionTitleStyle()}>
+            One session.<br />A decision you can <span className="fire-text">defend</span>.
+          </h2>
+          <p style={leadStyle({ marginTop: 22 })}>
+            When it is over, you don&apos;t get a vague thumbs-up. You get the evidence —
+            structured, comparable across candidates, and built to hold up in a hiring review.
+          </p>
+        </div>
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 1,
+          background: color.border.default,
+          border: `1px solid ${color.border.default}`,
+          borderRadius: radius.md, overflow: "hidden",
+        }}>
+          {points.map((pt, i) => (
+            <div key={pt.t} style={{ background: "#050403", padding: "32px 30px 36px" }}>
+              <div style={{
+                fontFamily: font.mono, fontSize: 12, letterSpacing: "0.20em",
+                color: color.accent.amber,
+              }}>
+                <b style={{ color: color.text.primary, fontWeight: 600 }}>{`0${i + 1}`}</b>
+              </div>
+              <h3 style={{
+                fontFamily: font.mono, fontWeight: 600, fontSize: "1.2rem",
+                letterSpacing: "-0.02em", margin: "18px 0 12px", color: color.text.primary,
+              }}>{pt.t}</h3>
+              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.96rem", lineHeight: 1.6 }}>{pt.p}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────── Signal/Noise */
 
 function SignalVsNoise() {
@@ -310,10 +442,10 @@ function SignalVsNoise() {
     <section style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
       <div style={WRAP_STYLE}>
         <div style={{ marginBottom: 40, maxWidth: 700 }}>
-          <SectionLabel tone="eyebrow">05 — signal vs noise</SectionLabel>
+          <SectionLabel tone="eyebrow">07 — signal vs noise</SectionLabel>
           <h2 style={sectionTitleStyle()}>Burn off the noise.</h2>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
           <SnCol
             title="What you screen today"
             tick="✕"
@@ -408,7 +540,7 @@ function CTABand() {
           <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
             <Button variant="primary" size="lg">Try the simulation →</Button>
           </Link>
-          <a href="mailto:hello@crucible.dev" style={{ textDecoration: "none" }}>
+          <a href={CONTACT_HREF} style={{ textDecoration: "none" }}>
             <Button variant="ghost" size="lg">Talk to us</Button>
           </a>
         </div>
@@ -424,14 +556,31 @@ function Footer() {
     <footer style={{ borderTop: `1px solid ${color.border.default}`, padding: "56px 0 40px" }}>
       <div style={WRAP_STYLE}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 30, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: "30ch" }}>
+          <div style={{ maxWidth: "32ch" }}>
             <Wordmark size={22} />
             <p style={{
               color: color.text.secondary, fontSize: "0.92rem",
               marginTop: 18, lineHeight: 1.65,
             }}>
-              Real-work assessment simulations.<br />For today&apos;s need.
+              The real-work assessment for AI engineers.<br />Measure what matters.
             </p>
+          </div>
+          <div style={{ display: "flex", gap: 60, flexWrap: "wrap" }}>
+            <FooterCol
+              heading="Product"
+              links={[
+                { href: "#method", label: "How it works" },
+                { href: "#product", label: "The simulation" },
+                { href: "#scorecard", label: "The signal" },
+              ]}
+            />
+            <FooterCol
+              heading="Get started"
+              links={[
+                { href: ASSESSMENT_HREF, label: "Try the simulation" },
+                { href: CONTACT_HREF, label: "Talk to us" },
+              ]}
+            />
           </div>
         </div>
         <div style={{
@@ -448,6 +597,27 @@ function Footer() {
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterCol({ heading, links }: { heading: string; links: { href: string; label: string }[] }) {
+  return (
+    <div>
+      <h5 style={{
+        fontFamily: font.mono, fontSize: 11, fontWeight: 500,
+        letterSpacing: "0.22em", textTransform: "uppercase",
+        color: color.text.muted, margin: "0 0 16px",
+      }}>{heading}</h5>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+        {links.map((l) => (
+          <li key={l.label}>
+            <a href={l.href} style={{ fontFamily: font.mono, fontSize: 12.5, color: color.text.secondary }}>
+              {l.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
