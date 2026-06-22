@@ -23,7 +23,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "assaya. — measure what matters",
-  description: "Real-work capability assessment simulation sandbox",
+  description: "Simulation-based assessment for AI-era roles. A personalized sandbox that scores how people actually work with AI, under real constraints.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

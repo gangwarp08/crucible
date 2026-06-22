@@ -37,11 +37,10 @@ export default function LandingPage(): React.ReactElement {
         <Nav />
         <Hero />
         <Problem />
-        <Thesis />
-        <Method />
-        <Product />
-        <Scorecard />
-        <SignalVsNoise />
+        <Engine />
+        <Simulation />
+        <Signal />
+        <Proof />
         <CTABand />
         <Footer />
       </div>
@@ -53,9 +52,9 @@ export default function LandingPage(): React.ReactElement {
 
 function Nav() {
   const links = [
-    { href: "#method", label: "How it works" },
-    { href: "#product", label: "The simulation" },
-    { href: "#scorecard", label: "The signal" },
+    { href: "#engine", label: "How it works" },
+    { href: "#simulation", label: "The simulation" },
+    { href: "#signal", label: "The signal" },
   ];
   return (
     <nav
@@ -116,7 +115,7 @@ function Hero() {
         <div style={{ marginTop: -36, marginBottom: -78 }}>
           <FlameCube size={150} intensity={60} hue={28} />
         </div>
-        <div style={{ maxWidth: 880 }}>
+        <div style={{ maxWidth: 900 }}>
           <span style={{
             fontFamily: font.mono,
             fontSize: 11.5,
@@ -126,7 +125,7 @@ function Hero() {
             color: color.accent.amber,
             display: "inline-block",
           }}>
-            the real-work assessment for ai engineers
+            dynamic work simulations · built for AI-era roles
           </span>
           <h1 style={{
             fontFamily: font.mono,
@@ -141,20 +140,21 @@ function Hero() {
           </h1>
           <p style={{
             color: color.text.secondary,
-            fontSize: "clamp(1rem, 1.35vw, 1.18rem)",
-            lineHeight: 1.65,
-            maxWidth: "58ch",
+            fontSize: "clamp(1rem, 1.35vw, 1.2rem)",
+            lineHeight: 1.6,
+            maxWidth: "60ch",
             margin: "26px auto 0",
           }}>
-            Résumés lie, portfolios are borrowed, and AI writes the rest. assaya. drops
-            candidates into 90 minutes of the actual job — real tools, live context, AI in
-            the loop — and shows you how they truly work.
+            The nature of work has changed — the way we assess must too. assaya. is
+            simulation-based assessment for AI-era roles: a personalized sandbox that
+            scores how people <em style={{ color: color.text.primary, fontStyle: "normal" }}>actually</em> work
+            with AI, under real constraints.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 36 }}>
             <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
               <Button variant="primary" size="lg">Try the simulation →</Button>
             </Link>
-            <a href="#method" style={{ textDecoration: "none" }}>
+            <a href="#engine" style={{ textDecoration: "none" }}>
               <Button variant="ghost" size="lg">See how it works</Button>
             </a>
           </div>
@@ -166,7 +166,7 @@ function Hero() {
 }
 
 function HeroMeta() {
-  const items = ["90 minutes", "real tools", "AI in the loop", "evidence you can audit"];
+  const items = ["Behavioural Telemetry™", "live-proctored", "dynamic", "evidence you can audit"];
   return (
     <div style={{
       display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center",
@@ -188,244 +188,213 @@ function HeroMeta() {
 /* ─────────────────────────────────────────────────────────────── Problem */
 
 function Problem() {
-  const items = [
-    { ix: "/ résumé",   t: "résumé",    p: "Written by a model, tuned for the keyword filter. A document optimized to pass, not to predict." },
-    { ix: "/ portfolio", t: "portfolio", p: "Borrowed, bought, or generated overnight. You can no longer tell whose work you are looking at." },
-    { ix: "/ take-home", t: "take-home", p: "Completed by the assistant, not the applicant. The artifact is real; the author is a question mark." },
+  const signals = [
+    { badge: "broken",       t: "Résumés",   p: "Written by a model, tuned for the keyword filter — optimized to pass, not to predict." },
+    { badge: "unverifiable", t: "Portfolios", p: "AI-generated and borrowed. You can no longer tell whose work you are looking at." },
+    { badge: "gamed",        t: "Interviews", p: "Half of technical candidates show AI assistance — and most of them still pass." },
   ];
   return (
     <section id="problem" style={{ padding: SECTION_PAD }}>
       <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 760 }}>
+        <div style={{ marginBottom: 44, maxWidth: 820 }}>
           <SectionLabel tone="eyebrow">02 — the problem</SectionLabel>
           <h2 style={sectionTitleStyle()}>
-            Hiring was broken.<br />AI made it <span className="fire-text">worse</span>.
+            AI-augmented engineering is exploding.<br />
+            The tools to hire for it are <span className="fire-text">broken</span>.
           </h2>
           <p style={leadStyle({ marginTop: 22 })}>
-            Every proxy we trusted is now synthetic. Candidates use AI to apply, companies
-            use AI to filter, and real talent gets lost in the middle. You are not screening
-            people anymore — you are screening prompts.
+            Candidates use AI to apply. Companies use AI to filter. Real talent gets lost in
+            the middle — and every proxy we trusted is now synthetic.
           </p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
-          {items.map((it) => (
+          {signals.map((it) => (
             <div key={it.t} className="card-fire-interactive" style={{
               border: `1px solid ${color.border.default}`,
               background:
                 "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0)), " +
                 color.bg.panel,
-              padding: "28px 26px 30px",
+              padding: "26px 26px 28px",
               borderRadius: radius.md,
               position: "relative",
               overflow: "hidden",
             }}>
-              <span style={{ fontFamily: font.mono, fontSize: 11, color: color.text.muted, letterSpacing: "0.20em" }}>
-                {it.ix}
-              </span>
-              <div style={{
-                fontFamily: font.mono, fontWeight: 600, fontSize: "1.45rem",
-                letterSpacing: "-0.02em", margin: "18px 0 12px", color: color.text.primary,
-                display: "inline-block",
-                position: "relative",
+              <span style={{
+                fontFamily: font.mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.18em",
+                textTransform: "uppercase", color: color.accent.base,
+                border: `1px solid rgba(255,106,0,0.45)`, borderRadius: 4, padding: "4px 9px",
               }}>
-                <span style={{ position: "relative", zIndex: 1 }}>{it.t}</span>
-                <span style={{
-                  position: "absolute", left: -2, right: -2, top: "52%", height: 2,
-                  background: color.accent.ember,
-                  zIndex: 0,
-                }} />
-              </div>
-              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.97rem" }}>{it.p}</p>
+                {it.badge}
+              </span>
+              <h3 style={{
+                fontFamily: font.mono, fontWeight: 600, fontSize: "1.4rem",
+                letterSpacing: "-0.02em", margin: "18px 0 10px", color: color.text.primary,
+              }}>{it.t}</h3>
+              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.97rem", lineHeight: 1.6 }}>{it.p}</p>
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────── Thesis */
-
-function Thesis() {
-  return (
-    <section style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ maxWidth: 940 }}>
-          <SectionLabel tone="eyebrow">03 — why now</SectionLabel>
-          <p style={{
-            fontFamily: font.mono,
-            fontWeight: 600,
-            letterSpacing: "-0.045em",
-            lineHeight: 1.18,
-            fontSize: "clamp(1.7rem, 3.6vw, 3rem)",
-            margin: "26px 0 0",
-            color: color.text.primary,
-            textWrap: "balance",
-          }}>
-            The AI engineer already exists. The job is now a human{" "}
-            <span className="fire-text">directing tools</span> — reasoning, delegating,
-            judging, and shipping with AI in the loop. So stop testing whether someone can
-            work{" "}
-            <span style={{ color: color.text.muted, textDecoration: "line-through", textDecorationColor: color.accent.ember }}>
-              without
-            </span>{" "}
-            it. Test how they work <span className="fire-text">with</span> it, under real heat.
-          </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, marginTop: 20 }}>
+          <StatBar n="75%" p={<>of companies report making a <b style={{ color: color.text.primary }}>bad hire this year</b> due to flawed assessment.</>} />
+          <StatBar n="85%" p={<>of interview performance <b style={{ color: color.text.primary }}>doesn&apos;t correlate</b> with actual job performance.</>} />
         </div>
+        <p style={{
+          fontFamily: font.mono, fontSize: "clamp(1.05rem, 1.7vw, 1.4rem)", fontWeight: 600,
+          letterSpacing: "-0.02em", lineHeight: 1.4, color: color.text.primary,
+          borderLeft: `2px solid ${color.accent.base}`, paddingLeft: 22, margin: "40px 0 0", maxWidth: "62ch",
+        }}>
+          <span className="fire-text">Correctness is now a commodity.</span> A coding screen that
+          bans AI tests a skill no engineer uses anymore.
+        </p>
       </div>
     </section>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────── Method */
+function StatBar({ n, p }: { n: string; p: React.ReactNode }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 18,
+      border: `1px solid rgba(255,106,0,0.30)`, background: "rgba(255,106,0,0.04)",
+      borderRadius: radius.md, padding: "20px 24px",
+    }}>
+      <span style={{
+        fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.8rem)",
+        letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base, flexShrink: 0,
+      }}>{n}</span>
+      <span style={{ color: color.text.secondary, fontSize: "0.95rem", lineHeight: 1.5 }}>{p}</span>
+    </div>
+  );
+}
 
-function Method() {
+/* ─────────────────────────────────────────────────────────────── Engine */
+
+function Engine() {
   const steps = [
-    { n: "01", t: "The real environment", p: "IDE, terminal, AI assistant, documentation, and live business context — the same surface the role touches on day one. No whiteboard abstractions." },
-    { n: "02", t: "Role-specific work", p: "Not puzzles. The actual work the role demands, drawn from real scenarios and scoped to 90 focused minutes. Generated fresh every time, so nothing leaks." },
-    { n: "03", t: "We watch how they work", p: "Every decision, prompt, iteration, dead-end, and recovery — not just the final artifact. The process is where the signal lives." },
-    { n: "04", t: "A signal you can defend", p: "Scored across the dimensions that predict on-the-job performance, weighted to your role, with every score linked to what actually happened." },
+    { n: "01", t: "Tell us your stack", p: "A five-minute intake on your tools, domain, the role, and the capabilities that matter. Everything we need to build your simulation — nothing more.", tag: "~5 minutes" },
+    { n: "02", t: "We generate the sandbox", p: "An intelligence engine mirrors your real environment from calibrated templates — your IDE, AI assistant, live personas, and real constraints. Personalized on the surface, fixed in difficulty." },
+    { n: "03", t: "They work, we watch", p: "Behavioural Telemetry™ captures every decision, prompt, and recovery as it happens — aligned with Stanford & ETS standards. Every action scored; every score evidence-linked." },
+    { n: "04", t: "Capability, measured", p: "An AI-Fluency Index™ and a full competency profile come out the other side — ranked, comparable, and fully auditable.", hot: true },
   ];
   return (
-    <section id="method" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
+    <section id="engine" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
       <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 24, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: 620 }}>
-            <SectionLabel tone="eyebrow">04 — how it works</SectionLabel>
+        <div style={{ marginBottom: 44, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 28, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 640 }}>
+            <SectionLabel tone="eyebrow">03 — how it works</SectionLabel>
             <h2 style={sectionTitleStyle()}>
-              90 minutes inside<br />the <span className="fire-text">real job</span>.
+              Your environment in.<br />
+              A <span className="fire-text">calibrated simulation</span> out.
             </h2>
           </div>
-          <p style={leadStyle({ maxWidth: 360 })}>
-            We put candidates under real heat — real tools, real context, real pressure — and watch
-            what it reveals.
+          <p style={leadStyle({ maxWidth: 380 })}>
+            A short form on your stack and role generates a personalized work simulation —
+            built and scored by assessment science to measure AI-era capability.
           </p>
         </div>
         <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 1,
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 1,
           background: color.border.default,
           border: `1px solid ${color.border.default}`,
           borderRadius: radius.md, overflow: "hidden",
         }}>
           {steps.map((s) => (
-            <div key={s.n} style={{ background: "#050403", padding: "34px 32px 38px" }}>
+            <div key={s.n} style={{
+              background: s.hot ? "linear-gradient(180deg, rgba(255,106,0,0.06), transparent)" : "#050403",
+              padding: "32px 28px 36px",
+              boxShadow: s.hot ? "inset 0 0 0 1px rgba(255,106,0,0.25)" : undefined,
+            }}>
               <div style={{
                 fontFamily: font.mono, fontSize: 12, letterSpacing: "0.20em",
                 color: color.accent.amber, display: "flex", alignItems: "center", gap: 10,
               }}>
-                <b style={{ color: color.text.primary, fontWeight: 600 }}>{s.n}</b> / step
+                <b style={{ color: s.hot ? color.accent.base : color.text.primary, fontWeight: 600 }}>{s.n}</b> / step
               </div>
               <h3 style={{
-                fontFamily: font.mono, fontWeight: 600, fontSize: "1.3rem",
-                letterSpacing: "-0.02em", margin: "20px 0 12px", color: color.text.primary,
+                fontFamily: font.mono, fontWeight: 600, fontSize: "1.22rem",
+                letterSpacing: "-0.02em", margin: "18px 0 12px",
+                color: s.hot ? color.accent.base : color.text.primary,
               }}>{s.t}</h3>
-              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.98rem", maxWidth: "42ch" }}>{s.p}</p>
+              {s.tag && (
+                <span style={{
+                  display: "inline-block", marginBottom: 12,
+                  fontFamily: font.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.14em",
+                  textTransform: "uppercase", color: color.accent.base,
+                  border: `1px solid rgba(255,106,0,0.45)`, borderRadius: 5, padding: "5px 10px",
+                }}>{s.tag}</span>
+              )}
+              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.95rem", lineHeight: 1.55 }}>{s.p}</p>
             </div>
           ))}
         </div>
+        <p style={{
+          fontFamily: font.mono, fontSize: "clamp(1.1rem, 2vw, 1.5rem)", fontWeight: 600,
+          letterSpacing: "-0.02em", lineHeight: 1.35, color: color.text.primary,
+          textAlign: "center", margin: "40px auto 0", maxWidth: "44ch", textWrap: "balance",
+        }}>
+          Personalized for fidelity. <span className="fire-text">Standardized for fairness.</span> Generated in minutes, not months.
+        </p>
       </div>
     </section>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────── Product */
+/* ─────────────────────────────────────────────────────────────── Simulation */
 
-function Product() {
-  const features = [
-    { t: "A real IDE & terminal", p: "A full editor, shell, and runnable project. Candidates build, run, and debug exactly like any normal working day." },
-    { t: "AI assistant on tap", p: "The same copilots they would use at work. We watch how they prompt, verify, and push back — not whether they used it." },
-    { t: "Live context to navigate", p: "Docs, a database, and a product brief with real ambiguity. They have to ask the right questions, not just answer a self-contained puzzle." },
-    { t: "People in the loop", p: "A client and a teammate to align with and update. Communication is part of the job, so it is part of the assessment." },
-    { t: "Real constraints", p: "Time, tokens, and compute are finite. You see how a candidate prioritizes when they can't do everything at once." },
-    { t: "Dynamic & proctored", p: "Every scenario is generated fresh and identity-verified — leak-proof, and impossible to ghost-write your way through." },
+function Simulation() {
+  const tiles = [
+    "IDE Workspace", "AI Assistant", "Database", "Documentation",
+    "Terminal", "Client Persona", "Teammate Persona", "Deliverable",
   ];
   return (
-    <section id="product" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
+    <section id="simulation" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
       <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 760 }}>
-          <SectionLabel tone="eyebrow">05 — inside the simulation</SectionLabel>
+        <div style={{ marginBottom: 44, maxWidth: 820 }}>
+          <SectionLabel tone="eyebrow">04 — the simulation</SectionLabel>
           <h2 style={sectionTitleStyle()}>
-            One workspace.<br />The <span className="fire-text">whole job</span>.
+            One workspace.<br />Every <span className="fire-text">real-world tool</span>.
           </h2>
           <p style={leadStyle({ marginTop: 22 })}>
             Candidates work in a real, sandboxed dev environment — not a whiteboard.
             Everything the role touches on day one is one tab away.
           </p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
-          {features.map((f) => (
-            <div key={f.t} style={{
-              border: `1px solid ${color.border.default}`,
-              background: color.bg.panel,
-              padding: "26px 26px 28px",
-              borderRadius: radius.md,
-            }}>
-              <div style={{
-                width: 7, height: 7, background: color.accent.base, marginBottom: 18,
-              }} />
-              <h3 style={{
-                fontFamily: font.mono, fontWeight: 600, fontSize: "1.15rem",
-                letterSpacing: "-0.02em", margin: "0 0 10px", color: color.text.primary,
-              }}>{f.t}</h3>
-              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.96rem", lineHeight: 1.6 }}>{f.p}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────── Scorecard */
-
-function Scorecard() {
-  const points = [
-    {
-      t: "A multi-parameter score",
-      p: "Not a single number, and never pass/fail. Candidates are scored across the dimensions that actually predict performance — problem framing, execution, judgment, collaboration — weighted to the role you are filling.",
-    },
-    {
-      t: "Linked to the evidence",
-      p: "Every score traces back to the exact moments that earned it. No black box: click through to what the candidate actually did, said, and shipped.",
-    },
-    {
-      t: "An AI-fluency read",
-      p: "See where each person lands — leaning on AI, working with it, or truly orchestrating it: catching its mistakes, knowing when not to use it, and multiplying their own output.",
-    },
-  ];
-  return (
-    <section id="scorecard" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 760 }}>
-          <SectionLabel tone="eyebrow">06 — the signal</SectionLabel>
-          <h2 style={sectionTitleStyle()}>
-            One session.<br />A decision you can <span className="fire-text">defend</span>.
-          </h2>
-          <p style={leadStyle({ marginTop: 22 })}>
-            When it is over, you don&apos;t get a vague thumbs-up. You get the evidence —
-            structured, comparable across candidates, and built to hold up in a hiring review.
-          </p>
-        </div>
         <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 1,
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 1,
           background: color.border.default,
           border: `1px solid ${color.border.default}`,
           borderRadius: radius.md, overflow: "hidden",
         }}>
-          {points.map((pt, i) => (
-            <div key={pt.t} style={{ background: "#050403", padding: "32px 30px 36px" }}>
-              <div style={{
-                fontFamily: font.mono, fontSize: 12, letterSpacing: "0.20em",
-                color: color.accent.amber,
+          {tiles.map((t) => (
+            <div key={t} style={{ background: "#050403", padding: "26px 24px", minHeight: 96, display: "flex", alignItems: "flex-end" }}>
+              <span style={{
+                fontFamily: font.mono, fontSize: 13, fontWeight: 600, letterSpacing: "0.06em",
+                textTransform: "uppercase", color: color.text.secondary,
+                display: "inline-flex", alignItems: "center", gap: 10,
               }}>
-                <b style={{ color: color.text.primary, fontWeight: 600 }}>{`0${i + 1}`}</b>
-              </div>
-              <h3 style={{
-                fontFamily: font.mono, fontWeight: 600, fontSize: "1.2rem",
-                letterSpacing: "-0.02em", margin: "18px 0 12px", color: color.text.primary,
-              }}>{pt.t}</h3>
-              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.96rem", lineHeight: 1.6 }}>{pt.p}</p>
+                <span style={{ width: 6, height: 6, background: color.accent.base, flexShrink: 0 }} />
+                {t}
+              </span>
             </div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20, marginTop: 20 }}>
+          <Badge tag="Live proctoring" p="Video + identity verified, end to end — so you know who actually did the work." />
+          <Badge tag="Dynamic scenario engine" p="Personalized to the role's environment with progressive difficulty — never identical, impossible to leak." />
+        </div>
+        <div style={{
+          marginTop: 20, border: `1px solid ${color.border.default}`, borderRadius: radius.md,
+          padding: "18px 24px", display: "flex", gap: 16, flexWrap: "wrap",
+          alignItems: "center", justifyContent: "center",
+          fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase",
+          color: color.text.muted,
+        }}>
+          <span style={{ color: color.accent.amber, fontWeight: 600 }}>Real-world constraints</span>
+          {["time", "tokens", "compute", "money", "memory"].map((c, i) => (
+            <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 16 }}>
+              {i > 0 && <span style={{ color: color.border.strong }}>·</span>}
+              <span style={{ color: color.text.secondary }}>{c}</span>
+            </span>
           ))}
         </div>
       </div>
@@ -433,73 +402,159 @@ function Scorecard() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────── Signal/Noise */
-
-function SignalVsNoise() {
-  const noise  = ["résumé keywords", "school & pedigree", "take-home polish", "interview charisma"];
-  const signal = ["how they actually think", "how they wield their tools", "how they recover from failure", "what they truly ship"];
+function Badge({ tag, p }: { tag: string; p: string }) {
   return (
-    <section style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
+    <div style={{ border: `1px solid ${color.border.default}`, background: color.bg.panel, borderRadius: radius.md, padding: "24px 26px" }}>
+      <span style={{
+        fontFamily: font.mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.20em",
+        textTransform: "uppercase", color: color.accent.base,
+      }}>{tag}</span>
+      <p style={{ color: color.text.secondary, margin: "12px 0 0", fontSize: "0.96rem", lineHeight: 1.6 }}>{p}</p>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────── Signal */
+
+function Signal() {
+  const pillars = [
+    { n: "01", t: "The Basics", s: "Core competency", items: ["Software engineering fundamentals", "Problem decomposition & structuring", "Code quality, accuracy & debugging"] },
+    { n: "02", t: "The Process", s: "How they work · most important", hot: true, items: ["AI orchestration & prompt design", "Verification & judgment — knows when AI is wrong", "Adaptability when the model fails", "Stakeholder communication & product mindset"] },
+    { n: "03", t: "The Outcome", s: "What gets delivered", items: ["Deliverable meets brief & constraints", "Resource efficiency — time, tokens, cost", "Stakeholder-ready output"] },
+  ];
+  return (
+    <section id="signal" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
       <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 40, maxWidth: 700 }}>
-          <SectionLabel tone="eyebrow">07 — signal vs noise</SectionLabel>
-          <h2 style={sectionTitleStyle()}>Burn off the noise.</h2>
+        <div style={{ marginBottom: 44, maxWidth: 820 }}>
+          <SectionLabel tone="eyebrow">05 — the signal</SectionLabel>
+          <h2 style={sectionTitleStyle()}>
+            Every action,<br /><span className="fire-text">scored and ranked</span>.
+          </h2>
+          <p style={leadStyle({ marginTop: 22 })}>
+            Not a pass/fail. A decision you can defend — scored on the basics, the process,
+            and the outcome, with every score linked to the exact moments that earned it.
+          </p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
-          <SnCol
-            title="What you screen today"
-            tick="✕"
-            items={noise}
-            tone="noise"
-          />
-          <SnCol
-            title="What survives the heat"
-            tick="▲"
-            items={signal}
-            tone="signal"
-          />
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          {pillars.map((p) => (
+            <div key={p.n} style={{
+              border: `1px solid ${p.hot ? "rgba(255,106,0,0.5)" : color.border.default}`,
+              background: p.hot ? "linear-gradient(180deg, rgba(255,106,0,0.05), transparent)" : color.bg.panel,
+              borderRadius: radius.md, padding: "26px 26px 28px",
+              boxShadow: p.hot ? "0 30px 80px -50px rgba(255,106,0,0.45)" : undefined,
+            }}>
+              <div style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: p.hot ? color.accent.base : color.text.muted }}>
+                {p.n} · {p.s}
+              </div>
+              <h3 style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1.5rem", letterSpacing: "-0.02em", margin: "12px 0 16px", color: p.hot ? color.accent.base : color.text.primary }}>
+                {p.t}
+              </h3>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                {p.items.map((it) => (
+                  <li key={it} style={{ display: "flex", gap: 11, color: color.text.secondary, fontSize: "0.93rem", lineHeight: 1.5 }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: p.hot ? color.accent.base : color.text.muted, marginTop: 8, flexShrink: 0 }} />
+                    {it}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
+
+        <FluencyIndex />
       </div>
     </section>
   );
 }
 
-function SnCol({ title, items, tick, tone }: { title: string; items: string[]; tick: string; tone: "noise" | "signal" }) {
-  const isSignal = tone === "signal";
+function FluencyIndex() {
+  const levels = [
+    { t: "AI-Dependent", v: "~20", p: "Leans on AI for answers; can't tell when it's wrong.", tone: "muted" as const },
+    { t: "AI-Augmented", v: "~55", p: "Directs AI well and verifies it; a reliable, productive contributor.", tone: "mid" as const },
+    { t: "AI-Orchestrator", v: "~90", p: "Multiplies output, catches model failures, and knows when not to use it.", tone: "hot" as const },
+  ];
+  const c = (tone: "muted" | "mid" | "hot") =>
+    tone === "hot" ? color.accent.base : tone === "mid" ? color.text.primary : color.text.muted;
   return (
     <div style={{
-      border: `1px solid ${isSignal ? "rgba(255, 150, 0, 0.35)" : color.border.default}`,
-      borderRadius: radius.md,
-      padding: "30px 30px 34px",
-      background: isSignal
-        ? "linear-gradient(180deg, rgba(255, 120, 0, 0.04), transparent)"
-        : "rgba(255, 255, 255, 0.008)",
-      boxShadow: isSignal ? "0 30px 80px -50px rgba(255, 106, 0, 0.45)" : undefined,
+      marginTop: 20, border: `1px solid rgba(255,106,0,0.30)`, borderRadius: radius.md,
+      padding: "28px 30px 30px", background: "rgba(255,106,0,0.02)",
     }}>
-      <h4 style={{
-        fontFamily: font.mono, fontSize: 12, letterSpacing: "0.22em",
-        textTransform: "uppercase", margin: "0 0 22px",
-        color: isSignal ? color.accent.amber : color.text.muted,
-      }}>{title}</h4>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {items.map((it, i) => (
-          <li key={it} style={{
-            fontFamily: font.mono, fontSize: "1.05rem", letterSpacing: "-0.01em",
-            padding: "14px 0",
-            borderTop: i === 0 ? "none" : `1px solid ${color.border.default}`,
-            display: "flex", alignItems: "center", gap: 14,
-            color: isSignal ? color.text.primary : color.text.muted,
-            textDecoration: isSignal ? "none" : "line-through",
-            textDecorationColor: isSignal ? undefined : "rgba(255, 61, 0, 0.6)",
-          }}>
-            <span style={{ fontFamily: font.mono, fontSize: 12, color: isSignal ? color.accent.base : color.text.muted }}>
-              {tick}
-            </span>
-            {it}
-          </li>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1.4rem", letterSpacing: "-0.02em", color: color.text.primary }}>
+          AI-Fluency Index<span style={{ color: color.accent.base, fontSize: "0.6em", verticalAlign: "super" }}>™</span>
+        </span>
+        <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: color.accent.base }}>
+          not pass / fail · a calibrated spectrum
+        </span>
+      </div>
+      {/* spectrum bar */}
+      <div style={{ position: "relative", margin: "30px 0 24px" }}>
+        <div style={{ height: 10, borderRadius: 6, background: "linear-gradient(90deg, #45403b 0%, #5f5346 28%, #9a6526 58%, #ff6a00 86%, #ff9500 100%)" }} />
+        {[20, 55, 90].map((left, i) => (
+          <span key={left} style={{
+            position: "absolute", left: `${left}%`, top: "50%", transform: "translate(-50%, -50%)",
+            width: i === 2 ? 14 : 10, height: i === 2 ? 14 : 10, borderRadius: "50%",
+            background: i === 2 ? color.accent.base : "#1c1916",
+            border: `2px solid ${i === 2 ? color.accent.hover : i === 1 ? color.accent.hover : color.text.muted}`,
+          }} />
         ))}
-      </ul>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontFamily: font.mono, fontSize: 10, letterSpacing: "0.12em", color: color.text.muted }}>
+          <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24 }}>
+        {levels.map((l) => (
+          <div key={l.t} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1rem", letterSpacing: "-0.01em", color: c(l.tone) }}>{l.t}</span>
+              <span style={{ fontFamily: font.mono, fontSize: 12, color: c(l.tone) }}>{l.v}</span>
+            </div>
+            <p style={{ color: l.tone === "hot" ? color.text.secondary : color.text.muted, fontSize: "0.9rem", lineHeight: 1.5, margin: 0 }}>{l.p}</p>
+          </div>
+        ))}
+      </div>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────── Proof */
+
+function Proof() {
+  const metrics = [
+    { n: "10×", l: "faster screening" },
+    { n: "95%", l: "cost saving" },
+    { n: "90%", l: "SME time saved" },
+    { n: "40 → 4", l: "interviews per hire" },
+  ];
+  return (
+    <section style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
+      <div style={WRAP_STYLE}>
+        <div style={{ marginBottom: 44, maxWidth: 820 }}>
+          <SectionLabel tone="eyebrow">06 — the impact</SectionLabel>
+          <h2 style={sectionTitleStyle()}>
+            20 candidates. ~40 interviews.<br /><span className="fire-text">Replaced</span>.
+          </h2>
+          <p style={leadStyle({ marginTop: 22 })}>
+            Keep the manager and SME judgment that can&apos;t be replaced. assaya. absorbs the
+            broken middle — the simulations of real work that every fake signal turns into
+            another interview.
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 1, background: color.border.default, border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
+          {metrics.map((m) => (
+            <div key={m.l} style={{ background: "#050403", padding: "34px 28px 36px" }}>
+              <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base }}>{m.n}</div>
+              <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: color.text.secondary, marginTop: 14 }}>{m.l}</div>
+            </div>
+          ))}
+        </div>
+        <p style={{ color: color.text.muted, fontSize: "0.95rem", lineHeight: 1.6, margin: "24px 0 0", maxWidth: "70ch" }}>
+          Plus the immeasurable cost — never giving genuinely capable people a fair shot.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -556,22 +611,22 @@ function Footer() {
     <footer style={{ borderTop: `1px solid ${color.border.default}`, padding: "56px 0 40px" }}>
       <div style={WRAP_STYLE}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 30, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: "32ch" }}>
+          <div style={{ maxWidth: "34ch" }}>
             <Wordmark size={22} />
             <p style={{
               color: color.text.secondary, fontSize: "0.92rem",
               marginTop: 18, lineHeight: 1.65,
             }}>
-              The real-work assessment for AI engineers.<br />Measure what matters.
+              Simulation-based assessment for AI-era roles.<br />Measure what matters.
             </p>
           </div>
           <div style={{ display: "flex", gap: 60, flexWrap: "wrap" }}>
             <FooterCol
               heading="Product"
               links={[
-                { href: "#method", label: "How it works" },
-                { href: "#product", label: "The simulation" },
-                { href: "#scorecard", label: "The signal" },
+                { href: "#engine", label: "How it works" },
+                { href: "#simulation", label: "The simulation" },
+                { href: "#signal", label: "The signal" },
               ]}
             />
             <FooterCol
@@ -628,7 +683,7 @@ function sectionTitleStyle(): React.CSSProperties {
     fontFamily: font.mono,
     fontWeight: 600,
     letterSpacing: "-0.04em",
-    lineHeight: 1.02,
+    lineHeight: 1.05,
     fontSize: "clamp(2rem, 4.4vw, 3.4rem)",
     margin: "22px 0 0",
     color: color.text.primary,
