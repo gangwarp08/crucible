@@ -17,7 +17,7 @@ const MAXW = 1180;
 // catalog lists every scenario; the per-scenario start screen is one click
 // further in.
 const ASSESSMENT_HREF = "/scenarios";
-const CONTACT_HREF = "mailto:hello@crucible.dev";
+const CONTACT_HREF = "mailto:hello@assaya.com";
 
 const WRAP_STYLE = {
   width: "100%",
@@ -146,7 +146,7 @@ function Hero() {
             maxWidth: "58ch",
             margin: "26px auto 0",
           }}>
-            Résumés lie, portfolios are borrowed, and AI writes the rest. crucible. drops
+            Résumés lie, portfolios are borrowed, and AI writes the rest. assaya. drops
             candidates into 90 minutes of the actual job — real tools, live context, AI in
             the loop — and shows you how they truly work.
           </p>
@@ -297,8 +297,8 @@ function Method() {
             </h2>
           </div>
           <p style={leadStyle({ maxWidth: 360 })}>
-            We put candidates in the crucible — real tools, real context, real pressure — and watch
-            what the heat reveals.
+            We put candidates under real heat — real tools, real context, real pressure — and watch
+            what it reveals.
           </p>
         </div>
         <div style={{
@@ -453,7 +453,7 @@ function SignalVsNoise() {
             tone="noise"
           />
           <SnCol
-            title="What survives the crucible"
+            title="What survives the heat"
             tick="▲"
             items={signal}
             tone="signal"
@@ -530,7 +530,7 @@ function CTABand() {
           margin: "20px 0 0", color: color.text.primary,
           textWrap: "balance",
         }}>
-          Put it in the <span className="fire-text">crucible</span>.
+          Put it through <span className="fire-text">assaya</span>.
         </h2>
         <p style={leadStyle({ margin: "24px auto 0", textAlign: "center" })}>
           Run a pilot with one role. See real signal in a week — and never read another
@@ -589,7 +589,7 @@ function Footer() {
           gap: 16, flexWrap: "wrap",
         }}>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
-            © 2026 crucible. — measure what matters.
+            © 2026 assaya. — measure what matters.
           </span>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
             forged under pressure ▲

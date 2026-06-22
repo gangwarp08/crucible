@@ -230,7 +230,7 @@ export default function Workspace({ sessionId }: Props) {
               whiteSpace: "nowrap",
             }}
           >
-            {scenario.title ?? "Crucible session"}
+            {scenario.title ?? "Assaya session"}
           </div>
           {scenario.difficulty && (
             <Pill tone={scenario.difficulty === "mid" ? "warn" : "neutral"}>

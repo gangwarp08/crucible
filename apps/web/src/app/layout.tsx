@@ -12,7 +12,7 @@ const plexSans = IBM_Plex_Sans({
 });
 
 // Monospace — used for headlines, labels, editor, terminal, and any numerics
-// that benefit from tabular-nums. The crucible design system leans heavily
+// that benefit from tabular-nums. The assaya design system leans heavily
 // on Plex Mono for headings and structural copy.
 const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -22,7 +22,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "crucible. — measure what matters",
+  title: "assaya. — measure what matters",
   description: "Real-work capability assessment simulation sandbox",
 };
 
