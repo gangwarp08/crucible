@@ -1,4 +1,4 @@
-// assaya design tokens — single source of truth for the fire-theme dark UI.
+// asaya design tokens — single source of truth for the fire-theme dark UI.
 //
 // Every visual primitive (components/ui/*) and every page-level component
 // imports from here. Direct hexes in components are a smell — if you find

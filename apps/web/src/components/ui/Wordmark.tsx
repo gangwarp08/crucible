@@ -64,7 +64,7 @@ interface WordmarkProps {
   size?: number;
 }
 
-/** Full lockup: flaming cube + the "assaya." wordmark. The trailing dot
+/** Full lockup: flaming cube + the "asaya." wordmark. The trailing dot
  *  is rendered in the fire accent and is a deliberate piece of the brand. */
 export default function Wordmark({ size = 22 }: WordmarkProps): React.ReactElement {
   // Word font-size derived from glyph size so the lockup scales together.
@@ -82,7 +82,7 @@ export default function Wordmark({ size = 22 }: WordmarkProps): React.ReactEleme
           lineHeight: 1,
         }}
       >
-        assaya<span style={{ color: color.accent.base }}>.</span>
+        asaya<span style={{ color: color.accent.base }}>.</span>
       </span>
     </div>
   );

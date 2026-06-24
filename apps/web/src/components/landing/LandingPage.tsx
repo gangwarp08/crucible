@@ -17,7 +17,7 @@ const MAXW = 1180;
 // catalog lists every scenario; the per-scenario start screen is one click
 // further in.
 const ASSESSMENT_HREF = "/scenarios";
-const CONTACT_HREF = "mailto:hello@assaya.com";
+const CONTACT_HREF = "mailto:hello@asaya.com";
 
 const WRAP_STYLE = {
   width: "100%",
@@ -145,7 +145,7 @@ function Hero() {
             maxWidth: "60ch",
             margin: "26px auto 0",
           }}>
-            The nature of work has changed — the way we assess must too. assaya. is
+            The nature of work has changed — the way we assess must too. asaya. is
             simulation-based assessment for AI-era roles: a personalized sandbox that
             scores how people <em style={{ color: color.text.primary, fontStyle: "normal" }}>actually</em> work
             with AI, under real constraints.
@@ -537,7 +537,7 @@ function Proof() {
             20 candidates. ~40 interviews.<br /><span className="fire-text">Replaced</span>.
           </h2>
           <p style={leadStyle({ marginTop: 22 })}>
-            Keep the manager and SME judgment that can&apos;t be replaced. assaya. absorbs the
+            Keep the manager and SME judgment that can&apos;t be replaced. asaya. absorbs the
             broken middle — the simulations of real work that every fake signal turns into
             another interview.
           </p>
@@ -585,7 +585,7 @@ function CTABand() {
           margin: "20px 0 0", color: color.text.primary,
           textWrap: "balance",
         }}>
-          Put it through <span className="fire-text">assaya</span>.
+          Put it through <span className="fire-text">asaya</span>.
         </h2>
         <p style={leadStyle({ margin: "24px auto 0", textAlign: "center" })}>
           Run a pilot with one role. See real signal in a week — and never read another
@@ -644,7 +644,7 @@ function Footer() {
           gap: 16, flexWrap: "wrap",
         }}>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
-            © 2026 assaya. — measure what matters.
+            © 2026 asaya. — measure what matters.
           </span>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
             forged under pressure ▲
