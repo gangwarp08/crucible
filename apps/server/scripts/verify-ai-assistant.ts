@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.7 — the in-platform AI assistant.
 //
 // Creates an fde-db-triage session with a tiny tokenBudgetOverride so a couple
@@ -41,6 +40,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
 const TOKEN_BUDGET = 500;          // small enough that 2-3 chats exhaust it
+
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -89,7 +97,7 @@ async function postChat(
 > {
   const res = await fetch(`${SERVER_URL}/api/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sessionId, prompt }),
   });
   const text = await res.text();
@@ -127,12 +135,14 @@ async function postChat(
     console.error("session create failed:", createRes.status, await createRes.text());
     process.exit(1);
   }
-  const { sessionId } = (await createRes.json()) as { sessionId: string };
+  const createBody = (await createRes.json()) as { sessionId: string; token?: string };
+  const { sessionId } = createBody;
+  if (createBody.token) tokens.set(createBody.sessionId, createBody.token);
   console.log(`\n[setup] session ${sessionId} created (token budget = ${TOKEN_BUDGET})`);
 
   // 3. GET /sessions/:id — confirm initial balance came back.
   console.log(`\n[a] GET /sessions/:id`);
-  const getRes = await fetch(`${SERVER_URL}/sessions/${sessionId}`).then((r) => r.json());
+  const getRes = await fetch(`${SERVER_URL}/sessions/${sessionId}`, { headers: { ...authHeaders(sessionId) } }).then((r) => r.json());
   if (getRes.scenarioTokensRemaining === TOKEN_BUDGET)
     pass(`scenarioTokensRemaining = ${TOKEN_BUDGET} on initial GET`);
   else fail(`expected scenarioTokensRemaining=${TOKEN_BUDGET}, got ${JSON.stringify(getRes.scenarioTokensRemaining)}`);
@@ -193,7 +203,9 @@ async function postChat(
   if (!exhaustedCreate.ok) {
     fail(`could not create exhausted-session: ${exhaustedCreate.status}`);
   } else {
-    const { sessionId: exhaustedSessionId } = (await exhaustedCreate.json()) as { sessionId: string };
+    const exhaustedBody = (await exhaustedCreate.json()) as { sessionId: string; token?: string };
+    const { sessionId: exhaustedSessionId } = exhaustedBody;
+    if (exhaustedBody.token) tokens.set(exhaustedBody.sessionId, exhaustedBody.token);
     const ex = await postChat(exhaustedSessionId, "Anything.");
     if (ex.kind === "reject" && ex.status === 402 && ex.body.error === "token_budget_exhausted") {
       pass(`pre-flight returned 402 token_budget_exhausted without an LLM call`);
@@ -212,7 +224,7 @@ async function postChat(
       .like("type", "ai.assistant.%");
     if (!evs || evs.length === 0) pass("no ai.assistant.* events emitted on pre-flight reject");
     else fail(`unexpected ai.assistant.* events on pre-flight reject: ${JSON.stringify(evs)}`);
-    await fetch(`${SERVER_URL}/sessions/${exhaustedSessionId}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`${SERVER_URL}/sessions/${exhaustedSessionId}`, { method: "DELETE", headers: { ...authHeaders(exhaustedSessionId) } }).catch(() => {});
   }
 
   // 7. Persona message — must NOT touch scenario_state.tokens.
@@ -224,8 +236,10 @@ async function postChat(
 
     // Open the messaging WS, send a message to the team channel, wait for reply.
     const wsBase = SERVER_URL.replace(/^http/, "ws");
+    const wsToken = tokens.get(sessionId);
+    const wsProtocols = wsToken ? [`bearer.${wsToken}`] : undefined;
     const ws = await new Promise<WS>((resolveOpen, rejectOpen) => {
-      const s = new WS(`${wsBase}/messages/${sessionId}`);
+      const s = new WS(`${wsBase}/messages/${sessionId}`, wsProtocols);
       s.once("open", () => resolveOpen(s));
       s.once("error", (err) => rejectOpen(err));
     });
@@ -340,7 +354,7 @@ async function postChat(
   }
 
   // Clean up.
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } }).catch(() => {});
 
   console.log("\n" +
     (failures === 0

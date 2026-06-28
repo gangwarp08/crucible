@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Three-part verifier for the fde-db-triage scenario:
 //   (a) Read back the scenarios row and assert all JSONB fields are populated
 //       and the 8 rubric weights sum to 1.0 (using integer hundredths to dodge

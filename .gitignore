@@ -12,6 +12,7 @@ build/
 out/
 coverage/
 *.tsbuildinfo
+.turbo/
 
 # --- logs / os / editor ---
 *.log

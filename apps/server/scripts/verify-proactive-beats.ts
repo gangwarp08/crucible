@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.6 — scripted proactive persona beats.
 //
 // Creates a fast-forwarded fde-db-triage session (beatTimingOverridesMs sets
@@ -35,6 +34,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
+
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
 
 // Beat offsets passed to POST /sessions. Real production timings are 30s
 // (Sam) and 25min (Dana); we compress to 3s / 15s here so the verifier
@@ -85,7 +93,9 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 function openMessagingWs(sessionId: string): Promise<WS> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     ws.once("open", () => resolveOpen(ws));
     ws.once("error", (err) => rejectOpen(err));
   });
@@ -166,7 +176,8 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
     console.error("session create failed:", createRes.status, await createRes.text());
     process.exit(1);
   }
-  const { sessionId } = (await createRes.json()) as { sessionId: string };
+  const { sessionId, token } = (await createRes.json()) as { sessionId: string; token?: string };
+  if (token) tokens.set(sessionId, token);
   const sessionStartMs = Date.now();
   console.log(`[setup] session ${sessionId} created (Sam@T+${SAM_OFFSET_MS}ms, Dana@T+${DANA_OFFSET_MS}ms)`);
 
@@ -356,7 +367,7 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
   }
 
   // Clean up.
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } }).catch(() => {});
 
   console.log("\n" + (failures === 0 ? "ALL CHECKS PASSED" : `FAILED: ${failures} check(s)`));
   process.exit(failures === 0 ? 0 : 1);

@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Calibration step 1 — discrimination check.
 //
 // Runs two SCRIPTED playthroughs of fde-db-triage end to end, lets each
@@ -44,6 +43,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
 
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,7 +78,9 @@ type Inbound = PersonaMsg | ErrMsg;
 function openMessagingWs(sessionId: string): Promise<WS> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     ws.once("open", () => resolveOpen(ws));
     ws.once("error", (err) => rejectOpen(err));
   });
@@ -169,8 +179,9 @@ async function createSession(scenarioId: string): Promise<string> {
   if (!r.ok) {
     throw new Error(`session create failed: ${r.status} ${await r.text()}`);
   }
-  const { sessionId } = (await r.json()) as { sessionId: string };
-  return sessionId;
+  const body = (await r.json()) as { sessionId: string; token?: string };
+  if (body.token) tokens.set(body.sessionId, body.token);
+  return body.sessionId;
 }
 
 // ─── STRONG playthrough ────────────────────────────────────────────────────
@@ -214,7 +225,7 @@ async function runStrongPlaythrough(scenarioId: string): Promise<PlayResult> {
   // [3] View both docs.
   for (const docId of ["data-dictionary", "revenue-dashboard-definition"]) {
     const r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: "{}",
     });
     if (!r.ok) note(result, `doc view ${docId} failed: ${r.status}`);
   }
@@ -230,7 +241,7 @@ async function runStrongPlaythrough(scenarioId: string): Promise<PlayResult> {
     ORDER BY month
   `.trim();
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: naiveSql }),
   });
   note(result, "naive monthly SUM query (inflated baseline)");
@@ -251,7 +262,7 @@ async function runStrongPlaythrough(scenarioId: string): Promise<PlayResult> {
     ORDER BY month
   `.trim();
   const dedupRes = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: dedupSql }),
   }).then((r) => r.json()) as { status: string; rows?: unknown[][] };
   if (dedupRes.status === "ok" && (dedupRes.rows ?? []).length === 3) {
@@ -262,7 +273,7 @@ async function runStrongPlaythrough(scenarioId: string): Promise<PlayResult> {
 
   // [6] Duplicate fingerprint — proves the duplicates exist.
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({
       sql: "SELECT external_payment_id, COUNT(*) FROM payments WHERE status='succeeded' GROUP BY external_payment_id HAVING COUNT(*) > 1 LIMIT 5",
     }),
@@ -291,7 +302,7 @@ async function runStrongPlaythrough(scenarioId: string): Promise<PlayResult> {
   // [8] One AI-assistant turn (canonical SQLite dedup pattern).
   try {
     const cr = await fetch(`${SERVER_URL}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({
         sessionId,
         prompt: "One sentence: in SQLite, when SUMming amount_cents from a payments table with duplicate rows sharing external_payment_id, what's the canonical dedup-then-SUM pattern?",
@@ -336,14 +347,14 @@ async function runStrongPlaythrough(scenarioId: string): Promise<PlayResult> {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify(deliv),
   });
   if (dr.ok) note(result, "deliverable submitted (complete, correct figures, upstream-fix rec)");
   else note(result, `deliverable submit FAILED: ${dr.status} ${(await dr.text()).slice(0, 100)}`);
 
   // End → auto-eval.
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   note(result, "session DELETEd → auto-eval triggered");
 
   return result;
@@ -398,7 +409,7 @@ async function runWeakPlaythrough(scenarioId: string): Promise<PlayResult> {
     ORDER BY month
   `.trim();
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: naiveSql }),
   });
   note(result, "ONE naive SUM query (no dedup, no fingerprint)");
@@ -443,14 +454,14 @@ async function runWeakPlaythrough(scenarioId: string): Promise<PlayResult> {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify(deliv),
   });
   if (dr.ok) note(result, "deliverable submitted (inflated figures, red-herring cause, trivial tradeoffs)");
   else note(result, `deliverable submit FAILED: ${dr.status} ${(await dr.text()).slice(0, 100)}`);
 
   // End → auto-eval.
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   note(result, "session DELETEd → auto-eval triggered");
 
   return result;
