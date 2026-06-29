@@ -9,7 +9,14 @@ import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
 import { loadScenarioById, type Scenario } from "./scenarios.js";
 import { seedScenarioDataset } from "./dataset-seed.js";
-import type { ScheduledBeat } from "./registry.js";
+import { freshVerificationState, type ScheduledBeat } from "./registry.js";
+
+// L4 verification (Slice 5.4b) fires this many ms BEFORE the session deadline,
+// so the interactive defense completes while the session is still live (the
+// LiteLLM key + sandbox are torn down at the deadline). Tests fast-forward via
+// beatTimingOverridesMs["verification"] (an absolute offset from session start).
+const VERIFICATION_LEAD_MS = 5 * 60_000;
+const VERIFICATION_BEAT_ID = "verification";
 
 /** Map a scenario curveball id to the reveal flag it sets when fired. New
  *  curveballs need a row here AND a matching personaState flag. */
@@ -48,6 +55,7 @@ export function effectiveBandForSession(scenarioBand: string | null): string | n
 function computeScheduledBeats(
   scenario: Scenario,
   baseMs: number,
+  timeoutMs: number,
   overridesMs: Record<string, number> | undefined,
 ): ScheduledBeat[] {
   const sessionBand = bandLevel(effectiveBandForSession(scenario.difficulty ?? null));
@@ -68,12 +76,30 @@ function computeScheduledBeats(
 
     out.push({
       id: raw.id,
+      kind: "persona",
       channel,
       beat,
       due_ts: new Date(baseMs + offsetMs).toISOString(),
       fired: false,
     });
   }
+
+  // L4 verification beat (Slice 5.4b) — one per scenario-bound session, due
+  // VERIFICATION_LEAD_MS before the deadline. The test override sets an absolute
+  // offset from session start; otherwise clamp so it never lands in the past for
+  // unusually short timeouts.
+  const verifOffsetMs =
+    overridesMs?.[VERIFICATION_BEAT_ID] !== undefined
+      ? overridesMs[VERIFICATION_BEAT_ID]!
+      : Math.max(0, timeoutMs - VERIFICATION_LEAD_MS);
+  out.push({
+    id: VERIFICATION_BEAT_ID,
+    kind: "verification",
+    channel: "verifier",
+    due_ts: new Date(baseMs + verifOffsetMs).toISOString(),
+    fired: false,
+  });
+
   return out;
 }
 
@@ -106,6 +132,7 @@ export async function createSandbox(
       const scheduledBeats = computeScheduledBeats(
         scenario,
         createdAtMs,
+        timeoutMs,
         beatTimingOverridesMs,
       );
       scenarioState = {
@@ -114,6 +141,7 @@ export async function createSandbox(
           client: { revealed_specifics: false, requirement_changed: false },
           team:   { gave_refund_hint: false, gave_webhook_clue: false },
         },
+        verification: freshVerificationState(),
         scheduled_beats: scheduledBeats,
         // Frozen snapshot of the starting constraint values, so the HUD can
         // show "X / Y" (live / original) without losing the original to the
@@ -209,6 +237,7 @@ export async function createSandbox(
       client: { revealed_specifics: false, requirement_changed: false },
       team:   { gave_refund_hint: false, gave_webhook_clue: false },
     },
+    verificationState: freshVerificationState(),
   });
 
   // Persist the sessions row synchronously so FK constraints on telemetry tables

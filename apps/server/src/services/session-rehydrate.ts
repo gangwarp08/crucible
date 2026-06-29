@@ -19,7 +19,13 @@
 
 import { Sandbox } from "e2b";
 import { env } from "../env.js";
-import { sessionRegistry, type SessionEntry, type PersonaState } from "./registry.js";
+import {
+  sessionRegistry,
+  freshVerificationState,
+  type SessionEntry,
+  type PersonaState,
+  type VerificationState,
+} from "./registry.js";
 import {
   loadSessionRowFull,
   loadNextEventSeq,
@@ -142,6 +148,10 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
   const scenarioState = (row.scenario_state ?? {}) as Record<string, unknown>;
   const personaStateFromRow =
     (scenarioState["personas"] as PersonaState | undefined) ?? DEFAULT_PERSONA_STATE;
+  // Resume any in-flight verification exchange (Slice 5.4b) from the persisted
+  // mirror; absent it, start idle so the scheduled beat can open one later.
+  const verificationStateFromRow =
+    (scenarioState["verification"] as VerificationState | undefined) ?? freshVerificationState();
 
   // Re-arm the expiry timer. Fires expireSession at the original deadline,
   // not a fresh `deadline + timeout`.
@@ -186,6 +196,7 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
     // functional; the session continues.
     channelHistory: { client: [], team: [] },
     personaState: personaStateFromRow,
+    verificationState: verificationStateFromRow,
   };
 
   sessionRegistry.set(sessionId, entry);

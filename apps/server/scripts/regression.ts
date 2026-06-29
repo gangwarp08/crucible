@@ -53,6 +53,7 @@ const CORE: Verifier[] = [
   { name: "ai-assistant", file: "verify-ai-assistant.ts" },
   { name: "messages", file: "verify-messages.ts" },
   { name: "proactive-beats", file: "verify-proactive-beats.ts" },
+  { name: "verification", file: "verify-verification.ts", note: "multi-turn WS + 2 evals" },
   { name: "rehydrate", file: "verify-rehydrate.ts" },
   { name: "scenario-state-race", file: "verify-scenario-state-race.ts" },
   { name: "discrimination", file: "verify-discrimination.ts" },

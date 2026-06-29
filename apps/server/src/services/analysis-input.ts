@@ -98,6 +98,20 @@ export interface CondensedFileSnapshot {
   truncated: boolean;
 }
 
+// L4 interactive verification transcript (Slice 5.4b). The verifier's defense
+// questions interleaved with the candidate's answers, in seq order. `prompted`
+// is false when verification never fired (the session ended before the beat) —
+// in that case the judge has no defense signal and ignores this section.
+export interface CondensedVerification {
+  prompted: boolean;
+  turns: Array<{
+    seq: number;
+    role: "verifier" | "candidate";
+    text: string;
+    competency_key?: string;
+  }>;
+}
+
 export interface AnalysisInput {
   session: {
     id: string;
@@ -138,6 +152,7 @@ export interface AnalysisInput {
     constraint_summary: ConstraintSummary;
     deliverable: CondensedDeliverable | null;
     file_snapshots: CondensedFileSnapshot[];
+    verification: CondensedVerification;
     truncation_notes: string[];
   };
   // Set of every event seq surfaced anywhere in `signal` — used by the agent
@@ -461,6 +476,36 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
     for (const s of followupSeqs) surfaced.add(s);
   }
 
+  // Verification transcript (Slice 5.4b) — verifier prompts + candidate answers
+  // in seq order. prompted=false when the verification beat never fired.
+  const verificationTurns: CondensedVerification["turns"] = [];
+  for (const e of events) {
+    const p = e.payload ?? {};
+    if (e.type === "verification.prompt") {
+      const turn: CondensedVerification["turns"][number] = {
+        seq: e.seq,
+        role: "verifier",
+        text: clip(typeof p["text"] === "string" ? p["text"] : "", MAX_MESSAGE_CHARS),
+      };
+      if (typeof p["competency_key"] === "string") turn.competency_key = p["competency_key"];
+      verificationTurns.push(turn);
+      surfaced.add(e.seq);
+    } else if (e.type === "verification.response") {
+      const turn: CondensedVerification["turns"][number] = {
+        seq: e.seq,
+        role: "candidate",
+        text: clip(typeof p["text"] === "string" ? p["text"] : "", MAX_MESSAGE_CHARS),
+      };
+      if (typeof p["competency_key"] === "string") turn.competency_key = p["competency_key"];
+      verificationTurns.push(turn);
+      surfaced.add(e.seq);
+    }
+  }
+  const verification: CondensedVerification = {
+    prompted: verificationTurns.some((t) => t.role === "verifier"),
+    turns: verificationTurns,
+  };
+
   // Constraint summary
   const scenarioState = (sessionRow.scenario_state ?? {}) as Record<string, unknown>;
   const initial = (scenarioState["budget_initial"] ?? {}) as Record<string, unknown>;
@@ -606,6 +651,7 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       constraint_summary,
       deliverable,
       file_snapshots,
+      verification,
       truncation_notes: truncationNotes,
     },
     surfaced_seqs: Array.from(surfaced).sort((a, b) => a - b),

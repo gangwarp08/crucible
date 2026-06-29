@@ -16,18 +16,25 @@ import { persistSessionUpdate } from "./db.js";
 import { destroySandbox } from "./sandbox.js";
 import { BudgetExceededError } from "./litellm.js";
 import { replyAsPersona, type Channel } from "./persona-agent.js";
+import { verifierReply } from "./verifier-agent.js";
+
+// Channels the candidate can message on. The persona channels are client/team;
+// "verifier" carries the L4 interactive defense (Slice 5.4b). Persona-agent's
+// Channel stays the narrower client|team — MessageChannel is its superset.
+export type MessageChannel = Channel | "verifier";
 
 // Per-session, per-channel promise chain to serialize work.
 interface ChannelChains {
   client: Promise<void>;
   team: Promise<void>;
+  verifier: Promise<void>;
 }
 const chainsBySession = new Map<string, ChannelChains>();
 
 function getChains(sessionId: string): ChannelChains {
   let c = chainsBySession.get(sessionId);
   if (!c) {
-    c = { client: Promise.resolve(), team: Promise.resolve() };
+    c = { client: Promise.resolve(), team: Promise.resolve(), verifier: Promise.resolve() };
     chainsBySession.set(sessionId, c);
   }
   return c;
@@ -65,6 +72,14 @@ export type OutboundMessage =
       ts: string;
     }
   | {
+      type?: undefined;
+      channel: "verifier";
+      role: "verifier";
+      persona_name: string;
+      text: string;
+      ts: string;
+    }
+  | {
       type: "error";
       code: "budget_exhausted" | "persona_error" | "session_ended" | "persona_misconfigured";
       message: string;
@@ -80,7 +95,7 @@ export type Send = (msg: OutboundMessage) => void;
  */
 export function enqueueCandidateMessage(
   sessionId: string,
-  channel: Channel,
+  channel: MessageChannel,
   text: string,
   send: Send,
 ): Promise<void> {
@@ -94,13 +109,28 @@ export function enqueueCandidateMessage(
 
 async function processOne(
   sessionId: string,
-  channel: Channel,
+  channel: MessageChannel,
   text: string,
   send: Send,
 ): Promise<void> {
   const entry = sessionRegistry.get(sessionId);
   if (!entry || entry.status === "completed") {
     send({ type: "error", code: "session_ended", message: "Session has ended." });
+    return;
+  }
+
+  // L4 verification (Slice 5.4b) — candidate answer on the verifier channel.
+  // verifierReply records the answer (verification.response event) and pushes
+  // the next question via broadcast; it has no LLM call and its own telemetry,
+  // so it does not flow through the persona cost/logging path below.
+  if (channel === "verifier") {
+    try {
+      verifierReply(sessionId, text, broadcastToSession);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[messaging] verifier reply failed for session ${sessionId}:`, message);
+      send({ type: "error", code: "persona_error", message });
+    }
     return;
   }
 

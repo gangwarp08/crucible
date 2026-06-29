@@ -158,6 +158,20 @@ upstream-fix recommendation. The diagnosis and method are real; the figure \
 is wrong for a nameable reason. This is genuinely mid, not a failure.
 - 1/5: wrong root cause / naive uncorrected figures / no real fix attempted.
 
+INTERACTIVE VERIFICATION (signal.verification): near the end a reviewer asked \
+the candidate to DEFEND 2-3 consequential decisions, one answer each. When \
+\`signal.verification.prompted\` is true, weigh the defense heavily: a \
+deliverable that LOOKS correct but that the candidate CANNOT defend — vague or \
+evasive answers, "I don't know", crediting the work to the AI, or contradicting \
+their own queries — is NOT evidence of mastery. Such an undefended result CAPS \
+the relevant competency (especially execution) at roughly 3, even if the figure \
+matches ground truth, because we cannot trust an answer the candidate can't \
+explain. The deterministic \`defense_weak\` evidence unit flags which \
+competencies had a weak defense. Conversely, a specific, correct defense that \
+shows real understanding is STRONG positive evidence for execution and \
+data_fluency. When \`prompted\` is false, no verification occurred — ignore this \
+section entirely and score on the rest of the signal as usual.
+
 If the scenario's rubric includes per-competency \`anchors\`, treat those as \
 authoritative for that scenario — they override these global anchors when \
 they conflict.

@@ -239,6 +239,76 @@ function agnosticDetectors(events: EventRow[]): EvidenceUnit[] {
   return units;
 }
 
+// A candidate defense is WEAK when it's missing, trivially short, or a refusal/
+// deflection ("I don't know", "the AI did it"). Deterministic so strong vs weak
+// runs separate reliably; Stage B still reads the raw transcript for nuance.
+const MIN_DEFENSE_CHARS = 25;
+const DEFENSE_REFUSAL_RE =
+  /\b(i don'?t know|not sure|no idea|dunno|can'?t recall|don'?t remember|the (ai|assistant|copilot) (did|wrote|made)|not certain|unsure|i guess|no clue)\b/i;
+
+function isWeakDefense(answer: string | undefined): boolean {
+  if (answer === undefined) return true;            // unanswered
+  const t = answer.trim();
+  if (t.length < MIN_DEFENSE_CHARS) return true;    // trivially short
+  return DEFENSE_REFUSAL_RE.test(t);                // refusal / deflection
+}
+
+/** Scenario-agnostic L4 verification (Slice 5.4b). Emits units ONLY when a
+ *  verification exchange actually fired — so non-verified sessions keep their
+ *  exact prior unit set. Pairs each verifier prompt with its answer by index;
+ *  a deliverable the candidate cannot defend surfaces as defense_weak=true on
+ *  the competency that decision mapped to (plus an overall engagement unit). */
+function verificationDetectors(events: EventRow[]): EvidenceUnit[] {
+  const prompts = events.filter((e) => e.type === "verification.prompt");
+  if (prompts.length === 0) return [];
+
+  const responses = events.filter((e) => e.type === "verification.response");
+  const units: EvidenceUnit[] = [];
+
+  // index → { competency_key, seqs, answer? }
+  const byIndex = new Map<number, { competency: string; seqs: number[]; answer?: string }>();
+  for (const e of prompts) {
+    const p = e.payload ?? {};
+    const idx = typeof p["index"] === "number" ? p["index"] : byIndex.size;
+    const competency = typeof p["competency_key"] === "string" ? p["competency_key"] : "execution";
+    byIndex.set(idx, { competency, seqs: [e.seq] });
+  }
+  for (const e of responses) {
+    const p = e.payload ?? {};
+    const idx = typeof p["index"] === "number" ? p["index"] : -1;
+    const slot = byIndex.get(idx);
+    if (!slot) continue;
+    slot.answer = typeof p["text"] === "string" ? p["text"] : "";
+    slot.seqs.push(e.seq);
+  }
+
+  // Per-competency weak/strong aggregation.
+  const perCompetency = new Map<string, { weak: number; total: number; seqs: number[] }>();
+  let weakCount = 0;
+  for (const slot of byIndex.values()) {
+    const weak = isWeakDefense(slot.answer);
+    if (weak) weakCount += 1;
+    const agg = perCompetency.get(slot.competency) ?? { weak: 0, total: 0, seqs: [] };
+    agg.total += 1;
+    if (weak) agg.weak += 1;
+    agg.seqs.push(...slot.seqs);
+    perCompetency.set(slot.competency, agg);
+  }
+
+  const allSeqs = [...prompts, ...responses].map((e) => e.seq).sort((a, b) => a - b);
+  units.push(unit("execution", "verification_engaged",
+    { prompted: true, questions: prompts.length, answered: responses.length, weak_count: weakCount },
+    allSeqs));
+
+  for (const [competency, agg] of perCompetency) {
+    units.push(unit(competency, "defense_weak",
+      { weak: agg.weak > 0, n_weak: agg.weak, n_total: agg.total },
+      agg.seqs));
+  }
+
+  return units;
+}
+
 /** fde-db-triage family — duplicate/status/figure correctness vs ground truth. */
 function fdeDbTriageDetectors(events: EventRow[], gt: Record<string, unknown>): EvidenceUnit[] {
   const units: EvidenceUnit[] = [];
@@ -309,6 +379,7 @@ export function runDetectors(
   groundTruth: Record<string, unknown>,
 ): EvidenceUnit[] {
   const units = agnosticDetectors(events);
+  units.push(...verificationDetectors(events));
   if (slug.startsWith("fde-db-triage")) {
     units.push(...fdeDbTriageDetectors(events, groundTruth));
   }
