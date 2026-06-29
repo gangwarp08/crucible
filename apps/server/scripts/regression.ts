@@ -48,6 +48,7 @@ interface Verifier {
 const CORE: Verifier[] = [
   { name: "competency-model", file: "verify-competency-model.ts", note: "Supabase-only (no server/LLM)" },
   { name: "evidence-units", file: "verify-evidence-units.ts", note: "deterministic, no LLM" },
+  { name: "outcomes", file: "verify-outcomes.ts", note: "deterministic, no LLM/server" },
   { name: "fde-db-triage", file: "verify-fde-db-triage.ts" },
   { name: "candidate-surfaces", file: "verify-candidate-surfaces.ts" },
   { name: "ai-assistant", file: "verify-ai-assistant.ts" },

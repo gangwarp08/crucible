@@ -16,6 +16,7 @@ import { messageRoutes } from "./routes/messages.js";
 import { docsRoutes } from "./routes/docs.js";
 import { deliverableRoutes } from "./routes/deliverable.js";
 import { scenariosRoutes } from "./routes/scenarios.js";
+import { outcomesRoutes } from "./routes/outcomes.js";
 import { startBeatScheduler } from "./services/scheduler.js";
 
 export async function buildServer() {
@@ -63,6 +64,7 @@ export async function buildServer() {
   await server.register(deliverableRoutes, { prefix: "/api" });
   await server.register(scenariosRoutes, { prefix: "/api/scenarios" });
   await server.register(reviewRoutes, { prefix: "/api/review" });
+  await server.register(outcomesRoutes, { prefix: "/api" });
 
   // Start the proactive-beat scheduler. The sweep loop iterates the live
   // sessionRegistry — initially empty after a fresh boot, populated as

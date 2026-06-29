@@ -37,6 +37,12 @@ const EnvSchema = z.object({
   // off (dev/preview). Set in production to keep stray URL hits from
   // burning LiteLLM + E2B budget.
   INVITE_CODE: z.string().min(1).optional(),
+
+  // Shared secret for the partner outcome webhook (POST /api/outcomes, Slice
+  // 5.5). Server-only. When unset, the webhook is DISABLED (returns 503) so an
+  // unconfigured deploy can't accept unauthenticated outcome writes; the CSV
+  // import script bypasses HTTP and writes via the service role directly.
+  OUTCOMES_WEBHOOK_SECRET: z.string().min(16).optional(),
 });
 
 function loadEnv() {
