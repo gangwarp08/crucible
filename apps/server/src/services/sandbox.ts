@@ -22,6 +22,24 @@ interface CurveballJson {
   id?: string;
   trigger?: { time_offset_minutes?: number };
   payload?: { channel?: string };
+  difficulty_band?: string;
+}
+
+// Difficulty bands, ordered. A session at band N fires every curveball whose
+// band is ≤ N (Slice 5.4). A curveball with no band is always-on (back-compat).
+const BAND_LEVEL: Record<string, number> = { easy: 0, mid: 1, hard: 2 };
+
+function bandLevel(band: string | null | undefined): number {
+  if (!band) return -Infinity; // unbanded → always fires
+  return BAND_LEVEL[band] ?? -Infinity;
+}
+
+/** v2 seam (NOT implemented in v1): real-time difficulty escalation would bump
+ *  a live session's effective band mid-run based on how the candidate is doing,
+ *  re-selecting curveballs. v1 fixes the band at session start from the
+ *  scenario. Kept as a named hook so the call site exists for v2. */
+export function effectiveBandForSession(scenarioBand: string | null): string | null {
+  return scenarioBand;
 }
 
 /** Compute the proactive-beat schedule from scenario.curveballs at session
@@ -32,11 +50,14 @@ function computeScheduledBeats(
   baseMs: number,
   overridesMs: Record<string, number> | undefined,
 ): ScheduledBeat[] {
+  const sessionBand = bandLevel(effectiveBandForSession(scenario.difficulty ?? null));
   const out: ScheduledBeat[] = [];
   for (const raw of (scenario.curveballs ?? []) as CurveballJson[]) {
     if (!raw?.id) continue;
     const beat = BEAT_FOR_CURVEBALL[raw.id];
     if (!beat) continue;
+    // Difficulty gate: skip curveballs whose band is above this session's band.
+    if (bandLevel(raw.difficulty_band) > sessionBand) continue;
     const channel = raw.payload?.channel;
     if (channel !== "client" && channel !== "team") continue;
 

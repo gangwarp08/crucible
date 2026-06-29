@@ -133,7 +133,8 @@
         "prioritization",
         "reprioritization",
         "outcome_communication"
-      ]
+      ],
+      "difficulty_band": "mid"
     },
     {
       "id": "misleading_teammate_hint",
@@ -151,7 +152,8 @@
         "verification_over_trust",
         "teamwork",
         "prioritization_under_pressure"
-      ]
+      ],
+      "difficulty_band": "mid"
     }
   ],
   "deliverable_spec": {

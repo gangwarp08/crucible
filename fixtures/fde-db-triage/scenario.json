@@ -117,7 +117,8 @@
         "adaptability",
         "reprioritization",
         "outcome_communication"
-      ]
+      ],
+      "difficulty_band": "mid"
     },
     {
       "id": "misleading_teammate_hint",
@@ -134,7 +135,8 @@
       "tests": [
         "verification_over_trust",
         "teamwork"
-      ]
+      ],
+      "difficulty_band": "mid"
     }
   ],
   "deliverable_spec": {
