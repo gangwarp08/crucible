@@ -67,7 +67,9 @@ export interface EvaluationResult {
 const MODEL = "gemini-flash";
 // Bump when the judge system prompt / scoring rubric in this file changes, so
 // re-scoring + drift detection (Slice 5.7) can tell prompt revisions apart.
-export const JUDGE_PROMPT_VERSION = "1";
+// v2: tightened the "3 = meets bar is EARNED" floor so a near-empty run can't
+// score 3 on process competencies (was inflating WEAK process scores).
+export const JUDGE_PROMPT_VERSION = "2";
 // 8k headroom: 8 items × (rationale ~120 tok + 4 evidence × ~30 tok) +
 // overall_summary ~250 tok ≈ 2k of actual content, plus the JSON scaffolding.
 // 4k was too tight for dense sessions (15+ queries + 2 long AI prompts) — the
@@ -143,6 +145,23 @@ final figures were right. If they wrote clean, well-structured client \
 communication, that is real evidence for outcome_communication and \
 customer_engagement regardless of execution correctness. Conversely, when \
 execution IS right, do not inflate process scores that lack their own evidence.
+
+3 = MEETS BAR, AND IT MUST BE EARNED — never a default or a participation \
+floor. A competency scores 3 ONLY when the signal shows the candidate actually \
+DEMONSTRATED that skill at a competent level. With NO supporting evidence, or \
+only TOKEN / perfunctory activity, the score is 1-2, NOT 3:
+- One vague or low-effort message ("hey what's wrong with the dashboard") is \
+NOT problem_framing or customer_engagement at the meets-bar level — that's a 1-2.
+- A single naive query with no follow-up, no dedup, no verification is NOT \
+data_fluency or design_under_constraints at 3 — that's a 1-2.
+- Zero AI-assistant turns is ai_orchestration 1, not 3. A passive one-line \
+acknowledgement to the teammate is teamwork 1-2, not 3.
+- A trivial or near-empty deliverable ("n/a", uncorrected figures) does not \
+earn 3 on outcome_communication.
+A NEAR-EMPTY SESSION — very few actions, no real investigation, blindly \
+accepting hints, a trivial deliverable — scores 1-2 ACROSS the process \
+competencies. Do not award 3s to round out a weak transcript. Reserve 3+ for \
+competencies with concrete, specific supporting evidence in the signal.
 
 THE EXCEPTION: confidently communicating an INCORRECT conclusion CAPS the \
 relevant communication competency. Clean prose for the wrong answer cannot \
