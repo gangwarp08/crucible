@@ -36,20 +36,16 @@ export class AnalysisError extends Error {
   }
 }
 
-const COMPETENCIES = [
-  "problem_framing",
-  "customer_engagement",
-  "data_fluency",
-  "design_under_constraints",
-  "execution",
-  "ai_orchestration",
-  "teamwork",
-  "outcome_communication",
-] as const;
-type Competency = (typeof COMPETENCIES)[number];
+// The competency SET is no longer hardcoded here — it comes from the canonical
+// competency model (Slice 5.1). assembleAnalysisInput resolves the scenario's
+// rubric binding into input.scenario.rubric; parseAndValidate iterates whatever
+// competencies that resolved rubric declares. (The SYSTEM_PROMPT below still
+// documents the current 8-competency schema by name; every v1 scenario binds
+// the same 8, so the prompt and the resolved set agree. A future scenario that
+// binds a different set would need the prompt schema generated from the keys.)
 
 export interface EvaluationItem {
-  competency: Competency;
+  competency: string;
   score: number; // integer 1-5
   weight: number;
   rationale: string;
@@ -188,7 +184,7 @@ interface RawItem {
 }
 interface RawResponse {
   overall_summary?: unknown;
-  items?: Partial<Record<Competency, RawItem>>;
+  items?: Record<string, RawItem | undefined>;
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -216,7 +212,9 @@ function parseAndValidate(
       : "(no summary returned)";
 
   const items: EvaluationItem[] = [];
-  for (const competency of COMPETENCIES) {
+  // Iterate the competencies the resolved rubric declares (from the canonical
+  // model binding), not a hardcoded list.
+  for (const competency of Object.keys(rubric)) {
     const raw = parsed.items?.[competency];
     const weight =
       typeof rubric[competency]?.weight === "number" ? rubric[competency]!.weight : 0;
@@ -277,6 +275,7 @@ async function persistEvaluation(
   summary: string,
   status: "complete" | "error",
   items: EvaluationItem[],
+  competencyModelVersion: number | null,
 ): Promise<string> {
   if (!supabase) {
     throw new AnalysisError("Supabase client unavailable; cannot persist evaluation");
@@ -302,6 +301,7 @@ async function persistEvaluation(
     summary,
     model: MODEL,
     status,
+    competency_model_version: competencyModelVersion,
   });
   if (insErr) {
     throw new AnalysisError(`evaluations insert failed: ${insErr.message}`);
@@ -377,6 +377,7 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
       `Evaluation failed: ${message}`,
       "error",
       [],
+      input.scenario.competency_model_version,
     );
     void appendEvent(sessionId, "ai.evaluation", "system", {
       evaluation_id: evaluationId,
@@ -406,6 +407,7 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
       `Response parse failed: ${message}. Raw start: ${result.text.slice(0, 200)}`,
       "error",
       [],
+      input.scenario.competency_model_version,
     );
     void appendEvent(sessionId, "ai.evaluation", "system", {
       evaluation_id: evaluationId,
@@ -426,6 +428,7 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
     summary,
     "complete",
     items,
+    input.scenario.competency_model_version,
   );
 
   // Cost ledger entry — NOT added to session.spend_usd since this is on the

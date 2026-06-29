@@ -13,7 +13,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ResolvedRubricItem } from "@crucible/shared";
 import { supabase } from "./supabase.js";
+import { resolveScenarioRubric } from "./competencies.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // apps/server/src/services/ → repo root is 4 levels up.
@@ -105,7 +107,13 @@ export interface AnalysisInput {
     spend_usd_final: number;
   };
   scenario: {
-    rubric: Record<string, { weight: number; description?: string; signals?: string[] }>;
+    // Resolved from the scenario's rubric BINDING against the canonical model
+    // (Slice 5.1). Mirrors the pre-rebind rubric item shape, so the LLM input
+    // is unchanged.
+    rubric: Record<string, ResolvedRubricItem>;
+    // The competency model version this evaluation runs under — stamped onto
+    // the evaluations row so scores stay comparable as the construct evolves.
+    competency_model_version: number;
     deliverable_spec: Record<string, unknown>;
     success_criteria: Record<string, unknown>;
     docs: Array<{ id: string; title: string }>;
@@ -176,7 +184,9 @@ interface SessionRow {
 interface ScenarioRow {
   id: string;
   slug: string;
-  rubric: Record<string, { weight: number; description?: string; signals?: string[] }>;
+  // Stored as a rubric BINDING array (Slice 5.1); validated + resolved against
+  // the canonical model by resolveScenarioRubric.
+  rubric: unknown;
   deliverable_spec: Record<string, unknown>;
   success_criteria: Record<string, unknown>;
   docs: Array<Record<string, unknown>>;
@@ -234,6 +244,13 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
     throw new AnalysisInputError(`scenario read failed: ${scenErr?.message}`);
   }
   const scenarioRow = scenarioData as unknown as ScenarioRow;
+
+  // ── 2b. Resolve the rubric binding against the canonical competency model.
+  // Produces the effective per-competency rubric (weights + anchors + scoring
+  // notes) the judge consumes, plus the model version to stamp on the verdict.
+  const { version: competencyModelVersion, resolved } = await resolveScenarioRubric(
+    scenarioRow.rubric,
+  );
 
   // ── 3. Ground truth from disk ───────────────────────────────────────
   let groundTruth: Record<string, unknown> = {};
@@ -552,7 +569,8 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       spend_usd_final: Number(sessionRow.spend_usd ?? 0),
     },
     scenario: {
-      rubric: scenarioRow.rubric as AnalysisInput["scenario"]["rubric"],
+      rubric: resolved.rubric,
+      competency_model_version: competencyModelVersion,
       deliverable_spec: scenarioRow.deliverable_spec as Record<string, unknown>,
       success_criteria: scenarioRow.success_criteria as Record<string, unknown>,
       docs,
