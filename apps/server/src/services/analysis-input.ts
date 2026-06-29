@@ -13,14 +13,17 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ResolvedRubricItem } from "@crucible/shared";
 import { supabase } from "./supabase.js";
+import { resolveScenarioRubric } from "./competencies.js";
+import { loadStoredEvidenceUnits } from "./evidence-extractor.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // apps/server/src/services/ → repo root is 4 levels up.
 const REPO_ROOT = resolve(here, "../../../..");
 
 const SCENARIOS_SELECT =
-  "id, slug, rubric, deliverable_spec, success_criteria, docs, dataset_ref, " +
+  "id, slug, version, rubric, deliverable_spec, success_criteria, docs, dataset_ref, " +
   "client_persona, team_persona, constraints";
 
 // ─── Public types ──────────────────────────────────────────────────────────
@@ -95,6 +98,20 @@ export interface CondensedFileSnapshot {
   truncated: boolean;
 }
 
+// L4 interactive verification transcript (Slice 5.4b). The verifier's defense
+// questions interleaved with the candidate's answers, in seq order. `prompted`
+// is false when verification never fired (the session ended before the beat) —
+// in that case the judge has no defense signal and ignores this section.
+export interface CondensedVerification {
+  prompted: boolean;
+  turns: Array<{
+    seq: number;
+    role: "verifier" | "candidate";
+    text: string;
+    competency_key?: string;
+  }>;
+}
+
 export interface AnalysisInput {
   session: {
     id: string;
@@ -105,12 +122,30 @@ export interface AnalysisInput {
     spend_usd_final: number;
   };
   scenario: {
-    rubric: Record<string, { weight: number; description?: string; signals?: string[] }>;
+    // Resolved from the scenario's rubric BINDING against the canonical model
+    // (Slice 5.1). Mirrors the pre-rebind rubric item shape, so the LLM input
+    // is unchanged.
+    rubric: Record<string, ResolvedRubricItem>;
+    // The competency model version this evaluation runs under — stamped onto
+    // the evaluations row so scores stay comparable as the construct evolves.
+    competency_model_version: number;
+    // Bumpable scenario content version (Slice 5.7) — stamped on the verdict so
+    // drift can re-score the anchor set when scenario content changes.
+    scenario_version: number | null;
     deliverable_spec: Record<string, unknown>;
     success_criteria: Record<string, unknown>;
     docs: Array<{ id: string; title: string }>;
   };
   ground_truth: Record<string, unknown>;
+  // Deterministic Stage A facts (Slice 5.3) — pre-computed, ground-truth-verified
+  // evidence the judge must keep its objective scores consistent with.
+  evidence_units: Array<{
+    id: string;
+    competency_key: string;
+    kind: string;
+    value: unknown;
+    event_seqs: number[];
+  }>;
   signal: {
     messages: CondensedMessage[];
     db_queries: CondensedDbQuery[];
@@ -120,6 +155,7 @@ export interface AnalysisInput {
     constraint_summary: ConstraintSummary;
     deliverable: CondensedDeliverable | null;
     file_snapshots: CondensedFileSnapshot[];
+    verification: CondensedVerification;
     truncation_notes: string[];
   };
   // Set of every event seq surfaced anywhere in `signal` — used by the agent
@@ -176,7 +212,10 @@ interface SessionRow {
 interface ScenarioRow {
   id: string;
   slug: string;
-  rubric: Record<string, { weight: number; description?: string; signals?: string[] }>;
+  version: number | null;
+  // Stored as a rubric BINDING array (Slice 5.1); validated + resolved against
+  // the canonical model by resolveScenarioRubric.
+  rubric: unknown;
   deliverable_spec: Record<string, unknown>;
   success_criteria: Record<string, unknown>;
   docs: Array<Record<string, unknown>>;
@@ -234,6 +273,23 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
     throw new AnalysisInputError(`scenario read failed: ${scenErr?.message}`);
   }
   const scenarioRow = scenarioData as unknown as ScenarioRow;
+
+  // ── 2b. Resolve the rubric binding against the canonical competency model.
+  // Produces the effective per-competency rubric (weights + anchors + scoring
+  // notes) the judge consumes, plus the model version to stamp on the verdict.
+  const { version: competencyModelVersion, resolved } = await resolveScenarioRubric(
+    scenarioRow.rubric,
+  );
+
+  // ── 2c. Stage A evidence units (deterministic facts) ────────────────
+  const storedUnits = await loadStoredEvidenceUnits(sessionId);
+  const evidenceUnits = storedUnits.map((u) => ({
+    id: u.id,
+    competency_key: u.competency_key,
+    kind: u.kind,
+    value: u.value,
+    event_seqs: u.event_seqs,
+  }));
 
   // ── 3. Ground truth from disk ───────────────────────────────────────
   let groundTruth: Record<string, unknown> = {};
@@ -424,6 +480,36 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
     for (const s of followupSeqs) surfaced.add(s);
   }
 
+  // Verification transcript (Slice 5.4b) — verifier prompts + candidate answers
+  // in seq order. prompted=false when the verification beat never fired.
+  const verificationTurns: CondensedVerification["turns"] = [];
+  for (const e of events) {
+    const p = e.payload ?? {};
+    if (e.type === "verification.prompt") {
+      const turn: CondensedVerification["turns"][number] = {
+        seq: e.seq,
+        role: "verifier",
+        text: clip(typeof p["text"] === "string" ? p["text"] : "", MAX_MESSAGE_CHARS),
+      };
+      if (typeof p["competency_key"] === "string") turn.competency_key = p["competency_key"];
+      verificationTurns.push(turn);
+      surfaced.add(e.seq);
+    } else if (e.type === "verification.response") {
+      const turn: CondensedVerification["turns"][number] = {
+        seq: e.seq,
+        role: "candidate",
+        text: clip(typeof p["text"] === "string" ? p["text"] : "", MAX_MESSAGE_CHARS),
+      };
+      if (typeof p["competency_key"] === "string") turn.competency_key = p["competency_key"];
+      verificationTurns.push(turn);
+      surfaced.add(e.seq);
+    }
+  }
+  const verification: CondensedVerification = {
+    prompted: verificationTurns.some((t) => t.role === "verifier"),
+    turns: verificationTurns,
+  };
+
   // Constraint summary
   const scenarioState = (sessionRow.scenario_state ?? {}) as Record<string, unknown>;
   const initial = (scenarioState["budget_initial"] ?? {}) as Record<string, unknown>;
@@ -552,12 +638,15 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       spend_usd_final: Number(sessionRow.spend_usd ?? 0),
     },
     scenario: {
-      rubric: scenarioRow.rubric as AnalysisInput["scenario"]["rubric"],
+      rubric: resolved.rubric,
+      competency_model_version: competencyModelVersion,
+      scenario_version: typeof scenarioRow.version === "number" ? scenarioRow.version : null,
       deliverable_spec: scenarioRow.deliverable_spec as Record<string, unknown>,
       success_criteria: scenarioRow.success_criteria as Record<string, unknown>,
       docs,
     },
     ground_truth: groundTruth,
+    evidence_units: evidenceUnits,
     signal: {
       messages,
       db_queries,
@@ -567,6 +656,7 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       constraint_summary,
       deliverable,
       file_snapshots,
+      verification,
       truncation_notes: truncationNotes,
     },
     surfaced_seqs: Array.from(surfaced).sort((a, b) => a - b),

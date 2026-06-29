@@ -18,7 +18,7 @@ import { supabase } from "../services/supabase.js";
 import { requireSessionToken, verifyWsToken } from "../services/session-token.js";
 
 const InboundSchema = z.object({
-  channel: z.enum(["client", "team"]),
+  channel: z.enum(["client", "team", "verifier"]),
   text: z.string().min(1).max(8000),
 });
 

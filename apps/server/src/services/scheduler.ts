@@ -23,6 +23,7 @@ import {
   proactiveBeatMessage,
   type ProactiveBeat,
 } from "./persona-agent.js";
+import { startVerification } from "./verifier-agent.js";
 import { broadcastToSession } from "./messaging.js";
 import { logEvent, recordCost } from "./telemetry.js";
 import { persistSessionUpdate, persistScenarioStatePatch } from "./db.js";
@@ -80,7 +81,9 @@ async function sweep(): Promise<void> {
 
         // Short-circuit: if the reactive path already gave this reveal, mark
         // the beat fired silently — avoids double-firing the same content.
-        if (beatAlreadyRevealed(beat, entry.personaState)) {
+        // Verification beats have no reveal flag; startVerification is itself
+        // idempotent, so they skip this persona-only check.
+        if (beat.kind !== "verification" && beatAlreadyRevealed(beat, entry.personaState)) {
           beat.fired = true;
           stateChanged = true;
           console.log(
@@ -124,7 +127,18 @@ async function fireBeat(sessionId: string, beat: ScheduledBeat): Promise<void> {
   const entry = sessionRegistry.get(sessionId);
   if (!entry) throw new Error("session missing from registry");
 
-  const reply = await proactiveBeatMessage(sessionId, beat.channel, beat.beat as ProactiveBeat);
+  // L4 verification beat (Slice 5.4b) — open the interactive defense exchange.
+  // startVerification handles its own telemetry, cost accounting, and broadcast.
+  if (beat.kind === "verification") {
+    await startVerification(sessionId, broadcastToSession);
+    return;
+  }
+
+  const reply = await proactiveBeatMessage(
+    sessionId,
+    beat.channel as "client" | "team",
+    beat.beat as ProactiveBeat,
+  );
 
   // Cost accounting — mirrors messaging.ts processOne.
   if (reply.costUsd !== null) entry.spendTally += reply.costUsd;
@@ -185,7 +199,8 @@ async function fireBeat(sessionId: string, beat: ScheduledBeat): Promise<void> {
   void persistSessionUpdate(sessionId, { spend_usd: entry.spendTally });
 
   broadcastToSession(sessionId, {
-    channel: beat.channel,
+    // Verification beats returned early above; this path is persona-only.
+    channel: beat.channel as "client" | "team",
     role: "persona",
     persona_name: reply.personaName,
     text: reply.text,

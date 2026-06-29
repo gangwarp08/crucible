@@ -34,7 +34,7 @@
 
 import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { dirname, resolve } from "path";
 import { readFileSync } from "fs";
 import { WebSocket } from "undici";
@@ -227,26 +227,26 @@ function awaitMsg(
 
 // ─── Eval shape + fetching ─────────────────────────────────────────────────
 
-interface EvaluationItem {
+export interface EvaluationItem {
   competency: string;
   score: number;
   weight: number;
   rationale: string;
 }
-interface EvaluationRow {
+export interface EvaluationRow {
   id: string;
   overall_score: number;
   summary: string | null;
   status: "complete" | "error";
   items: EvaluationItem[];
 }
-interface PlayResult {
+export interface PlayResult {
   label: string;
   sessionId: string;
   evaluation: EvaluationRow | null;
 }
 
-async function fetchEvalBySessionId(sessionId: string): Promise<EvaluationRow | null> {
+export async function fetchEvalBySessionId(sessionId: string): Promise<EvaluationRow | null> {
   const { data: row } = await supabase
     .from("evaluations")
     .select("id, overall_score, summary, status")
@@ -269,7 +269,7 @@ async function fetchEvalBySessionId(sessionId: string): Promise<EvaluationRow | 
   };
 }
 
-async function pollForEval(sessionId: string, timeoutMs: number, sinceEvalId: string | null): Promise<EvaluationRow | null> {
+export async function pollForEval(sessionId: string, timeoutMs: number, sinceEvalId: string | null): Promise<EvaluationRow | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(2_000);
@@ -315,7 +315,7 @@ async function createSession(scenarioId: string, beats: Record<string, number>):
   return body.sessionId;
 }
 
-async function getScenarioId(): Promise<string> {
+export async function getScenarioId(): Promise<string> {
   const { data, error } = await supabase
     .from("scenarios").select("id").eq("slug", SLUG).single();
   if (error || !data) throw new Error(`could not load scenario ${SLUG}: ${error?.message}`);
@@ -609,7 +609,7 @@ function heldoutDeliverable(): DeliverableData {
 
 // ─── PROFILE: STRONG ──────────────────────────────────────────────────────
 
-async function runStrong(scenarioId: string): Promise<PlayResult> {
+export async function runStrong(scenarioId: string): Promise<PlayResult> {
   const sessionId = await createSession(scenarioId, {
     misleading_teammate_hint: 3_000,
     requirement_change:       30_000,
@@ -798,7 +798,7 @@ async function runStrongChurnFirst(scenarioId: string): Promise<PlayResult> {
 
 // ─── PROFILE: WEAK ────────────────────────────────────────────────────────
 
-async function runWeak(scenarioId: string): Promise<PlayResult> {
+export async function runWeak(scenarioId: string): Promise<PlayResult> {
   const sessionId = await createSession(scenarioId, {
     misleading_teammate_hint: 3_000,
     requirement_change:       3_600_000, // pushed past session end
@@ -980,7 +980,7 @@ async function runRPWE(scenarioId: string): Promise<PlayResult> {
 
 // ─── PROFILE: HELD-OUT (partial finds + neutral on Sam) ──────────────────
 
-async function runHeldout(scenarioId: string): Promise<PlayResult> {
+export async function runHeldout(scenarioId: string): Promise<PlayResult> {
   const sessionId = await createSession(scenarioId, {
     misleading_teammate_hint: 3_000,
     requirement_change:       30_000,
@@ -1212,35 +1212,39 @@ async function fetchPriorOrRun(
   return runner(scenarioId);
 }
 
-(async () => {
-  console.log(`SERVER_URL=${SERVER_URL}`);
-  console.log(`scenario slug=${SLUG}`);
-  const scenarioId = await getScenarioId();
-  console.log(`scenario id=${scenarioId}`);
+// Only run main when invoked directly as a script — not when imported as a
+// module (e.g. by sim-fde-discrimination.ts which reuses the playbooks).
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  (async () => {
+    console.log(`SERVER_URL=${SERVER_URL}`);
+    console.log(`scenario slug=${SLUG}`);
+    const scenarioId = await getScenarioId();
+    console.log(`scenario id=${scenarioId}`);
 
-  const strong  = await fetchPriorOrRun("STRONG",  "S", BASELINE_STRONG_ID,  runStrong,  scenarioId);
-  const weak    = await fetchPriorOrRun("WEAK",    "W", BASELINE_WEAK_ID,    runWeak,    scenarioId);
-  const caves   = await fetchPriorOrRun("CAVES",   "C", BASELINE_CAVES_ID,   runCaves,   scenarioId);
-  const rpwe    = await fetchPriorOrRun("RPWE",    "R", BASELINE_RPWE_ID,    runRPWE,    scenarioId);
-  const heldout = await fetchPriorOrRun("HELDOUT", "H", BASELINE_HELDOUT_ID, runHeldout, scenarioId);
-  const scf     = await fetchPriorOrRun("SCF",     "F", BASELINE_SCF_ID,     runStrongChurnFirst, scenarioId);
+    const strong  = await fetchPriorOrRun("STRONG",  "S", BASELINE_STRONG_ID,  runStrong,  scenarioId);
+    const weak    = await fetchPriorOrRun("WEAK",    "W", BASELINE_WEAK_ID,    runWeak,    scenarioId);
+    const caves   = await fetchPriorOrRun("CAVES",   "C", BASELINE_CAVES_ID,   runCaves,   scenarioId);
+    const rpwe    = await fetchPriorOrRun("RPWE",    "R", BASELINE_RPWE_ID,    runRPWE,    scenarioId);
+    const heldout = await fetchPriorOrRun("HELDOUT", "H", BASELINE_HELDOUT_ID, runHeldout, scenarioId);
+    const scf     = await fetchPriorOrRun("SCF",     "F", BASELINE_SCF_ID,     runStrongChurnFirst, scenarioId);
 
-  console.log(`\nSession IDs (export as BASELINE_PRO_*_ID to re-fetch on next run):`);
-  console.log(`  BASELINE_PRO_STRONG_ID=${strong.sessionId}`);
-  console.log(`  BASELINE_PRO_WEAK_ID=${weak.sessionId}`);
-  console.log(`  BASELINE_PRO_CAVES_ID=${caves.sessionId}`);
-  console.log(`  BASELINE_PRO_RPWE_ID=${rpwe.sessionId}`);
-  console.log(`  BASELINE_PRO_HELDOUT_ID=${heldout.sessionId}`);
-  console.log(`  BASELINE_PRO_SCF_ID=${scf.sessionId}`);
+    console.log(`\nSession IDs (export as BASELINE_PRO_*_ID to re-fetch on next run):`);
+    console.log(`  BASELINE_PRO_STRONG_ID=${strong.sessionId}`);
+    console.log(`  BASELINE_PRO_WEAK_ID=${weak.sessionId}`);
+    console.log(`  BASELINE_PRO_CAVES_ID=${caves.sessionId}`);
+    console.log(`  BASELINE_PRO_RPWE_ID=${rpwe.sessionId}`);
+    console.log(`  BASELINE_PRO_HELDOUT_ID=${heldout.sessionId}`);
+    console.log(`  BASELINE_PRO_SCF_ID=${scf.sessionId}`);
 
-  const verdict = printReport(strong, weak, caves, rpwe, heldout, scf);
+    const verdict = printReport(strong, weak, caves, rpwe, heldout, scf);
 
-  console.log("\n═══ ASSESSMENT ═══");
-  if (verdict.pass) {
-    console.log("VERDICT: prioritization + stakeholder-resistance discriminate cleanly");
-  } else {
-    console.log("VERDICT: discrimination has gaps");
-    for (const n of verdict.notes) console.log(`  - ${n}`);
-  }
-  console.log("\n(STOP — no anchor edits applied. Next step: revisit rubric anchors based on flagged failures.)");
-})();
+    console.log("\n═══ ASSESSMENT ═══");
+    if (verdict.pass) {
+      console.log("VERDICT: prioritization + stakeholder-resistance discriminate cleanly");
+    } else {
+      console.log("VERDICT: discrimination has gaps");
+      for (const n of verdict.notes) console.log(`  - ${n}`);
+    }
+    console.log("\n(STOP — no anchor edits applied. Next step: revisit rubric anchors based on flagged failures.)");
+  })();
+}

@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Calibration step 3 — judge anchor tuning verifier.
 //
 // After updating the global SYSTEM_PROMPT (services/analysis-agent.ts) and
@@ -50,11 +49,22 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
 
-const BASELINE_STRONG_ID = process.env.BASELINE_STRONG_ID ?? "b6a45922-822e-4737-96e1-eee188823608";
-const BASELINE_WEAK_ID   = process.env.BASELINE_WEAK_ID   ?? "9d91776c-5efd-4887-a02d-4d5a06376f71";
-const BASELINE_A_ID      = process.env.BASELINE_A_ID      ?? "73cf7977-6eff-4b77-bcb9-f4cea584b573";
-const BASELINE_B_ID      = process.env.BASELINE_B_ID      ?? "a3bf4248-722d-4f20-a7aa-0b9b80c4ad6d";
-const BASELINE_C_ID      = process.env.BASELINE_C_ID      ?? "2f1fa83b-e2f0-4441-af50-16225814d020";
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+// Baselines re-established under JUDGE_PROMPT_VERSION=2 (the "3 = meets bar is
+// earned" tightening). Same v2 session set as verify-gradient.
+const BASELINE_STRONG_ID = process.env.BASELINE_STRONG_ID ?? "f42fbde7-d4f3-455a-a3e7-25ad5b8bffe5";
+const BASELINE_WEAK_ID   = process.env.BASELINE_WEAK_ID   ?? "c66032bd-c737-4350-ae53-a3c2dadab2c8";
+const BASELINE_A_ID      = process.env.BASELINE_A_ID      ?? "281cfe0a-c9bb-42fd-bb30-f5b7843695c5";
+const BASELINE_B_ID      = process.env.BASELINE_B_ID      ?? "e1c33afb-75d3-446c-8972-aef44f922734";
+const BASELINE_C_ID      = process.env.BASELINE_C_ID      ?? "93a30f84-c7a0-488f-aa82-a7ff7bfb6687";
 
 const SKIP_REEVAL = process.env.SKIP_REEVAL === "1";
 const SKIP_D      = process.env.SKIP_D === "1";
@@ -97,7 +107,9 @@ interface MessageBus {
 function openMessagingWs(sessionId: string): Promise<MessageBus> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     const bus: MessageBus = { ws, buffer: [], waiters: [], closed: false };
     ws.on("message", (raw: WS.RawData) => {
       let parsed: Inbound;
@@ -273,7 +285,9 @@ async function createSession(scenarioId: string, beats: Record<string, number>):
     body: JSON.stringify({ scenarioId, beatTimingOverridesMs: beats }),
   });
   if (!r.ok) throw new Error(`session create failed: ${r.status} ${await r.text()}`);
-  return ((await r.json()) as { sessionId: string }).sessionId;
+  const body = (await r.json()) as { sessionId: string; token?: string };
+  if (body.token) tokens.set(body.sessionId, body.token);
+  return body.sessionId;
 }
 
 async function runProfileD(scenarioId: string): Promise<PlayResult> {
@@ -317,11 +331,11 @@ async function runProfileD(scenarioId: string): Promise<PlayResult> {
   // [4] Technical: dedup + fingerprint (same as A — full correct figures).
   const dedupSql = `WITH dedup AS (SELECT MIN(id) AS keep_id FROM payments WHERE status='succeeded' GROUP BY external_payment_id) SELECT substr(p.created_at,1,7) AS month, SUM(p.amount_cents) AS cents FROM payments p JOIN dedup d ON d.keep_id=p.id WHERE substr(p.created_at,1,7) IN ('2026-03','2026-04','2026-05') GROUP BY substr(p.created_at,1,7) ORDER BY month`;
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: dedupSql }),
   });
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: "SELECT external_payment_id, COUNT(*) FROM payments WHERE status='succeeded' GROUP BY external_payment_id HAVING COUNT(*)>1 LIMIT 5" }),
   });
   console.log(`  [d] dedup CTE + duplicate fingerprint queries run (correct figures)`);
@@ -370,13 +384,13 @@ async function runProfileD(scenarioId: string): Promise<PlayResult> {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify(deliv),
   });
   if (dr.ok) console.log(`  [d] deliverable submitted (correct figures, blunt summary)`);
   else console.log(`  [d] deliverable submit FAILED: ${dr.status}`);
 
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   console.log(`  [d] session DELETEd → auto-eval triggered`);
 
   const fresh = await pollForEval(sessionId, 90_000, null);

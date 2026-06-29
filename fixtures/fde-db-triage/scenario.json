@@ -117,7 +117,8 @@
         "adaptability",
         "reprioritization",
         "outcome_communication"
-      ]
+      ],
+      "difficulty_band": "mid"
     },
     {
       "id": "misleading_teammate_hint",
@@ -134,7 +135,8 @@
       "tests": [
         "verification_over_trust",
         "teamwork"
-      ]
+      ],
+      "difficulty_band": "mid"
     }
   ],
   "deliverable_spec": {
@@ -183,125 +185,48 @@
       }
     ]
   },
-  "rubric": {
-    "problem_framing": {
+  "rubric": [
+    {
+      "competency_key": "problem_framing",
       "weight": 0.15,
-      "description": "Asks what 'wrong'/expected/when before digging; forms hypotheses before querying.",
-      "signals": [
-        "Client questions asked before first query.",
-        "Time-to-first-question vs time-to-first-query.",
-        "Hypotheses stated explicitly before testing them."
-      ],
-      "anchors": {
-        "5": "Clarifying question to Dana BEFORE the first query AND explicit hypothesis-testing in queries (refund hypothesis quantified and rejected against actual numbers).",
-        "3": "At least one clarifying question to Dana (even if generic), OR explicit hypothesis-testing queries — one of the two, not both.",
-        "1": "No clarifying question to Dana AND queries dive straight at the bug without any hypothesis stated."
-      },
-      "scoring_note": "Score on the candidate's own framing evidence. A wrong final answer does NOT lower this score — process is process."
+      "load_bearing": true
     },
-    "data_fluency": {
-      "weight": 0.20,
-      "description": "Explores schema, finds the duplicates, quantifies the gap; does not accept the refund hint blindly.",
-      "signals": [
-        "Progression of db.query calls from exploration to targeted aggregation.",
-        "Dedup query present in the final solution.",
-        "Refund hypothesis explicitly tested and rejected with numbers."
-      ],
-      "anchors": {
-        "5": "Progression from exploration → targeted dedup CTE → duplicate-fingerprint (HAVING COUNT > 1) verification AND refund hypothesis tested with actual numbers.",
-        "3": "Ran a dedup query OR a fingerprint query (found the duplicates) but did not test the refund hypothesis numerically.",
-        "1": "Only naive SUM queries; accepted the refund hint without querying for it."
-      }
+    {
+      "competency_key": "data_fluency",
+      "weight": 0.2,
+      "load_bearing": true
     },
-    "design_under_constraints": {
-      "weight": 0.10,
-      "description": "Uses targeted queries over full scans; manages compute and token budget; reprioritizes after the requirement change.",
-      "signals": [
-        "Constraint-spend trajectory (compute / tokens) stays below the displayed budgets.",
-        "Query selectivity (predicates on indexed columns, narrow projections).",
-        "Reprioritization observable after curveball 1."
-      ],
-      "anchors": {
-        "5": "Targeted queries with narrow projections and predicates on indexed columns; <5 compute-minutes consumed total; visible reprioritization after curveball.",
-        "3": "Mostly targeted queries with some broad scans; constraint spend visible in the trajectory but not pathological.",
-        "1": "Many broad scans / SELECT * with no projections; compute trajectory drains visibly; no constraint-awareness."
-      }
+    {
+      "competency_key": "design_under_constraints",
+      "weight": 0.1,
+      "load_bearing": true
     },
-    "execution": {
-      "weight": 0.20,
-      "description": "Produces corrected figures that actually run and match ground truth — but credit correct diagnosis and sound method separately from final-figure precision.",
-      "signals": [
-        "Deliverable correctness vs ground truth within ±2%.",
-        "Working dedup query or script committed to the workspace.",
-        "All four deliverable components present."
-      ],
-      "anchors": {
-        "5": "Correct root cause (duplicates) + figures within ±2% of ground truth + working dedup query + upstream idempotency-key recommendation.",
-        "3": "Correct root cause AND sound method (dedup query actually run) but figures materially off for a specific identifiable reason — e.g. dedup'd correctly but missed the status='succeeded' filter so figures came back ~12% high; or correct figures but missing the bonus upstream-fix recommendation. The diagnosis and method are REAL; the figure is wrong for a nameable reason. This is genuinely mid, not a failure.",
-        "1": "Wrong root cause (e.g. blamed refunds) OR naive uncorrected figures OR no working dedup query at all."
-      }
+    {
+      "competency_key": "execution",
+      "weight": 0.2,
+      "load_bearing": true
     },
-    "ai_orchestration": {
-      "weight": 0.10,
-      "description": "Uses the AI assistant to accelerate work but verifies its output against the data.",
-      "signals": [
-        "ai.assistant usage events followed by verification queries.",
-        "Does not paste assistant output as final without checking.",
-        "Recovers gracefully if the token budget runs low."
-      ],
-      "anchors": {
-        "5": "Focused AI-assistant turn on the actual problem (e.g. SQLite dedup pattern) followed by a verification query against the data.",
-        "3": "AI-assistant used, but on the wrong hypothesis (e.g. refund subtraction) OR not verified against the data.",
-        "1": "No AI-assistant use at all."
-      }
+    {
+      "competency_key": "ai_orchestration",
+      "weight": 0.1,
+      "load_bearing": true
     },
-    "teamwork": {
-      "weight": 0.10,
-      "description": "Engages the teammate, verifies the misleading hint rather than acting on it, escalates appropriately.",
-      "signals": [
-        "Exchange in the team channel before acting on the refund hint.",
-        "Refund hypothesis tested against the data, not just trusted.",
-        "Asks Sam follow-ups with specific evidence to unlock the real clue."
-      ],
-      "anchors": {
-        "5": "Engaged Sam in the team channel AND verified the refund hypothesis against data before acting AND pushed back with concrete numbers to unlock the webhook clue.",
-        "3": "Engaged Sam, asked clarifying follow-ups, but accepted the refund hint without quantifying it against the actual gap.",
-        "2": "Engaged Sam in some exchange (one or two messages) but accepted the misleading hint without any verification — or actively curt/dismissive but at least sent a reply.",
-        "1": "No team-channel exchange at all (purely silent)."
-      },
-      "scoring_note": "Score on the team-channel evidence directly. If the candidate genuinely engaged Sam in a multi-turn exchange, that is teamwork — even if they accepted the wrong hint, that lands them at 2-3, not 1."
+    {
+      "competency_key": "teamwork",
+      "weight": 0.1,
+      "load_bearing": true
     },
-    "customer_engagement": {
+    {
+      "competency_key": "customer_engagement",
       "weight": 0.05,
-      "description": "Sets expectations, updates the anxious client, absorbs the requirement change calmly.",
-      "signals": [
-        "Cadence and quality of client-channel updates.",
-        "Calm, non-defensive response to curveball 1.",
-        "Translates technical findings into client-appropriate language."
-      ],
-      "anchors": {
-        "5": "Clarifying question upfront + calm/professional handling of the curveball + plain-language client-facing summary.",
-        "3": "Clarifying question OR calm curveball handling but not both; professional tone throughout.",
-        "2": "Minimal engagement (one message) OR absent entirely but not actively rude.",
-        "1": "Zero client-channel engagement AND no client-facing summary, OR actively rude/dismissive/curt tone toward client."
-      }
+      "load_bearing": true
     },
-    "outcome_communication": {
-      "weight": 0.10,
-      "description": "Board-ready paragraph is clear, accurate, non-technical, with the correct number and plain cause.",
-      "signals": [
-        "Final paragraph reads as board-appropriate prose.",
-        "Corrected number is stated clearly and matches the candidate's own query.",
-        "Cause is described in plain English without jargon."
-      ],
-      "anchors": {
-        "5": "Board-ready paragraph in plain English, correct figure cited, plain-language root cause, upstream-fix mention.",
-        "3": "Clean professional prose stating the (wrong) figures and an (incorrect) cause — clarity is real but the conclusion is wrong. CAP at this band when the content is incorrect; clear prose for the wrong answer cannot score 5.",
-        "1": "Terse one-liner OR no client-facing summary OR jargon-laden / unstructured."
-      },
-      "scoring_note": "Communication quality is structure, audience-fit, and clarity — scored independently of execution correctness. The CAP at 3 applies when the candidate confidently communicates an incorrect conclusion; the well-written-but-wrong case should land mid, not at the bottom."
+    {
+      "competency_key": "outcome_communication",
+      "weight": 0.1,
+      "load_bearing": true
     }
-  },
+  ],
   "success_criteria": {
     "must": [
       "Identifies duplicate payments as the root cause (not refunds).",

@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Calibration step 2 — gradient + independence check.
 //
 // Step 1 (verify-discrimination.ts) showed clean separation between a
@@ -60,16 +59,28 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
 
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 // Baselines from prior runs. Override via env if you re-run upstream steps.
 //   STRONG, WEAK: from verify-discrimination step 1.
 //   A: from the first verify-gradient run (saved here so we don't waste a
 //   Gemini call re-running an already-clean playthrough). When re-running
 //   only B/C after fixes, pass SKIP=A.
-const BASELINE_STRONG_ID = process.env.BASELINE_STRONG_ID ?? "b6a45922-822e-4737-96e1-eee188823608";
-const BASELINE_WEAK_ID   = process.env.BASELINE_WEAK_ID   ?? "9d91776c-5efd-4887-a02d-4d5a06376f71";
-const BASELINE_A_ID      = process.env.BASELINE_A_ID      ?? "73cf7977-6eff-4b77-bcb9-f4cea584b573";
-const BASELINE_B_ID      = process.env.BASELINE_B_ID      ?? "";
-const BASELINE_C_ID      = process.env.BASELINE_C_ID      ?? "";
+// Baselines re-established under JUDGE_PROMPT_VERSION=2 (the "3 = meets bar is
+// earned" tightening). The prior v1 defaults are stale; re-score under the new
+// prompt if the judge changes again (drift detection flags the version bump).
+const BASELINE_STRONG_ID = process.env.BASELINE_STRONG_ID ?? "f42fbde7-d4f3-455a-a3e7-25ad5b8bffe5";
+const BASELINE_WEAK_ID   = process.env.BASELINE_WEAK_ID   ?? "c66032bd-c737-4350-ae53-a3c2dadab2c8";
+const BASELINE_A_ID      = process.env.BASELINE_A_ID      ?? "281cfe0a-c9bb-42fd-bb30-f5b7843695c5";
+const BASELINE_B_ID      = process.env.BASELINE_B_ID      ?? "e1c33afb-75d3-446c-8972-aef44f922734";
+const BASELINE_C_ID      = process.env.BASELINE_C_ID      ?? "93a30f84-c7a0-488f-aa82-a7ff7bfb6687";
 // SKIP="A" or "AB" or "ABC" — for any letter in SKIP we fetch the baseline
 // instead of running. (STRONG/WEAK are always fetched.)
 const SKIP_PROFILES = (process.env.SKIP ?? "").toUpperCase();
@@ -119,7 +130,9 @@ interface MessageBus {
 function openMessagingWs(sessionId: string): Promise<MessageBus> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     const bus: MessageBus = { ws, buffer: [], waiters: [], closed: false };
     ws.on("message", (raw: WS.RawData) => {
       let parsed: Inbound;
@@ -246,7 +259,9 @@ async function createSession(
     body: JSON.stringify({ scenarioId, beatTimingOverridesMs: beatOverrides }),
   });
   if (!r.ok) throw new Error(`session create failed: ${r.status} ${await r.text()}`);
-  return ((await r.json()) as { sessionId: string }).sessionId;
+  const body = (await r.json()) as { sessionId: string; token?: string };
+  if (body.token) tokens.set(body.sessionId, body.token);
+  return body.sessionId;
 }
 
 async function pollForEval(sessionId: string, timeoutMs: number): Promise<EvaluationRow | null> {
@@ -310,7 +325,7 @@ async function runProfileA(scenarioId: string): Promise<PlayResult> {
   // Technical work: view docs (research signal, not social).
   for (const docId of ["data-dictionary", "revenue-dashboard-definition"]) {
     const r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: "{}",
     });
     if (!r.ok) note(result, `doc view ${docId} failed: ${r.status}`);
   }
@@ -319,16 +334,16 @@ async function runProfileA(scenarioId: string): Promise<PlayResult> {
   // Same precise query path as STRONG: naive → dedup → fingerprint.
   const naiveSql = `SELECT substr(created_at,1,7) AS month, SUM(amount_cents) AS cents FROM payments WHERE status='succeeded' AND substr(created_at,1,7) IN ('2026-03','2026-04','2026-05') GROUP BY substr(created_at,1,7) ORDER BY month`;
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: naiveSql }),
   });
   const dedupSql = `WITH dedup AS (SELECT MIN(id) AS keep_id FROM payments WHERE status='succeeded' GROUP BY external_payment_id) SELECT substr(p.created_at,1,7) AS month, SUM(p.amount_cents) AS cents FROM payments p JOIN dedup d ON d.keep_id=p.id WHERE substr(p.created_at,1,7) IN ('2026-03','2026-04','2026-05') GROUP BY substr(p.created_at,1,7) ORDER BY month`;
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: dedupSql }),
   });
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: "SELECT external_payment_id, COUNT(*) FROM payments WHERE status='succeeded' GROUP BY external_payment_id HAVING COUNT(*)>1 LIMIT 5" }),
   });
   note(result, "ran naive SUM + dedup CTE + duplicate fingerprint");
@@ -359,12 +374,12 @@ async function runProfileA(scenarioId: string): Promise<PlayResult> {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(deliv),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(deliv),
   });
   if (dr.ok) note(result, "deliverable submitted (correct figures + terse client_facing_summary)");
   else note(result, `deliverable submit FAILED: ${dr.status}`);
 
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   note(result, "session DELETEd → auto-eval triggered");
   return result;
 }
@@ -420,7 +435,7 @@ async function runProfileB(scenarioId: string): Promise<PlayResult> {
   // [3] View both docs.
   for (const docId of ["data-dictionary", "revenue-dashboard-definition"]) {
     const r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: "{}",
     });
     if (!r.ok) note(result, `doc view ${docId} failed: ${r.status}`);
   }
@@ -444,7 +459,7 @@ async function runProfileB(scenarioId: string): Promise<PlayResult> {
   // [5] AI-assistant turn — pursuing the refund red herring thoughtfully.
   try {
     const cr = await fetch(`${SERVER_URL}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({
         sessionId,
         prompt: "Two sentences max: in SQLite, what's the canonical pattern for computing monthly revenue while subtracting refund amounts, when refunds appear as separate rows with status='refunded' linking back to the original via external_payment_id?",
@@ -488,7 +503,7 @@ async function runProfileB(scenarioId: string): Promise<PlayResult> {
 
   // [8] Run ONE naive SUM only (no dedup, no fingerprint).
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({
       sql: `SELECT substr(created_at,1,7) AS month, SUM(amount_cents) AS cents FROM payments WHERE status='succeeded' AND substr(created_at,1,7) IN ('2026-03','2026-04','2026-05') GROUP BY substr(created_at,1,7) ORDER BY month`,
     }),
@@ -522,12 +537,12 @@ async function runProfileB(scenarioId: string): Promise<PlayResult> {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(deliv),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(deliv),
   });
   if (dr.ok) note(result, "deliverable submitted (INFLATED figures + clean board-ready prose)");
   else note(result, `deliverable submit FAILED: ${dr.status}`);
 
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   note(result, "session DELETEd → auto-eval triggered");
   return result;
 }
@@ -574,7 +589,7 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
   // [3] View docs.
   for (const docId of ["data-dictionary", "revenue-dashboard-definition"]) {
     await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: "{}",
     });
   }
   note(result, "viewed both docs");
@@ -601,7 +616,7 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
   ];
   for (const sql of wasteSqls) {
     await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({ sql }),
     });
   }
@@ -610,7 +625,7 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
   // [5] AI-assistant turns — two long prompts to burn tokens.
   try {
     await fetch(`${SERVER_URL}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({
         sessionId,
         prompt: "I'm investigating a revenue dashboard discrepancy where the SUM of amount_cents in a payments table doesn't match the expected total. Walk me through the considerations when deciding whether to dedup payments by external_payment_id alone, or by a composite fingerprint of (external_payment_id, amount_cents, subscription_id), or by looking for rows created within N seconds of each other with otherwise-identical fields. What are the failure modes of each approach in a SQLite database that ingests from a Stripe-style webhook with at-least-once delivery semantics?",
@@ -625,7 +640,7 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
 
   try {
     await fetch(`${SERVER_URL}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({
         sessionId,
         prompt: "Given a payments table where some succeeded payments have been duplicated by webhook retries, write out a complete SQLite CTE that deduplicates them by external_payment_id, keeping the row with the smallest id per group. Then aggregate monthly revenue. Explain each step.",
@@ -638,7 +653,7 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
 
   // [6] Run the CORRECT dedup query and capture its values (proves data_fluency).
   const goodDedupRes = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({
       sql: `WITH dedup AS (SELECT MIN(id) AS keep_id FROM payments WHERE status='succeeded' GROUP BY external_payment_id) ` +
            `SELECT substr(p.created_at,1,7) AS month, SUM(p.amount_cents) AS cents FROM payments p JOIN dedup d ON d.keep_id=p.id ` +
@@ -654,7 +669,7 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
                       `SELECT substr(p.created_at,1,7) AS month, SUM(p.amount_cents) AS cents FROM payments p JOIN dedup d ON d.keep_id=p.id ` +
                       `WHERE substr(p.created_at,1,7) IN ('2026-03','2026-04','2026-05') GROUP BY 1 ORDER BY 1`;
   const nearMissRes = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: nearMissSql }),
   }).then((r) => r.json()) as { status: string; rows?: unknown[][] };
 
@@ -698,12 +713,12 @@ async function runProfileC(scenarioId: string): Promise<PlayResult> {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(deliv),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(deliv),
   });
   if (dr.ok) note(result, "deliverable submitted (correct insight, WRONG figures, no upstream-fix rec)");
   else note(result, `deliverable submit FAILED: ${dr.status}`);
 
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   note(result, "session DELETEd → auto-eval triggered");
   return result;
 }

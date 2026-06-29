@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.9 — the Analysis Agent.
 //
 // Two phases:
@@ -40,6 +39,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
 
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +80,9 @@ type Inbound = PersonaMsg | ErrMsg;
 function openMessagingWs(sessionId: string): Promise<WS> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     ws.once("open", () => resolveOpen(ws));
     ws.once("error", (err) => rejectOpen(err));
   });
@@ -158,7 +168,9 @@ function fmtUsd(cents: number): string {
     console.error("session create failed:", createRes.status, await createRes.text());
     process.exit(1);
   }
-  const { sessionId } = (await createRes.json()) as { sessionId: string };
+  const createBody = (await createRes.json()) as { sessionId: string; token?: string };
+  const { sessionId } = createBody;
+  if (createBody.token) tokens.set(createBody.sessionId, createBody.token);
   const sessionStartMs = Date.now();
   console.log(`  [a.1] session ${sessionId} created`);
 
@@ -202,7 +214,7 @@ function fmtUsd(cents: number): string {
   // View both docs.
   for (const docId of ["data-dictionary", "revenue-dashboard-definition"]) {
     const r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: "{}",
     });
     if (!r.ok) { fail(`doc view ${docId}: ${r.status}`); }
   }
@@ -224,7 +236,7 @@ function fmtUsd(cents: number): string {
     ORDER BY month
   `.trim();
   const qr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({ sql: dedupSql }),
   }).then((r) => r.json()) as { status: string; rows?: unknown[][] };
   if (qr.status === "ok" && Array.isArray(qr.rows) && qr.rows.length === 3) {
@@ -235,7 +247,7 @@ function fmtUsd(cents: number): string {
 
   // Also run the duplicate fingerprint, so the eval has clear data_fluency evidence.
   await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
     body: JSON.stringify({
       sql: "SELECT external_payment_id, COUNT(*) FROM payments WHERE status='succeeded' GROUP BY external_payment_id HAVING COUNT(*) > 1 LIMIT 5",
     }),
@@ -246,7 +258,7 @@ function fmtUsd(cents: number): string {
   // One AI-assistant turn.
   try {
     const cr = await fetch(`${SERVER_URL}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({
         sessionId,
         prompt: "Give me one sentence: when SUMming amount_cents from a payments table that has duplicate rows sharing external_payment_id, what's the canonical way to dedup before SUMming in SQLite?",
@@ -297,13 +309,13 @@ function fmtUsd(cents: number): string {
     },
   };
   const dr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(deliv),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(deliv),
   });
   if (dr.ok) console.log("  [a.7] deliverable submitted with correct figures + root cause");
   else fail(`deliverable submit: ${dr.status}: ${await dr.text()}`);
 
   // DELETE → triggers expireSession → auto-eval fires (fire-and-forget on server).
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } });
   console.log("  [a.8] session DELETEd → auto-eval should fire");
 
   // Poll for the evaluation row.

@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // Verifier for the scenario_state write-race fix (Week 4.10).
 //
 // Three phases:
@@ -33,6 +32,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
+
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -89,7 +97,9 @@ async function createSession(): Promise<string> {
     console.error("session create failed:", r.status, await r.text());
     process.exit(1);
   }
-  return ((await r.json()) as { sessionId: string }).sessionId;
+  const body = (await r.json()) as { sessionId: string; token?: string };
+  if (body.token) tokens.set(body.sessionId, body.token);
+  return body.sessionId;
 }
 
 (async () => {
@@ -122,7 +132,7 @@ async function createSession(): Promise<string> {
       fail(`pre-existing keys altered: ${lost.join(", ")}`);
     }
   }
-  await fetch(`${SERVER_URL}/sessions/${probeSession}`, { method: "DELETE" }).catch(() => {});
+  await fetch(`${SERVER_URL}/sessions/${probeSession}`, { method: "DELETE", headers: { ...authHeaders(probeSession) } }).catch(() => {});
 
   // ── [b] Concurrency stress (the core fix) ──────────────────────────────
   console.log("\n[b] concurrency stress — 5 rounds × parallel write fan-out");
@@ -151,19 +161,19 @@ async function createSession(): Promise<string> {
     // compute the expected delta against what actually fired.
     const [q1, q2, q3, dr] = await Promise.all([
       fetch(`${SERVER_URL}/api/sessions/${sid}/query`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sid) },
         body: JSON.stringify({ sql: "SELECT 1" }),
       }),
       fetch(`${SERVER_URL}/api/sessions/${sid}/query`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sid) },
         body: JSON.stringify({ sql: "SELECT 1" }),
       }),
       fetch(`${SERVER_URL}/api/sessions/${sid}/query`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sid) },
         body: JSON.stringify({ sql: "SELECT 1" }),
       }),
       fetch(`${SERVER_URL}/api/sessions/${sid}/deliverable`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sid) },
         body: deliverableBody,
       }),
     ]);
@@ -238,7 +248,7 @@ async function createSession(): Promise<string> {
     if (roundOK) console.log(`  round ${round}: PASS`);
     else { console.log(`  round ${round}: FAIL`); stressFails++; }
 
-    await fetch(`${SERVER_URL}/sessions/${sid}`, { method: "DELETE" }).catch(() => {});
+    await fetch(`${SERVER_URL}/sessions/${sid}`, { method: "DELETE", headers: { ...authHeaders(sid) } }).catch(() => {});
   }
 
   if (stressFails === 0) pass(`${ROUNDS}/${ROUNDS} stress rounds passed`);
@@ -262,21 +272,21 @@ async function createSession(): Promise<string> {
   };
   await Promise.all([
     fetch(`${SERVER_URL}/api/sessions/${reproSid}/query`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(reproSid) },
       body: JSON.stringify({ sql: "SELECT 1" }),
     }),
     fetch(`${SERVER_URL}/api/sessions/${reproSid}/deliverable`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(reproSid) },
       body: JSON.stringify(reproDeliverable),
     }),
     fetch(`${SERVER_URL}/api/sessions/${reproSid}/query`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(reproSid) },
       body: JSON.stringify({ sql: "SELECT 1" }),
     }),
   ]);
   // Now mimic the prior bug's scenario: DELETE immediately after submit.
   await sleep(200);
-  await fetch(`${SERVER_URL}/sessions/${reproSid}`, { method: "DELETE" });
+  await fetch(`${SERVER_URL}/sessions/${reproSid}`, { method: "DELETE", headers: { ...authHeaders(reproSid) } });
   await sleep(1_500);
 
   const reproState = await readScenarioState(reproSid);

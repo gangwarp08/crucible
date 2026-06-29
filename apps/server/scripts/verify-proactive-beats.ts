@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.6 — scripted proactive persona beats.
 //
 // Creates a fast-forwarded fde-db-triage session (beatTimingOverridesMs sets
@@ -35,6 +34,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
+
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
 
 // Beat offsets passed to POST /sessions. Real production timings are 30s
 // (Sam) and 25min (Dana); we compress to 3s / 15s here so the verifier
@@ -85,7 +93,9 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 function openMessagingWs(sessionId: string): Promise<WS> {
   const wsBase = SERVER_URL.replace(/^http/, "ws");
   return new Promise((resolveOpen, rejectOpen) => {
-    const ws = new WS(`${wsBase}/messages/${sessionId}`);
+    const token = tokens.get(sessionId);
+    const protocols = token ? [`bearer.${token}`] : undefined;
+    const ws = new WS(`${wsBase}/messages/${sessionId}`, protocols);
     ws.once("open", () => resolveOpen(ws));
     ws.once("error", (err) => rejectOpen(err));
   });
@@ -166,7 +176,8 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
     console.error("session create failed:", createRes.status, await createRes.text());
     process.exit(1);
   }
-  const { sessionId } = (await createRes.json()) as { sessionId: string };
+  const { sessionId, token } = (await createRes.json()) as { sessionId: string; token?: string };
+  if (token) tokens.set(sessionId, token);
   const sessionStartMs = Date.now();
   console.log(`[setup] session ${sessionId} created (Sam@T+${SAM_OFFSET_MS}ms, Dana@T+${DANA_OFFSET_MS}ms)`);
 
@@ -318,10 +329,18 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
   } else {
     const ss = sessionRow.scenario_state as Record<string, unknown>;
     const beats = (ss.scheduled_beats ?? []) as Array<Record<string, unknown>>;
-    if (beats.length === 2) pass(`scheduled_beats has 2 entries`);
-    else fail(`scheduled_beats has ${beats.length}, expected 2`);
-    if (beats.every((b) => b.fired === true)) pass("both scheduled_beats fired = true");
-    else fail(`scheduled_beats fired status: ${JSON.stringify(beats.map((b) => ({ id: b.id, fired: b.fired })))}`);
+    // Slice 5.4b adds a verification beat (kind="verification") due near the
+    // deadline. It does NOT fire in this short verifier run, so assert only the
+    // two persona beats fired and the verification beat is present + unfired.
+    const personaBeats = beats.filter((b) => b.kind !== "verification");
+    const verifBeats = beats.filter((b) => b.kind === "verification");
+    if (personaBeats.length === 2) pass(`scheduled_beats has 2 persona entries`);
+    else fail(`persona scheduled_beats has ${personaBeats.length}, expected 2`);
+    if (personaBeats.every((b) => b.fired === true)) pass("both persona scheduled_beats fired = true");
+    else fail(`persona scheduled_beats fired status: ${JSON.stringify(personaBeats.map((b) => ({ id: b.id, fired: b.fired })))}`);
+    if (verifBeats.length === 1 && verifBeats[0]!.fired === false)
+      pass("verification beat present + unfired (due near deadline)");
+    else fail(`verification beats = ${JSON.stringify(verifBeats.map((b) => ({ id: b.id, fired: b.fired })))}, expected 1 unfired`);
 
     const personas = ss.personas as {
       client?: { revealed_specifics?: boolean; requirement_changed?: boolean };
@@ -356,7 +375,7 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
   }
 
   // Clean up.
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } }).catch(() => {});
 
   console.log("\n" + (failures === 0 ? "ALL CHECKS PASSED" : `FAILED: ${failures} check(s)`));
   process.exit(failures === 0 ? 0 : 1);

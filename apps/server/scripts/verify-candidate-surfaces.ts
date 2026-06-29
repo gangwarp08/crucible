@@ -1,4 +1,3 @@
-// TODO(jwt-auth): verifier not updated for per-session JWT auth (see verify-rehydrate.ts + verify-pro-discrimination.ts for the pattern). Will 401 on every fetch until updated.
 // End-to-end verifier for Week 4.8 — docs + deliverable + compute HUD.
 //
 // Creates an fde-db-triage session, asserts:
@@ -38,6 +37,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const SERVER_URL = process.env.SERVER_URL ?? "http://127.0.0.1:3001";
 const SLUG = "fde-db-triage";
 
+// Per-session JWTs minted on POST /sessions. createSession stashes them here;
+// every session-scoped HTTP call attaches `Authorization: Bearer <token>` and
+// WS connections use `bearer.<token>` as a subprotocol.
+const tokens = new Map<string, string>();
+function authHeaders(sessionId: string): Record<string, string> {
+  const t = tokens.get(sessionId);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,12 +84,14 @@ async function asJson(res: Response): Promise<unknown> {
     console.error("session create failed:", createRes.status, await createRes.text());
     process.exit(1);
   }
-  const { sessionId } = (await createRes.json()) as { sessionId: string };
+  const createBody = (await createRes.json()) as { sessionId: string; token?: string };
+  const { sessionId } = createBody;
+  if (createBody.token) tokens.set(createBody.sessionId, createBody.token);
   console.log(`\n[setup] session ${sessionId} created`);
 
   // ── [a] GET /sessions/:id shape ─────────────────────────────────────────
   console.log("\n[a] GET /sessions/:id");
-  const getRes = await fetch(`${SERVER_URL}/sessions/${sessionId}`).then((r) => r.json()) as {
+  const getRes = await fetch(`${SERVER_URL}/sessions/${sessionId}`, { headers: { ...authHeaders(sessionId) } }).then((r) => r.json()) as {
     scenarioConstraints: Record<string, unknown> | null;
     scenarioBalances: Record<string, unknown> | null;
     scenarioTokensRemaining: number | null;
@@ -104,7 +114,7 @@ async function asJson(res: Response): Promise<unknown> {
 
   // ── [b] GET /api/sessions/:id/docs ──────────────────────────────────────
   console.log("\n[b] GET /api/sessions/:id/docs");
-  const docsRes = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs`).then(asJson) as {
+  const docsRes = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs`, { headers: { ...authHeaders(sessionId) } }).then(asJson) as {
     docs: Array<{ id: string; title: string; body: string }>;
   };
   if (docsRes.docs?.length === 2) pass(`2 docs returned`);
@@ -125,7 +135,7 @@ async function asJson(res: Response): Promise<unknown> {
   console.log("\n[c] POST .../docs/:docId/view fires doc.view");
   for (const docId of ["data-dictionary", "revenue-dashboard-definition"]) {
     const r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/docs/${docId}/view`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: "{}",
     });
     if (!r.ok) { fail(`view POST for ${docId} returned ${r.status}`); break; }
   }
@@ -159,7 +169,7 @@ async function asJson(res: Response): Promise<unknown> {
     },
   };
   let r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft1),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(draft1),
   });
   if (r.ok) pass("draft save returned 200");
   else { fail(`draft save returned ${r.status}: ${await r.text()}`); }
@@ -174,7 +184,7 @@ async function asJson(res: Response): Promise<unknown> {
     },
   };
   r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submit1),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(submit1),
   });
   if (r.ok) pass("submit returned 200");
   else { fail(`submit returned ${r.status}: ${await r.text()}`); }
@@ -189,7 +199,7 @@ async function asJson(res: Response): Promise<unknown> {
     },
   };
   r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submit2),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(submit2),
   });
   if (r.ok) pass("resubmit returned 200");
 
@@ -224,7 +234,7 @@ async function asJson(res: Response): Promise<unknown> {
   const computeBefore = ((ss.compute_minutes as number) ?? 60);
   for (let i = 0; i < 3; i++) {
     const qr = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) },
       body: JSON.stringify({ sql: "SELECT 1" }),
     });
     if (!qr.ok) { fail(`query ${i} returned ${qr.status}`); break; }
@@ -253,8 +263,10 @@ async function asJson(res: Response): Promise<unknown> {
   // ── [f] PTY-driven deductions ──────────────────────────────────────────
   console.log("\n[f] PTY input with 2 \\r characters deducts 2 × 0.5 compute_minutes");
   const wsBase = SERVER_URL.replace(/^http/, "ws");
+  const ptyToken = tokens.get(sessionId);
+  const ptyProtocols = ptyToken ? [`bearer.${ptyToken}`] : undefined;
   const pty = await new Promise<WS>((resolveOpen, rejectOpen) => {
-    const s = new WS(`${wsBase}/pty/${sessionId}`);
+    const s = new WS(`${wsBase}/pty/${sessionId}`, ptyProtocols);
     s.once("open", () => resolveOpen(s));
     s.once("error", (err) => rejectOpen(err));
   });
@@ -290,7 +302,7 @@ async function asJson(res: Response): Promise<unknown> {
   else fail(`expected 2 sandbox_command constraint.spend events, got ${cmdSpends.length}`);
 
   // Clean up.
-  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE" }).catch(() => {});
+  await fetch(`${SERVER_URL}/sessions/${sessionId}`, { method: "DELETE", headers: { ...authHeaders(sessionId) } }).catch(() => {});
 
   console.log("\n" + (failures === 0 ? "ALL CHECKS PASSED" : `FAILED: ${failures} check(s)`));
   process.exit(failures === 0 ? 0 : 1);

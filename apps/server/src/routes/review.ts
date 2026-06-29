@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { supabase } from "../services/supabase.js";
-import { runAnalysisAgent, AnalysisError } from "../services/analysis-agent.js";
+import { runAnalysisAgent, reinterpretEvaluation, AnalysisError } from "../services/analysis-agent.js";
 
 const LIST_LIMIT = 100;
 // Cap for the per-table grouped-count scans below. Bigger than supabase-js's
@@ -252,6 +252,35 @@ export async function reviewRoutes(server: FastifyInstance) {
         }
         server.log.error({ err, sessionId }, "manual analysis failed");
         return reply.status(500).send({ error: "analysis failed", message: msg });
+      }
+    },
+  );
+
+  // Re-score over STORED evidence units only — runs Stage B (the LLM judge)
+  // without re-running Stage A extraction or replaying the session (Slice 5.3).
+  // Cheap calibration / judge A-B over historical sessions: one LLM call, no
+  // sandbox, no playthrough. Same delete-then-insert persistence as /evaluate.
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/reinterpret",
+    {
+      config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id" });
+      }
+      const sessionId = idParse.data.id;
+      try {
+        const result = await reinterpretEvaluation(sessionId);
+        return reply.send(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (err instanceof AnalysisError && /not found|no scenario|not ended/i.test(msg)) {
+          return reply.status(400).send({ error: msg });
+        }
+        server.log.error({ err, sessionId }, "reinterpret failed");
+        return reply.status(500).send({ error: "reinterpret failed", message: msg });
       }
     },
   );

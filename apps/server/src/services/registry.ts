@@ -26,13 +26,36 @@ export interface PersonaState {
 
 /** One scheduled proactive beat. Lives inside scenarioState.scheduled_beats
  *  (jsonb on the sessions row) — that's the durability point: the schedule
- *  survives a server restart even if the in-memory registry does not. */
+ *  survives a server restart even if the in-memory registry does not.
+ *
+ *  Two kinds share the schedule (Slice 5.4b): persona beats (a client/team
+ *  reveal, the original use) and a single verification beat fired near the
+ *  deadline. `kind` is optional for back-compat — beats persisted before 5.4b
+ *  have no `kind` and are treated as "persona". */
 export interface ScheduledBeat {
   id: string;                                       // curveball id from scenario.json
-  channel: "client" | "team";
-  beat: "refund_hint" | "requirement_change";       // which reveal flag this beat sets
+  kind?: "persona" | "verification";               // default "persona" when absent
+  channel: "client" | "team" | "verifier";
+  beat?: "refund_hint" | "requirement_change";      // persona kind only — the reveal flag set
   due_ts: string;                                   // ISO 8601 absolute
   fired: boolean;
+}
+
+/** L4 interactive verification (Slice 5.4b). Near the deadline the verifier
+ *  picks 2–3 consequential decisions and asks the candidate to defend each,
+ *  one answer per question, no adaptive follow-up. Persisted into
+ *  scenarioState.verification so the in-flight exchange survives a restart. */
+export interface VerificationQuestion {
+  decision: string;        // the candidate decision being probed
+  question: string;        // the verifier's defense question (candidate-facing)
+  competency_key: string;  // competency this decision maps to (for Stage A tying)
+}
+
+export interface VerificationState {
+  status: "idle" | "in_progress" | "done";
+  questions: VerificationQuestion[];
+  current_index: number;   // index of the question awaiting an answer
+  answers: string[];       // candidate answers, parallel to questions[0..current_index)
 }
 
 /** A single buffered telemetry event waiting to be flushed to Supabase. */
@@ -96,6 +119,17 @@ export interface SessionEntry {
   messagingSockets: Set<MessagingSocket>;
   channelHistory: { client: PersonaTurn[]; team: PersonaTurn[] };
   personaState: PersonaState;
+
+  // L4 interactive verification (Slice 5.4b). Live state of the near-deadline
+  // defense exchange on the "verifier" channel. Mirrored into
+  // scenarioState.verification for durability across a restart.
+  verificationState: VerificationState;
+}
+
+/** Fresh verification state for a new session — nothing asked yet. Returns a
+ *  new object each call so two sessions never alias the same mutable state. */
+export function freshVerificationState(): VerificationState {
+  return { status: "idle", questions: [], current_index: 0, answers: [] };
 }
 
 // In-memory session store keyed by sessionId.

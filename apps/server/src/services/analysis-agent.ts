@@ -23,6 +23,8 @@ import { supabase } from "./supabase.js";
 import { chatCompletionWithMessages, type ChatMessage } from "./litellm.js";
 import { recordCost } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
+import { extractAndPersistEvidence, DETECTOR_VERSION } from "./evidence-extractor.js";
+import { updateScenarioStats } from "./scenario-stats.js";
 import {
   assembleAnalysisInput,
   AnalysisInputError,
@@ -36,20 +38,16 @@ export class AnalysisError extends Error {
   }
 }
 
-const COMPETENCIES = [
-  "problem_framing",
-  "customer_engagement",
-  "data_fluency",
-  "design_under_constraints",
-  "execution",
-  "ai_orchestration",
-  "teamwork",
-  "outcome_communication",
-] as const;
-type Competency = (typeof COMPETENCIES)[number];
+// The competency SET is no longer hardcoded here — it comes from the canonical
+// competency model (Slice 5.1). assembleAnalysisInput resolves the scenario's
+// rubric binding into input.scenario.rubric; parseAndValidate iterates whatever
+// competencies that resolved rubric declares. (The SYSTEM_PROMPT below still
+// documents the current 8-competency schema by name; every v1 scenario binds
+// the same 8, so the prompt and the resolved set agree. A future scenario that
+// binds a different set would need the prompt schema generated from the keys.)
 
 export interface EvaluationItem {
-  competency: Competency;
+  competency: string;
   score: number; // integer 1-5
   weight: number;
   rationale: string;
@@ -67,6 +65,11 @@ export interface EvaluationResult {
 }
 
 const MODEL = "gemini-flash";
+// Bump when the judge system prompt / scoring rubric in this file changes, so
+// re-scoring + drift detection (Slice 5.7) can tell prompt revisions apart.
+// v2: tightened the "3 = meets bar is EARNED" floor so a near-empty run can't
+// score 3 on process competencies (was inflating WEAK process scores).
+export const JUDGE_PROMPT_VERSION = "2";
 // 8k headroom: 8 items × (rationale ~120 tok + 4 evidence × ~30 tok) +
 // overall_summary ~250 tok ≈ 2k of actual content, plus the JSON scaffolding.
 // 4k was too tight for dense sessions (15+ queries + 2 long AI prompts) — the
@@ -92,6 +95,18 @@ correctness, not just plausibility.
 - The candidate's signal stream: messages they sent and received, db \
 queries they ran, docs they viewed, AI-assistant turns, file snapshots, \
 curveball reactions, and the constraint trajectory.
+- evidence_units: DETERMINISTIC facts pre-computed by code from the event \
+stream + ground truth — e.g. whether the candidate's dedup was correct, \
+whether a status='succeeded' filter was missing, whether the corrected figure \
+matched ground truth, AI-turn counts, whether the client/team were engaged. \
+Treat these as STRONG, reliable signals and weigh them heavily for the \
+objective competencies (data_fluency, execution). But they can be INCOMPLETE: \
+e.g. figures_match_truth only matches a TOTAL figure written in the deliverable \
+text, so a candidate who reported correct PER-MONTH figures may still show \
+false. So: where a unit and the raw deliverable/signal AGREE, score with \
+confidence; where they CONFLICT, look at the actual deliverable and signal to \
+decide, rather than blindly following the unit. Use the signal stream for \
+QUALITY and TONE (prose, collaboration, framing) where no unit applies.
 - A list of valid event_seqs (\`surfaced_seqs\`). Every \`event_seq\` you \
 cite as evidence MUST come from this list. Do NOT invent seqs.
 
@@ -131,6 +146,23 @@ communication, that is real evidence for outcome_communication and \
 customer_engagement regardless of execution correctness. Conversely, when \
 execution IS right, do not inflate process scores that lack their own evidence.
 
+3 = MEETS BAR, AND IT MUST BE EARNED — never a default or a participation \
+floor. A competency scores 3 ONLY when the signal shows the candidate actually \
+DEMONSTRATED that skill at a competent level. With NO supporting evidence, or \
+only TOKEN / perfunctory activity, the score is 1-2, NOT 3:
+- One vague or low-effort message ("hey what's wrong with the dashboard") is \
+NOT problem_framing or customer_engagement at the meets-bar level — that's a 1-2.
+- A single naive query with no follow-up, no dedup, no verification is NOT \
+data_fluency or design_under_constraints at 3 — that's a 1-2.
+- Zero AI-assistant turns is ai_orchestration 1, not 3. A passive one-line \
+acknowledgement to the teammate is teamwork 1-2, not 3.
+- A trivial or near-empty deliverable ("n/a", uncorrected figures) does not \
+earn 3 on outcome_communication.
+A NEAR-EMPTY SESSION — very few actions, no real investigation, blindly \
+accepting hints, a trivial deliverable — scores 1-2 ACROSS the process \
+competencies. Do not award 3s to round out a weak transcript. Reserve 3+ for \
+competencies with concrete, specific supporting evidence in the signal.
+
 THE EXCEPTION: confidently communicating an INCORRECT conclusion CAPS the \
 relevant communication competency. Clean prose for the wrong answer cannot \
 score 5 on outcome_communication — clarity is real but the message is wrong, \
@@ -148,6 +180,20 @@ figures came back ~12% high; or correct figures but missing the bonus \
 upstream-fix recommendation. The diagnosis and method are real; the figure \
 is wrong for a nameable reason. This is genuinely mid, not a failure.
 - 1/5: wrong root cause / naive uncorrected figures / no real fix attempted.
+
+INTERACTIVE VERIFICATION (signal.verification): near the end a reviewer asked \
+the candidate to DEFEND 2-3 consequential decisions, one answer each. When \
+\`signal.verification.prompted\` is true, weigh the defense heavily: a \
+deliverable that LOOKS correct but that the candidate CANNOT defend — vague or \
+evasive answers, "I don't know", crediting the work to the AI, or contradicting \
+their own queries — is NOT evidence of mastery. Such an undefended result CAPS \
+the relevant competency (especially execution) at roughly 3, even if the figure \
+matches ground truth, because we cannot trust an answer the candidate can't \
+explain. The deterministic \`defense_weak\` evidence unit flags which \
+competencies had a weak defense. Conversely, a specific, correct defense that \
+shows real understanding is STRONG positive evidence for execution and \
+data_fluency. When \`prompted\` is false, no verification occurred — ignore this \
+section entirely and score on the rest of the signal as usual.
 
 If the scenario's rubric includes per-competency \`anchors\`, treat those as \
 authoritative for that scenario — they override these global anchors when \
@@ -188,7 +234,7 @@ interface RawItem {
 }
 interface RawResponse {
   overall_summary?: unknown;
-  items?: Partial<Record<Competency, RawItem>>;
+  items?: Record<string, RawItem | undefined>;
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -216,7 +262,9 @@ function parseAndValidate(
       : "(no summary returned)";
 
   const items: EvaluationItem[] = [];
-  for (const competency of COMPETENCIES) {
+  // Iterate the competencies the resolved rubric declares (from the canonical
+  // model binding), not a hardcoded list.
+  for (const competency of Object.keys(rubric)) {
     const raw = parsed.items?.[competency];
     const weight =
       typeof rubric[competency]?.weight === "number" ? rubric[competency]!.weight : 0;
@@ -270,6 +318,13 @@ function weightedOverall(items: EvaluationItem[]): number {
 
 // ─── Persistence ───────────────────────────────────────────────────────────
 
+interface VersionStamps {
+  competencyModelVersion: number | null;
+  detectorVersion: string | null;
+  judgePromptVersion: string | null;
+  scenarioVersion: number | null;
+}
+
 async function persistEvaluation(
   sessionId: string,
   scenarioId: string,
@@ -277,6 +332,7 @@ async function persistEvaluation(
   summary: string,
   status: "complete" | "error",
   items: EvaluationItem[],
+  versions: VersionStamps,
 ): Promise<string> {
   if (!supabase) {
     throw new AnalysisError("Supabase client unavailable; cannot persist evaluation");
@@ -302,6 +358,10 @@ async function persistEvaluation(
     summary,
     model: MODEL,
     status,
+    competency_model_version: versions.competencyModelVersion,
+    detector_version: versions.detectorVersion,
+    judge_prompt_version: versions.judgePromptVersion,
+    scenario_version: versions.scenarioVersion,
   });
   if (insErr) {
     throw new AnalysisError(`evaluations insert failed: ${insErr.message}`);
@@ -328,7 +388,7 @@ async function persistEvaluation(
 
 // ─── Main entry ────────────────────────────────────────────────────────────
 
-export async function runAnalysisAgent(sessionId: string): Promise<EvaluationResult> {
+async function runStageB(sessionId: string): Promise<EvaluationResult> {
   let input: AnalysisInput;
   try {
     input = await assembleAnalysisInput(sessionId);
@@ -349,6 +409,16 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
   if (!scenarioId) {
     throw new AnalysisError(`session ${sessionId} has no scenario_id`);
   }
+
+  // Full provenance stamp for this verdict (Slice 5.7). competency_model_version
+  // landed in 5.1; the other three legs let drift detection re-score the anchor
+  // set whenever any of them changes.
+  const versions: VersionStamps = {
+    competencyModelVersion: input.scenario.competency_model_version,
+    detectorVersion: DETECTOR_VERSION,
+    judgePromptVersion: JUDGE_PROMPT_VERSION,
+    scenarioVersion: input.scenario.scenario_version,
+  };
 
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -377,6 +447,7 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
       `Evaluation failed: ${message}`,
       "error",
       [],
+      versions,
     );
     void appendEvent(sessionId, "ai.evaluation", "system", {
       evaluation_id: evaluationId,
@@ -406,6 +477,7 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
       `Response parse failed: ${message}. Raw start: ${result.text.slice(0, 200)}`,
       "error",
       [],
+      versions,
     );
     void appendEvent(sessionId, "ai.evaluation", "system", {
       evaluation_id: evaluationId,
@@ -426,7 +498,17 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
     summary,
     "complete",
     items,
+    versions,
   );
+
+  // Refresh the scenario's running aggregates (Slice 5.7). Fire-and-forget +
+  // non-fatal: a stats failure must never block the evaluation result.
+  void updateScenarioStats(scenarioId).catch((err) => {
+    console.error(
+      `[analysis] scenario_stats update failed for scenario ${scenarioId}:`,
+      (err as Error).message,
+    );
+  });
 
   // Cost ledger entry — NOT added to session.spend_usd since this is on the
   // platform master key, not the per-session key. The cumulative_spend_usd
@@ -471,4 +553,34 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
     status: "complete",
     items,
   };
+}
+
+/**
+ * Full evaluation (auto-eval on session end + POST /evaluate):
+ * Stage A deterministic extraction → Stage B LLM judge over the units + signal.
+ */
+export async function runAnalysisAgent(sessionId: string): Promise<EvaluationResult> {
+  // Stage A — deterministic evidence extraction (Slice 5.2). Runs BEFORE the
+  // judge so Stage B reads fresh units. Non-fatal: a detector failure must
+  // never block the evaluation (Stage B can still judge the raw signal).
+  try {
+    const units = await extractAndPersistEvidence(sessionId);
+    console.log(`[analysis] extracted ${units.length} evidence units for session ${sessionId}`);
+  } catch (err) {
+    console.error(
+      `[analysis] evidence extraction failed for session ${sessionId}:`,
+      (err as Error).message,
+    );
+  }
+  return runStageB(sessionId);
+}
+
+/**
+ * Re-score over STORED evidence units only — no Stage A re-extraction and no
+ * session replay (Slice 5.3). This is the cheap calibration / model A-B path:
+ * the deterministic units are fixed, so re-running Stage B re-interprets them
+ * for a single LLM call against a historical session.
+ */
+export async function reinterpretEvaluation(sessionId: string): Promise<EvaluationResult> {
+  return runStageB(sessionId);
 }

@@ -48,7 +48,8 @@ interface ScenarioDoc {
   constraints: Record<string, number>;
   curveballs: unknown[];
   deliverable_spec: Record<string, unknown>;
-  rubric: Record<string, { weight: number; description: string; signals: string[] }>;
+  // Rubric BINDING array (Slice 5.1): references canonical competency keys.
+  rubric: Array<{ competency_key: string; weight: number } & Record<string, unknown>>;
   success_criteria: Record<string, unknown>;
 }
 
@@ -63,11 +64,8 @@ const TARGET_SLUG = "fde-db-triage-pro";
     process.exit(1);
   }
 
-  // Local sanity check: rubric weights sum to 1.00 (integer cents to dodge float).
-  const weightCents = Object.values(doc.rubric).reduce(
-    (sum, r) => sum + Math.round(r.weight * 100),
-    0,
-  );
+  // Local sanity check: binding weights sum to 1.00 (integer cents to dodge float).
+  const weightCents = doc.rubric.reduce((sum, r) => sum + Math.round(r.weight * 100), 0);
   if (weightCents !== 100) {
     console.error(`rubric weights sum to ${weightCents / 100}, expected 1.00`);
     process.exit(1);
