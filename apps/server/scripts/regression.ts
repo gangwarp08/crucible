@@ -60,6 +60,7 @@ const CORE: Verifier[] = [
   { name: "discrimination", file: "verify-discrimination.ts" },
   { name: "pro-discrimination", file: "verify-pro-discrimination.ts" },
   { name: "analysis-agent", file: "verify-analysis-agent.ts" },
+  { name: "isomorph-equivalence", file: "verify-isomorph-equivalence.ts", note: "2 matched LLM playthroughs" },
 ];
 
 // Need baseline session IDs from a prior discrimination run (BASELINE_*_ID env).

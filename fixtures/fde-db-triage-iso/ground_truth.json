@@ -1,0 +1,45 @@
+{
+  "reference_date": "2026-05-31T23:59:59Z",
+  "reporting_window": [
+    "2026-03",
+    "2026-04",
+    "2026-05"
+  ],
+  "bug_months": [
+    "2026-04",
+    "2026-05"
+  ],
+  "naive_monthly_cents": {
+    "2026-03": 105696344,
+    "2026-04": 120698811,
+    "2026-05": 126597228
+  },
+  "corrected_monthly_cents": {
+    "2026-03": 105696344,
+    "2026-04": 113298107,
+    "2026-05": 117698862
+  },
+  "overstatement_cents": 16299070,
+  "overstatement_by_month_cents": {
+    "2026-03": 0,
+    "2026-04": 7400704,
+    "2026-05": 8898366
+  },
+  "duplicate_count_by_month": {
+    "2026-04": 25,
+    "2026-05": 27
+  },
+  "succeeded_count_by_month": {
+    "2026-03": 311,
+    "2026-04": 344,
+    "2026-05": 370
+  },
+  "totals": {
+    "payments": 3726,
+    "customers": 400,
+    "subscriptions": 500,
+    "base_payments": 3674,
+    "duplicate_payments": 52
+  },
+  "root_cause_narrative": "In the bug months (Apr + May 2026) a webhook-retry bug double-inserted ~8% of succeeded payments. Duplicates share external_payment_id + amount_cents + subscription_id and differ only by id and a few seconds of created_at. The correct method is to dedup by external_payment_id (e.g. SELECT MIN(id) per external_payment_id, JOIN back) before SUMing amount_cents — filtering to status = 'succeeded'. Refunds (~10% of all payments, normally distributed) and UTC month-boundary timestamps are red herrings and do not close the gap."
+}
