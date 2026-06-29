@@ -155,14 +155,30 @@ async function verifyScenarioRow(): Promise<void> {
     pass(`constraints keys = ${consKeys.join(", ")}`);
   else fail(`constraints keys = ${consKeys.join(", ")} (expected ${wantConsKeys.join(", ")})`);
 
-  const rubric = data.rubric as Record<string, { weight: number }>;
-  const rubricKeys = Object.keys(rubric ?? {}).sort();
+  // Rubric is a BINDING ARRAY since Slice 5.1 ([{competency_key, weight}, ...]),
+  // not the legacy object map. Accept either: derive keys from competency_key
+  // when it's an array, else fall back to object keys.
+  const rubricRaw = data.rubric as unknown;
+  const rubricArr = Array.isArray(rubricRaw)
+    ? (rubricRaw as Array<{ competency_key?: string; weight?: number }>)
+    : [];
+  const rubricKeys = (
+    rubricArr.length > 0
+      ? rubricArr.map((r) => r.competency_key ?? "")
+      : Object.keys((rubricRaw ?? {}) as Record<string, unknown>)
+  )
+    .filter((k) => k.length > 0)
+    .sort();
   if (JSON.stringify(rubricKeys) === JSON.stringify(EXPECTED_RUBRIC_KEYS))
     pass(`rubric keys match the 8-competency spec exactly`);
   else
     fail(`rubric keys = [${rubricKeys.join(", ")}], expected [${EXPECTED_RUBRIC_KEYS.join(", ")}]`);
 
-  const weightCents = Object.values(rubric ?? {}).reduce(
+  const weightItems: Array<{ weight?: number }> =
+    rubricArr.length > 0
+      ? rubricArr
+      : Object.values((rubricRaw ?? {}) as Record<string, { weight?: number }>);
+  const weightCents = weightItems.reduce(
     (sum, r) => sum + Math.round((r?.weight ?? 0) * 100),
     0,
   );
