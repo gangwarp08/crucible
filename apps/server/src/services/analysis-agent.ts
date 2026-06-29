@@ -23,6 +23,7 @@ import { supabase } from "./supabase.js";
 import { chatCompletionWithMessages, type ChatMessage } from "./litellm.js";
 import { recordCost } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
+import { extractAndPersistEvidence } from "./evidence-extractor.js";
 import {
   assembleAnalysisInput,
   AnalysisInputError,
@@ -348,6 +349,19 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
   const scenarioId = (sessRow as unknown as { scenario_id: string } | null)?.scenario_id;
   if (!scenarioId) {
     throw new AnalysisError(`session ${sessionId} has no scenario_id`);
+  }
+
+  // Stage A — deterministic evidence extraction (Slice 5.2). Populates
+  // evidence_units for this session; Stage B (Slice 5.3) will consume them.
+  // Non-fatal: a detector failure must never block the evaluation.
+  try {
+    const units = await extractAndPersistEvidence(sessionId);
+    console.log(`[analysis] extracted ${units.length} evidence units for session ${sessionId}`);
+  } catch (err) {
+    console.error(
+      `[analysis] evidence extraction failed for session ${sessionId}:`,
+      (err as Error).message,
+    );
   }
 
   const messages: ChatMessage[] = [

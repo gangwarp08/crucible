@@ -1,0 +1,350 @@
+// L5 Stage A — deterministic evidence extraction (Slice 5.2).
+//
+// Reads a completed session's append-only event stream + the scenario's
+// ground_truth.json and emits typed EVIDENCE UNITS: small, deterministic facts
+// each tied to a competency and the exact event_seqs that produced it. No LLM
+// here — these features repeat exactly across runs, which is what makes the
+// downstream judge (Stage B, Slice 5.3) reliable and auditable.
+//
+// Reads strictly from durable storage (Supabase + filesystem), mirroring
+// analysis-input — so it works post-session and on historical sessions.
+//
+// Detectors come in two tiers: scenario-AGNOSTIC (query/deliverable/AI/message
+// shape — run for any scenario) and fde-db-triage-SPECIFIC (dedup correctness,
+// status filter, corrected-figure match — keyed off the scenario slug). Adding
+// a scenario means adding a detector block, not touching the agnostic core.
+
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { supabase } from "./supabase.js";
+
+// Bump when detector logic changes so re-scoring/drift can tell versions apart.
+export const DETECTOR_VERSION = "1";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(here, "../../../..");
+
+export interface EvidenceUnit {
+  competency_key: string;
+  kind: string;
+  /** boolean | number | structured — interpreted by Stage B. */
+  value: unknown;
+  /** Detector importance/confidence (0..1); refined in Slice 5.3. */
+  weight: number;
+  event_seqs: number[];
+  detector_version: string;
+}
+
+export class EvidenceExtractorError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = "EvidenceExtractorError";
+  }
+}
+
+export interface EventRow {
+  seq: number;
+  type: string;
+  actor: string;
+  payload: Record<string, unknown>;
+}
+
+interface QueryEvent {
+  seq: number;
+  sql: string;
+  status: string;
+  row_count: number | undefined;
+  error: string | undefined;
+}
+
+// ─── Durable read ────────────────────────────────────────────────────────────
+
+interface SessionContext {
+  slug: string;
+  datasetRef: string | null;
+  events: EventRow[];
+  groundTruth: Record<string, unknown>;
+}
+
+async function loadContext(sessionId: string): Promise<SessionContext> {
+  if (!supabase) {
+    throw new EvidenceExtractorError("Supabase client unavailable; cannot extract evidence");
+  }
+
+  const { data: sessRow, error: sessErr } = await supabase
+    .from("sessions")
+    .select("scenario_id")
+    .eq("id", sessionId)
+    .single();
+  if (sessErr || !sessRow) {
+    throw new EvidenceExtractorError(`session read failed: ${sessErr?.message}`);
+  }
+  const scenarioId = (sessRow as { scenario_id: string | null }).scenario_id;
+  if (!scenarioId) {
+    throw new EvidenceExtractorError(`session ${sessionId} has no scenario_id`);
+  }
+
+  const { data: scenRow, error: scenErr } = await supabase
+    .from("scenarios")
+    .select("slug, dataset_ref")
+    .eq("id", scenarioId)
+    .single();
+  if (scenErr || !scenRow) {
+    throw new EvidenceExtractorError(`scenario read failed: ${scenErr?.message}`);
+  }
+  const { slug, dataset_ref: datasetRef } = scenRow as { slug: string; dataset_ref: string | null };
+
+  const { data: eventsRaw, error: evErr } = await supabase
+    .from("events")
+    .select("seq, type, actor, payload")
+    .eq("session_id", sessionId)
+    .order("seq", { ascending: true });
+  if (evErr) {
+    throw new EvidenceExtractorError(`events read failed: ${evErr.message}`);
+  }
+  const events = (eventsRaw ?? []) as unknown as EventRow[];
+
+  let groundTruth: Record<string, unknown> = {};
+  if (datasetRef) {
+    try {
+      groundTruth = JSON.parse(
+        readFileSync(resolve(REPO_ROOT, datasetRef, "ground_truth.json"), "utf8"),
+      ) as Record<string, unknown>;
+    } catch (err) {
+      console.warn(
+        `[evidence-extractor] no ground_truth.json for dataset_ref=${datasetRef}:`,
+        (err as Error).message,
+      );
+    }
+  }
+
+  return { slug, datasetRef, events, groundTruth };
+}
+
+// ─── Small helpers ───────────────────────────────────────────────────────────
+
+function unit(
+  competency_key: string,
+  kind: string,
+  value: unknown,
+  event_seqs: number[],
+  weight = 1,
+): EvidenceUnit {
+  return { competency_key, kind, value, weight, event_seqs, detector_version: DETECTOR_VERSION };
+}
+
+function asQueries(events: EventRow[]): QueryEvent[] {
+  return events
+    .filter((e) => e.type === "db.query")
+    .map((e) => ({
+      seq: e.seq,
+      sql: typeof e.payload.sql === "string" ? e.payload.sql : "",
+      status: typeof e.payload.status === "string" ? e.payload.status : "error",
+      row_count: typeof e.payload.row_count === "number" ? e.payload.row_count : undefined,
+      error: typeof e.payload.error === "string" ? e.payload.error : undefined,
+    }));
+}
+
+/** Extract candidate dollar amounts from free text (handles $, commas, M/K). */
+function parseDollarAmounts(text: string): number[] {
+  const out: number[] = [];
+  const re = /\$?\s*([\d][\d,]*\.?\d*)\s*(m(?:illion)?|k)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const n = parseFloat(m[1]!.replace(/,/g, ""));
+    if (!Number.isFinite(n)) continue;
+    const suf = (m[2] ?? "").toLowerCase();
+    out.push(suf.startsWith("m") ? n * 1e6 : suf === "k" ? n * 1e3 : n);
+  }
+  return out;
+}
+
+// ─── Detectors ───────────────────────────────────────────────────────────────
+
+/** Scenario-agnostic — run for every scenario. */
+function agnosticDetectors(events: EventRow[]): EvidenceUnit[] {
+  const units: EvidenceUnit[] = [];
+  const queries = asQueries(events);
+  const ok = queries.filter((q) => q.status === "ok");
+  const errs = queries.filter((q) => q.status !== "ok");
+  const firstQuerySeq = queries.length ? queries[0]!.seq : null;
+
+  const drafts = events.filter((e) => e.type === "deliverable.draft");
+  const submits = events.filter((e) => e.type === "deliverable.submit");
+  const lastDeliverable = [...submits, ...drafts].sort((a, b) => b.seq - a.seq)[0] ?? null;
+  const aiTurns = events.filter((e) => e.type === "ai.assistant.candidate");
+  const aiResponses = events.filter((e) => e.type === "ai.assistant.response");
+  const clientMsgs = events.filter((e) => e.type === "message.client.candidate");
+  const teamMsgs = events.filter((e) => e.type === "message.team.candidate");
+
+  // data_fluency — query hygiene
+  units.push(unit("data_fluency", "query_error_count",
+    { errors: errs.length, total: queries.length },
+    errs.map((q) => q.seq)));
+
+  // execution — deliverable presence + completeness
+  const delivData = (lastDeliverable?.payload.data ?? null) as Record<string, unknown> | null;
+  units.push(unit("execution", "deliverable_present", lastDeliverable !== null,
+    lastDeliverable ? [lastDeliverable.seq] : []));
+  if (delivData) {
+    const requiredFields = [
+      "corrected_monthly_revenue", "root_cause_finding",
+      "client_facing_summary", "decisions_and_tradeoffs",
+    ];
+    const missing = requiredFields.filter((f) => {
+      const v = delivData[f];
+      return typeof v !== "string" || v.trim() === "";
+    });
+    units.push(unit("execution", "required_fields_present",
+      { complete: missing.length === 0, missing },
+      lastDeliverable ? [lastDeliverable.seq] : []));
+  }
+
+  // execution — iterated after a failed query (error then a later success)
+  const firstErr = errs[0];
+  const recovered = firstErr ? ok.find((q) => q.seq > firstErr.seq) : undefined;
+  units.push(unit("execution", "iterated_after_failure", recovered !== undefined,
+    firstErr && recovered ? [firstErr.seq, recovered.seq] : []));
+
+  // execution — verified after drafting (a successful query after the first draft)
+  const firstDraftSeq = drafts.length ? drafts[0]!.seq : null;
+  const verifyQuery = firstDraftSeq !== null ? ok.find((q) => q.seq > firstDraftSeq) : undefined;
+  units.push(unit("execution", "verified_before_submit", verifyQuery !== undefined,
+    firstDraftSeq !== null && verifyQuery ? [firstDraftSeq, verifyQuery.seq] : []));
+
+  // design_under_constraints — wasteful SELECT * scans
+  const selectStar = ok.filter((q) => /select\s+\*/i.test(q.sql));
+  units.push(unit("design_under_constraints", "wasteful_select_star_count",
+    selectStar.length, selectStar.map((q) => q.seq)));
+
+  // ai_orchestration — usage volume
+  const aiTokens = aiResponses.reduce(
+    (s, e) => s + (typeof e.payload.total_tokens === "number" ? e.payload.total_tokens : 0), 0);
+  units.push(unit("ai_orchestration", "ai_turn_count", aiTurns.length, aiTurns.map((e) => e.seq)));
+  units.push(unit("ai_orchestration", "ai_token_spend", aiTokens, aiResponses.map((e) => e.seq)));
+
+  // problem_framing — asked the client before querying
+  const clarifier = firstQuerySeq !== null
+    ? clientMsgs.find((e) => e.seq < firstQuerySeq)
+    : clientMsgs[0];
+  units.push(unit("problem_framing", "clarifier_before_first_query", clarifier !== undefined,
+    clarifier ? [clarifier.seq] : []));
+
+  // customer_engagement / teamwork — channel engagement counts
+  units.push(unit("customer_engagement", "client_update_count", clientMsgs.length,
+    clientMsgs.map((e) => e.seq)));
+  units.push(unit("teamwork", "team_engaged_count", teamMsgs.length, teamMsgs.map((e) => e.seq)));
+
+  return units;
+}
+
+/** fde-db-triage family — duplicate/status/figure correctness vs ground truth. */
+function fdeDbTriageDetectors(events: EventRow[], gt: Record<string, unknown>): EvidenceUnit[] {
+  const units: EvidenceUnit[] = [];
+  const ok = asQueries(events).filter((q) => q.status === "ok");
+
+  // data_fluency — dedup by external_payment_id present
+  const dedupRe =
+    /(\bmin\s*\(\s*id\s*\)|\bdistinct\b|row_number\s*\(|group\s+by[^;]*external_payment_id)/i;
+  const dedupQueries = ok.filter((q) => /external_payment_id/i.test(q.sql) && dedupRe.test(q.sql));
+  units.push(unit("data_fluency", "dedup_correct", dedupQueries.length > 0,
+    dedupQueries.map((q) => q.seq)));
+
+  // data_fluency — revenue computed WITHOUT a status='succeeded' filter
+  const revenueQueries = ok.filter((q) => /sum\s*\(\s*amount_cents\s*\)/i.test(q.sql));
+  const statusFilterRe = /status\s*=\s*['"]succeeded['"]/i;
+  const anyFiltered = revenueQueries.some((q) => statusFilterRe.test(q.sql));
+  units.push(unit("data_fluency", "status_filter_missing",
+    revenueQueries.length > 0 && !anyFiltered,
+    revenueQueries.map((q) => q.seq)));
+
+  // execution — corrected figure in the deliverable matches ground truth (±2%)
+  const corrected = gt.corrected_monthly_cents as Record<string, number> | undefined;
+  const submits = events.filter((e) => e.type === "deliverable.submit");
+  const lastSubmit = submits.sort((a, b) => b.seq - a.seq)[0] ?? null;
+  if (corrected && lastSubmit) {
+    const totalDollars = Object.values(corrected).reduce((s, c) => s + c, 0) / 100;
+    const data = (lastSubmit.payload.data ?? {}) as Record<string, unknown>;
+    const text = typeof data.corrected_monthly_revenue === "string"
+      ? data.corrected_monthly_revenue : "";
+    const amounts = parseDollarAmounts(text);
+    // Best relative distance to the corrected total, trying both a dollars and a
+    // cents reading of each parsed number.
+    let bestRel = Number.POSITIVE_INFINITY;
+    for (const a of amounts) {
+      for (const candidate of [a, a / 100]) {
+        const rel = Math.abs(candidate - totalDollars) / totalDollars;
+        if (rel < bestRel) bestRel = rel;
+      }
+    }
+    const matched = bestRel <= 0.02;
+    units.push(unit("execution", "figures_match_truth",
+      { matched, best_rel_delta: Number.isFinite(bestRel) ? Math.round(bestRel * 1e4) / 1e4 : null,
+        corrected_total_dollars: Math.round(totalDollars * 100) / 100 },
+      [lastSubmit.seq]));
+  }
+
+  return units;
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+/** Pure detector pass over an event stream — no IO. Exposed so tests can feed
+ *  events directly and assert deterministically without the LLM/analysis path. */
+export function runDetectors(
+  slug: string,
+  events: EventRow[],
+  groundTruth: Record<string, unknown>,
+): EvidenceUnit[] {
+  const units = agnosticDetectors(events);
+  if (slug.startsWith("fde-db-triage")) {
+    units.push(...fdeDbTriageDetectors(events, groundTruth));
+  }
+  return units;
+}
+
+/** Extract all evidence units for a completed session (pure read; no writes). */
+export async function extractEvidence(sessionId: string): Promise<EvidenceUnit[]> {
+  const ctx = await loadContext(sessionId);
+  return runDetectors(ctx.slug, ctx.events, ctx.groundTruth);
+}
+
+/** Persist a session's evidence units. DELETE-then-INSERT so re-extraction is
+ *  idempotent and never leaves stale units from a prior detector version. */
+export async function persistEvidenceUnits(
+  sessionId: string,
+  units: EvidenceUnit[],
+): Promise<void> {
+  if (!supabase) {
+    throw new EvidenceExtractorError("Supabase client unavailable; cannot persist evidence units");
+  }
+  const { error: delErr } = await supabase
+    .from("evidence_units")
+    .delete()
+    .eq("session_id", sessionId);
+  if (delErr) {
+    console.error("[evidence-extractor] prior-units delete failed", delErr.message);
+  }
+  if (units.length === 0) return;
+  const rows = units.map((u) => ({
+    session_id: sessionId,
+    competency_key: u.competency_key,
+    kind: u.kind,
+    value: u.value,
+    weight: u.weight,
+    event_seqs: u.event_seqs,
+    detector_version: u.detector_version,
+  }));
+  const { error: insErr } = await supabase.from("evidence_units").insert(rows);
+  if (insErr) {
+    throw new EvidenceExtractorError(`evidence_units insert failed: ${insErr.message}`);
+  }
+}
+
+/** Extract + persist in one call. Used by the analysis pipeline (Stage A). */
+export async function extractAndPersistEvidence(sessionId: string): Promise<EvidenceUnit[]> {
+  const units = await extractEvidence(sessionId);
+  await persistEvidenceUnits(sessionId, units);
+  return units;
+}
