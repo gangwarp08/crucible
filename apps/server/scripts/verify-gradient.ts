@@ -73,11 +73,14 @@ function authHeaders(sessionId: string): Record<string, string> {
 //   A: from the first verify-gradient run (saved here so we don't waste a
 //   Gemini call re-running an already-clean playthrough). When re-running
 //   only B/C after fixes, pass SKIP=A.
-const BASELINE_STRONG_ID = process.env.BASELINE_STRONG_ID ?? "b6a45922-822e-4737-96e1-eee188823608";
-const BASELINE_WEAK_ID   = process.env.BASELINE_WEAK_ID   ?? "9d91776c-5efd-4887-a02d-4d5a06376f71";
-const BASELINE_A_ID      = process.env.BASELINE_A_ID      ?? "73cf7977-6eff-4b77-bcb9-f4cea584b573";
-const BASELINE_B_ID      = process.env.BASELINE_B_ID      ?? "";
-const BASELINE_C_ID      = process.env.BASELINE_C_ID      ?? "";
+// Baselines re-established under JUDGE_PROMPT_VERSION=2 (the "3 = meets bar is
+// earned" tightening). The prior v1 defaults are stale; re-score under the new
+// prompt if the judge changes again (drift detection flags the version bump).
+const BASELINE_STRONG_ID = process.env.BASELINE_STRONG_ID ?? "f42fbde7-d4f3-455a-a3e7-25ad5b8bffe5";
+const BASELINE_WEAK_ID   = process.env.BASELINE_WEAK_ID   ?? "c66032bd-c737-4350-ae53-a3c2dadab2c8";
+const BASELINE_A_ID      = process.env.BASELINE_A_ID      ?? "281cfe0a-c9bb-42fd-bb30-f5b7843695c5";
+const BASELINE_B_ID      = process.env.BASELINE_B_ID      ?? "e1c33afb-75d3-446c-8972-aef44f922734";
+const BASELINE_C_ID      = process.env.BASELINE_C_ID      ?? "93a30f84-c7a0-488f-aa82-a7ff7bfb6687";
 // SKIP="A" or "AB" or "ABC" — for any letter in SKIP we fetch the baseline
 // instead of running. (STRONG/WEAK are always fetched.)
 const SKIP_PROFILES = (process.env.SKIP ?? "").toUpperCase();
