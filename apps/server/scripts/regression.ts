@@ -49,6 +49,8 @@ const CORE: Verifier[] = [
   { name: "competency-model", file: "verify-competency-model.ts", note: "Supabase-only (no server/LLM)" },
   { name: "evidence-units", file: "verify-evidence-units.ts", note: "deterministic, no LLM" },
   { name: "outcomes", file: "verify-outcomes.ts", note: "deterministic, no LLM/server" },
+  { name: "drift", file: "verify-drift.ts", note: "deterministic, no LLM/server" },
+  { name: "fairness", file: "verify-fairness.ts", note: "deterministic seam, no LLM/server" },
   { name: "fde-db-triage", file: "verify-fde-db-triage.ts" },
   { name: "candidate-surfaces", file: "verify-candidate-surfaces.ts" },
   { name: "ai-assistant", file: "verify-ai-assistant.ts" },
@@ -61,6 +63,7 @@ const CORE: Verifier[] = [
   { name: "pro-discrimination", file: "verify-pro-discrimination.ts" },
   { name: "analysis-agent", file: "verify-analysis-agent.ts" },
   { name: "isomorph-equivalence", file: "verify-isomorph-equivalence.ts", note: "2 matched LLM playthroughs" },
+  { name: "reliability", file: "verify-reliability.ts", note: "N Stage-B reinterprets (LLM)" },
 ];
 
 // Need baseline session IDs from a prior discrimination run (BASELINE_*_ID env).

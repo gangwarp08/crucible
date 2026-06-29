@@ -23,7 +23,8 @@ import { supabase } from "./supabase.js";
 import { chatCompletionWithMessages, type ChatMessage } from "./litellm.js";
 import { recordCost } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
-import { extractAndPersistEvidence } from "./evidence-extractor.js";
+import { extractAndPersistEvidence, DETECTOR_VERSION } from "./evidence-extractor.js";
+import { updateScenarioStats } from "./scenario-stats.js";
 import {
   assembleAnalysisInput,
   AnalysisInputError,
@@ -64,6 +65,9 @@ export interface EvaluationResult {
 }
 
 const MODEL = "gemini-flash";
+// Bump when the judge system prompt / scoring rubric in this file changes, so
+// re-scoring + drift detection (Slice 5.7) can tell prompt revisions apart.
+export const JUDGE_PROMPT_VERSION = "1";
 // 8k headroom: 8 items × (rationale ~120 tok + 4 evidence × ~30 tok) +
 // overall_summary ~250 tok ≈ 2k of actual content, plus the JSON scaffolding.
 // 4k was too tight for dense sessions (15+ queries + 2 long AI prompts) — the
@@ -295,6 +299,13 @@ function weightedOverall(items: EvaluationItem[]): number {
 
 // ─── Persistence ───────────────────────────────────────────────────────────
 
+interface VersionStamps {
+  competencyModelVersion: number | null;
+  detectorVersion: string | null;
+  judgePromptVersion: string | null;
+  scenarioVersion: number | null;
+}
+
 async function persistEvaluation(
   sessionId: string,
   scenarioId: string,
@@ -302,7 +313,7 @@ async function persistEvaluation(
   summary: string,
   status: "complete" | "error",
   items: EvaluationItem[],
-  competencyModelVersion: number | null,
+  versions: VersionStamps,
 ): Promise<string> {
   if (!supabase) {
     throw new AnalysisError("Supabase client unavailable; cannot persist evaluation");
@@ -328,7 +339,10 @@ async function persistEvaluation(
     summary,
     model: MODEL,
     status,
-    competency_model_version: competencyModelVersion,
+    competency_model_version: versions.competencyModelVersion,
+    detector_version: versions.detectorVersion,
+    judge_prompt_version: versions.judgePromptVersion,
+    scenario_version: versions.scenarioVersion,
   });
   if (insErr) {
     throw new AnalysisError(`evaluations insert failed: ${insErr.message}`);
@@ -377,6 +391,16 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
     throw new AnalysisError(`session ${sessionId} has no scenario_id`);
   }
 
+  // Full provenance stamp for this verdict (Slice 5.7). competency_model_version
+  // landed in 5.1; the other three legs let drift detection re-score the anchor
+  // set whenever any of them changes.
+  const versions: VersionStamps = {
+    competencyModelVersion: input.scenario.competency_model_version,
+    detectorVersion: DETECTOR_VERSION,
+    judgePromptVersion: JUDGE_PROMPT_VERSION,
+    scenarioVersion: input.scenario.scenario_version,
+  };
+
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: JSON.stringify(input) },
@@ -404,7 +428,7 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
       `Evaluation failed: ${message}`,
       "error",
       [],
-      input.scenario.competency_model_version,
+      versions,
     );
     void appendEvent(sessionId, "ai.evaluation", "system", {
       evaluation_id: evaluationId,
@@ -434,7 +458,7 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
       `Response parse failed: ${message}. Raw start: ${result.text.slice(0, 200)}`,
       "error",
       [],
-      input.scenario.competency_model_version,
+      versions,
     );
     void appendEvent(sessionId, "ai.evaluation", "system", {
       evaluation_id: evaluationId,
@@ -455,8 +479,17 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
     summary,
     "complete",
     items,
-    input.scenario.competency_model_version,
+    versions,
   );
+
+  // Refresh the scenario's running aggregates (Slice 5.7). Fire-and-forget +
+  // non-fatal: a stats failure must never block the evaluation result.
+  void updateScenarioStats(scenarioId).catch((err) => {
+    console.error(
+      `[analysis] scenario_stats update failed for scenario ${scenarioId}:`,
+      (err as Error).message,
+    );
+  });
 
   // Cost ledger entry — NOT added to session.spend_usd since this is on the
   // platform master key, not the per-session key. The cumulative_spend_usd

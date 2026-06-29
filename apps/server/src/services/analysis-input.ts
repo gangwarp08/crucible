@@ -23,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, "../../../..");
 
 const SCENARIOS_SELECT =
-  "id, slug, rubric, deliverable_spec, success_criteria, docs, dataset_ref, " +
+  "id, slug, version, rubric, deliverable_spec, success_criteria, docs, dataset_ref, " +
   "client_persona, team_persona, constraints";
 
 // ─── Public types ──────────────────────────────────────────────────────────
@@ -129,6 +129,9 @@ export interface AnalysisInput {
     // The competency model version this evaluation runs under — stamped onto
     // the evaluations row so scores stay comparable as the construct evolves.
     competency_model_version: number;
+    // Bumpable scenario content version (Slice 5.7) — stamped on the verdict so
+    // drift can re-score the anchor set when scenario content changes.
+    scenario_version: number | null;
     deliverable_spec: Record<string, unknown>;
     success_criteria: Record<string, unknown>;
     docs: Array<{ id: string; title: string }>;
@@ -209,6 +212,7 @@ interface SessionRow {
 interface ScenarioRow {
   id: string;
   slug: string;
+  version: number | null;
   // Stored as a rubric BINDING array (Slice 5.1); validated + resolved against
   // the canonical model by resolveScenarioRubric.
   rubric: unknown;
@@ -636,6 +640,7 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
     scenario: {
       rubric: resolved.rubric,
       competency_model_version: competencyModelVersion,
+      scenario_version: typeof scenarioRow.version === "number" ? scenarioRow.version : null,
       deliverable_spec: scenarioRow.deliverable_spec as Record<string, unknown>,
       success_criteria: scenarioRow.success_criteria as Record<string, unknown>,
       docs,
