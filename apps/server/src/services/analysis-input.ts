@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import type { ResolvedRubricItem } from "@crucible/shared";
 import { supabase } from "./supabase.js";
 import { resolveScenarioRubric } from "./competencies.js";
+import { loadStoredEvidenceUnits } from "./evidence-extractor.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // apps/server/src/services/ → repo root is 4 levels up.
@@ -119,6 +120,15 @@ export interface AnalysisInput {
     docs: Array<{ id: string; title: string }>;
   };
   ground_truth: Record<string, unknown>;
+  // Deterministic Stage A facts (Slice 5.3) — pre-computed, ground-truth-verified
+  // evidence the judge must keep its objective scores consistent with.
+  evidence_units: Array<{
+    id: string;
+    competency_key: string;
+    kind: string;
+    value: unknown;
+    event_seqs: number[];
+  }>;
   signal: {
     messages: CondensedMessage[];
     db_queries: CondensedDbQuery[];
@@ -251,6 +261,16 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
   const { version: competencyModelVersion, resolved } = await resolveScenarioRubric(
     scenarioRow.rubric,
   );
+
+  // ── 2c. Stage A evidence units (deterministic facts) ────────────────
+  const storedUnits = await loadStoredEvidenceUnits(sessionId);
+  const evidenceUnits = storedUnits.map((u) => ({
+    id: u.id,
+    competency_key: u.competency_key,
+    kind: u.kind,
+    value: u.value,
+    event_seqs: u.event_seqs,
+  }));
 
   // ── 3. Ground truth from disk ───────────────────────────────────────
   let groundTruth: Record<string, unknown> = {};
@@ -576,6 +596,7 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       docs,
     },
     ground_truth: groundTruth,
+    evidence_units: evidenceUnits,
     signal: {
       messages,
       db_queries,

@@ -264,23 +264,34 @@ function fdeDbTriageDetectors(events: EventRow[], gt: Record<string, unknown>): 
   const submits = events.filter((e) => e.type === "deliverable.submit");
   const lastSubmit = submits.sort((a, b) => b.seq - a.seq)[0] ?? null;
   if (corrected && lastSubmit) {
-    const totalDollars = Object.values(corrected).reduce((s, c) => s + c, 0) / 100;
+    const monthDollars = Object.values(corrected).map((c) => c / 100);
+    const totalDollars = monthDollars.reduce((s, c) => s + c, 0);
     const data = (lastSubmit.payload.data ?? {}) as Record<string, unknown>;
     const text = typeof data.corrected_monthly_revenue === "string"
       ? data.corrected_monthly_revenue : "";
     const amounts = parseDollarAmounts(text);
-    // Best relative distance to the corrected total, trying both a dollars and a
-    // cents reading of each parsed number.
-    let bestRel = Number.POSITIVE_INFINITY;
-    for (const a of amounts) {
-      for (const candidate of [a, a / 100]) {
-        const rel = Math.abs(candidate - totalDollars) / totalDollars;
-        if (rel < bestRel) bestRel = rel;
+    // Relative distance from a target, trying both a dollars and cents reading
+    // of each parsed number (candidates report either $3.9M or 394203852 cents).
+    const bestRelTo = (target: number): number => {
+      let best = Number.POSITIVE_INFINITY;
+      for (const a of amounts) {
+        for (const cand of [a, a / 100]) {
+          const rel = Math.abs(cand - target) / target;
+          if (rel < best) best = rel;
+        }
       }
-    }
-    const matched = bestRel <= 0.02;
+      return best;
+    };
+    const totalRel = bestRelTo(totalDollars);
+    // How many of the corrected monthly figures appear (±2%) in the text — a
+    // candidate who reported correct per-month figures got it right even if
+    // they never wrote the total.
+    const monthMatches = monthDollars.filter((m) => bestRelTo(m) <= 0.02).length;
+    const matched = totalRel <= 0.02 || monthMatches >= 2;
     units.push(unit("execution", "figures_match_truth",
-      { matched, best_rel_delta: Number.isFinite(bestRel) ? Math.round(bestRel * 1e4) / 1e4 : null,
+      { matched,
+        best_rel_delta: Number.isFinite(totalRel) ? Math.round(totalRel * 1e4) / 1e4 : null,
+        month_matches: monthMatches,
         corrected_total_dollars: Math.round(totalDollars * 100) / 100 },
       [lastSubmit.seq]));
   }
@@ -347,4 +358,26 @@ export async function extractAndPersistEvidence(sessionId: string): Promise<Evid
   const units = await extractEvidence(sessionId);
   await persistEvidenceUnits(sessionId, units);
   return units;
+}
+
+/** A persisted evidence unit (carries its DB id, for Stage B citation/audit). */
+export interface StoredEvidenceUnit extends EvidenceUnit {
+  id: string;
+}
+
+/** Load a session's persisted evidence units (Stage B reads these — for the
+ *  /reinterpret path this avoids re-running Stage A entirely). */
+export async function loadStoredEvidenceUnits(sessionId: string): Promise<StoredEvidenceUnit[]> {
+  if (!supabase) {
+    throw new EvidenceExtractorError("Supabase client unavailable; cannot load evidence units");
+  }
+  const { data, error } = await supabase
+    .from("evidence_units")
+    .select("id, competency_key, kind, value, weight, event_seqs, detector_version")
+    .eq("session_id", sessionId)
+    .order("competency_key", { ascending: true });
+  if (error) {
+    throw new EvidenceExtractorError(`evidence_units read failed: ${error.message}`);
+  }
+  return (data ?? []) as unknown as StoredEvidenceUnit[];
 }

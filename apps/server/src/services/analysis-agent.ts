@@ -89,6 +89,18 @@ correctness, not just plausibility.
 - The candidate's signal stream: messages they sent and received, db \
 queries they ran, docs they viewed, AI-assistant turns, file snapshots, \
 curveball reactions, and the constraint trajectory.
+- evidence_units: DETERMINISTIC facts pre-computed by code from the event \
+stream + ground truth — e.g. whether the candidate's dedup was correct, \
+whether a status='succeeded' filter was missing, whether the corrected figure \
+matched ground truth, AI-turn counts, whether the client/team were engaged. \
+Treat these as STRONG, reliable signals and weigh them heavily for the \
+objective competencies (data_fluency, execution). But they can be INCOMPLETE: \
+e.g. figures_match_truth only matches a TOTAL figure written in the deliverable \
+text, so a candidate who reported correct PER-MONTH figures may still show \
+false. So: where a unit and the raw deliverable/signal AGREE, score with \
+confidence; where they CONFLICT, look at the actual deliverable and signal to \
+decide, rather than blindly following the unit. Use the signal stream for \
+QUALITY and TONE (prose, collaboration, framing) where no unit applies.
 - A list of valid event_seqs (\`surfaced_seqs\`). Every \`event_seq\` you \
 cite as evidence MUST come from this list. Do NOT invent seqs.
 
@@ -329,7 +341,7 @@ async function persistEvaluation(
 
 // ─── Main entry ────────────────────────────────────────────────────────────
 
-export async function runAnalysisAgent(sessionId: string): Promise<EvaluationResult> {
+async function runStageB(sessionId: string): Promise<EvaluationResult> {
   let input: AnalysisInput;
   try {
     input = await assembleAnalysisInput(sessionId);
@@ -349,19 +361,6 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
   const scenarioId = (sessRow as unknown as { scenario_id: string } | null)?.scenario_id;
   if (!scenarioId) {
     throw new AnalysisError(`session ${sessionId} has no scenario_id`);
-  }
-
-  // Stage A — deterministic evidence extraction (Slice 5.2). Populates
-  // evidence_units for this session; Stage B (Slice 5.3) will consume them.
-  // Non-fatal: a detector failure must never block the evaluation.
-  try {
-    const units = await extractAndPersistEvidence(sessionId);
-    console.log(`[analysis] extracted ${units.length} evidence units for session ${sessionId}`);
-  } catch (err) {
-    console.error(
-      `[analysis] evidence extraction failed for session ${sessionId}:`,
-      (err as Error).message,
-    );
   }
 
   const messages: ChatMessage[] = [
@@ -488,4 +487,34 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
     status: "complete",
     items,
   };
+}
+
+/**
+ * Full evaluation (auto-eval on session end + POST /evaluate):
+ * Stage A deterministic extraction → Stage B LLM judge over the units + signal.
+ */
+export async function runAnalysisAgent(sessionId: string): Promise<EvaluationResult> {
+  // Stage A — deterministic evidence extraction (Slice 5.2). Runs BEFORE the
+  // judge so Stage B reads fresh units. Non-fatal: a detector failure must
+  // never block the evaluation (Stage B can still judge the raw signal).
+  try {
+    const units = await extractAndPersistEvidence(sessionId);
+    console.log(`[analysis] extracted ${units.length} evidence units for session ${sessionId}`);
+  } catch (err) {
+    console.error(
+      `[analysis] evidence extraction failed for session ${sessionId}:`,
+      (err as Error).message,
+    );
+  }
+  return runStageB(sessionId);
+}
+
+/**
+ * Re-score over STORED evidence units only — no Stage A re-extraction and no
+ * session replay (Slice 5.3). This is the cheap calibration / model A-B path:
+ * the deterministic units are fixed, so re-running Stage B re-interprets them
+ * for a single LLM call against a historical session.
+ */
+export async function reinterpretEvaluation(sessionId: string): Promise<EvaluationResult> {
+  return runStageB(sessionId);
 }
