@@ -15,9 +15,19 @@ interface Props {
   sessionId: string;
   defenseOutcome?: string | null;
   verificationCapStatus?: string | null;
+  scorable?: boolean | null;
+  exclusionReason?: string | null;
   events: ReviewEvent[];
   onRefetch: () => Promise<void> | void;
 }
+
+const EXCLUSION_COPY: Record<string, string> = {
+  excluded_infra: "Infrastructure / abnormal termination — not the candidate's signal",
+  excluded_abandoned: "Too little engagement to be a real attempt",
+  excluded_no_deliverable: "Engaged, but submitted nothing to score",
+  excluded_defense_unreachable: "Defense never reached the candidate (verifier / deadline / UI)",
+  excluded_insufficient_evidence: "Too few load-bearing competencies were surfaced",
+};
 
 type RunState =
   | { kind: "idle" }
@@ -29,6 +39,8 @@ export default function Scorecard({
   sessionId,
   defenseOutcome,
   verificationCapStatus,
+  scorable,
+  exclusionReason,
   events,
   onRefetch,
 }: Props) {
@@ -174,6 +186,27 @@ export default function Scorecard({
             }}
           >
             {run.message}
+          </div>
+        )}
+
+        {scorable === false && exclusionReason && (
+          <div
+            style={{
+              background: "rgba(124, 127, 255, 0.08)",
+              border: "1px solid rgba(124, 127, 255, 0.35)",
+              borderRadius: 4,
+              padding: "10px 14px",
+              marginBottom: 14,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#9da0ff", letterSpacing: "0.04em" }}>
+              EXCLUDED FROM VALIDITY DATASET · {exclusionReason}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#9999a3", marginTop: 5, lineHeight: 1.5 }}>
+              {EXCLUSION_COPY[exclusionReason] ?? "This session does not meet the scorable floor."}{" "}
+              Any score below is informational only — it is NOT counted toward partner-facing
+              aggregates and must never be read as &quot;weak candidate.&quot;
+            </div>
           </div>
         )}
 

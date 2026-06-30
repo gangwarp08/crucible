@@ -36,6 +36,7 @@ import {
   capStatusFor,
   applyExecutionCap,
 } from "./defense.js";
+import { computeScorability, type ScorabilityInput } from "./scorability.js";
 
 export class AnalysisError extends Error {
   constructor(msg: string) {
@@ -523,21 +524,46 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
     versions,
   );
 
-  // Stamp the defense verdict on the session so review can surface it (and the
-  // verification-cap endpoint can confirm/override an advisory cap). Best-effort
-  // + non-fatal: a stamp failure must never lose the evaluation we just wrote.
-  // Only write when verification actually fired (outcome non-null).
-  if (defenseOutcome !== null) {
-    await persistSessionUpdate(sessionId, {
-      defense_outcome: defenseOutcome,
-      verification_cap_status: capStatus,
-    }).catch((err) => {
-      console.error(
-        `[analysis] defense-outcome stamp failed for ${sessionId}:`,
-        (err as Error).message,
-      );
-    });
-  }
+  // RD3 (Slice 6.4): decide scorability from the SAME recomputable signal — a
+  // dirty terminal / abandoned run / empty deliverable / unreachable defense /
+  // thin evidence is EXCLUDED with a reason code, never scored 1. Derived from
+  // `input` so it re-computes whenever the evidence does.
+  const del = input.signal.deliverable;
+  const deliverableNonEmpty =
+    del !== null && Object.values(del.data).some((v) => typeof v === "string" && v.trim().length > 0);
+  const loadBearingAssessedCount = new Set(input.evidence_units.map((u) => u.competency_key)).size;
+  const meaningfulEventCount =
+    input.signal.db_queries.length +
+    input.signal.messages.length +
+    input.signal.ai_assistant.length +
+    input.signal.doc_views.length +
+    input.signal.file_snapshots.length;
+  const scorabilityInput: ScorabilityInput = {
+    endReason: input.session.end_reason,
+    deliverableNonEmpty,
+    activeDurationMin: input.session.duration_min,
+    meaningfulEventCount,
+    loadBearingAssessedCount,
+    defenseOutcome,
+  };
+  const scorability = computeScorability(scorabilityInput);
+
+  // Stamp the defense verdict + scorability on the session so review can surface
+  // them (and the verification-cap endpoint can confirm/override an advisory
+  // cap). Best-effort + non-fatal: a stamp failure must never lose the
+  // evaluation we just wrote. defense_outcome only when verification fired.
+  await persistSessionUpdate(sessionId, {
+    scorable: scorability.scorable,
+    exclusion_reason: scorability.exclusionReason,
+    ...(defenseOutcome !== null
+      ? { defense_outcome: defenseOutcome, verification_cap_status: capStatus }
+      : {}),
+  }).catch((err) => {
+    console.error(
+      `[analysis] lifecycle stamp failed for ${sessionId}:`,
+      (err as Error).message,
+    );
+  });
 
   // Refresh the scenario's running aggregates (Slice 5.7). Fire-and-forget +
   // non-fatal: a stats failure must never block the evaluation result.

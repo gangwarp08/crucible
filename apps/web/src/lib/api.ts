@@ -440,9 +440,11 @@ export interface ReviewSessionFull {
   created_at: string;
   started_at: string | null;
   updated_at: string;
-  // Lifecycle / verification (Slice 6.1–6.3). Present once migration 0014 ran.
+  // Lifecycle / verification / scorability (Slice 6.1–6.4). Present once 0014 ran.
   defense_outcome?: string | null;          // coherent | weak | declined | not_reached
   verification_cap_status?: string | null;  // none | applied | advisory_pending | confirmed | overridden
+  scorable?: boolean | null;                // RD3: in the validity dataset?
+  exclusion_reason?: string | null;         // excluded_infra | excluded_abandoned | ...
 }
 
 export interface ReviewEvent {
