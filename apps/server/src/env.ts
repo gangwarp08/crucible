@@ -50,6 +50,17 @@ const EnvSchema = z.object({
   // candidates until the verifier UI exists — an unanswered verification would
   // otherwise read as a weak defense and unfairly cap execution.
   VERIFICATION_ENABLED: z.string().optional(),
+
+  // Pilot stance for verification-driven score caps (Slice 6.3). When "true", a
+  // cap is recorded as advisory (verification_cap_status=advisory_pending) and
+  // does NOT alter the official score until a human confirms it in review.
+  PILOT_VERIFICATION_ADVISORY: z.string().optional(),
+
+  // Deployed commit SHA for /health (Slice 6.8e). Railway sets
+  // RAILWAY_GIT_COMMIT_SHA on git-triggered deploys; our `railway up` (CLI)
+  // deploys don't, so the deploy step sets GIT_COMMIT_SHA explicitly. Either is
+  // read by /health to make "prod ≠ main" drift impossible to miss.
+  GIT_COMMIT_SHA: z.string().optional(),
 });
 
 function loadEnv() {
