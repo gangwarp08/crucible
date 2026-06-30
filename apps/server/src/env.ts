@@ -43,6 +43,13 @@ const EnvSchema = z.object({
   // unconfigured deploy can't accept unauthenticated outcome writes; the CSV
   // import script bypasses HTTP and writes via the service role directly.
   OUTCOMES_WEBHOOK_SECRET: z.string().min(16).optional(),
+
+  // L4 interactive verification (Slice 5.4b) feature flag. OFF by default: the
+  // near-deadline verification beat is only scheduled when this is "true" (or a
+  // per-session test override is passed). Keeps it from firing for real
+  // candidates until the verifier UI exists — an unanswered verification would
+  // otherwise read as a weak defense and unfairly cap execution.
+  VERIFICATION_ENABLED: z.string().optional(),
 });
 
 function loadEnv() {

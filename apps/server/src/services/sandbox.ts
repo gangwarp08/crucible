@@ -85,20 +85,27 @@ function computeScheduledBeats(
   }
 
   // L4 verification beat (Slice 5.4b) — one per scenario-bound session, due
-  // VERIFICATION_LEAD_MS before the deadline. The test override sets an absolute
-  // offset from session start; otherwise clamp so it never lands in the past for
-  // unusually short timeouts.
-  const verifOffsetMs =
-    overridesMs?.[VERIFICATION_BEAT_ID] !== undefined
-      ? overridesMs[VERIFICATION_BEAT_ID]!
-      : Math.max(0, timeoutMs - VERIFICATION_LEAD_MS);
-  out.push({
-    id: VERIFICATION_BEAT_ID,
-    kind: "verification",
-    channel: "verifier",
-    due_ts: new Date(baseMs + verifOffsetMs).toISOString(),
-    fired: false,
-  });
+  // VERIFICATION_LEAD_MS before the deadline. GATED: only scheduled when the
+  // VERIFICATION_ENABLED flag is on OR a per-session test override is given.
+  // Until the candidate-facing verifier UI ships, leaving it off means a real
+  // candidate is never asked a question they can't answer (which would read as
+  // a weak defense and unfairly cap execution). The test override bypasses the
+  // flag so verify-verification still exercises the full path.
+  const verifOverride = overridesMs?.[VERIFICATION_BEAT_ID];
+  const verificationEnabled = env.VERIFICATION_ENABLED === "true";
+  if (verificationEnabled || verifOverride !== undefined) {
+    const verifOffsetMs =
+      verifOverride !== undefined
+        ? verifOverride
+        : Math.max(0, timeoutMs - VERIFICATION_LEAD_MS);
+    out.push({
+      id: VERIFICATION_BEAT_ID,
+      kind: "verification",
+      channel: "verifier",
+      due_ts: new Date(baseMs + verifOffsetMs).toISOString(),
+      fired: false,
+    });
+  }
 
   return out;
 }
