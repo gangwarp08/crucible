@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 import type { ReviewSessionDetail } from "@/lib/api";
 import SessionSummary from "./SessionSummary";
 import Scorecard from "./Scorecard";
+import OutcomeInvitePanel from "./OutcomeInvitePanel";
 import TranscriptPanel from "./TranscriptPanel";
 import FilesDiffPanel from "./FilesDiffPanel";
 import Timeline from "./Timeline";
@@ -39,6 +40,8 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
           events={detail.events}
           onRefetch={onRefetch}
         />
+
+        <OutcomeInvitePanel sessionId={detail.session.id} />
 
         <div
           style={{

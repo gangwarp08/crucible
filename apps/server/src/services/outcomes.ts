@@ -30,7 +30,7 @@ export const OUTCOME_TYPES = [
 ] as const;
 export type OutcomeType = (typeof OUTCOME_TYPES)[number];
 
-export type OutcomeSource = "csv" | "webhook" | "manual";
+export type OutcomeSource = "csv" | "webhook" | "manual" | "partner_form";
 
 // Per-type value validation. `value` is supplied flat by the caller and stored
 // as { value } in outcome_value.
