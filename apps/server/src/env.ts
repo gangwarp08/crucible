@@ -50,6 +50,11 @@ const EnvSchema = z.object({
   // candidates until the verifier UI exists — an unanswered verification would
   // otherwise read as a weak defense and unfairly cap execution.
   VERIFICATION_ENABLED: z.string().optional(),
+
+  // Pilot stance (Slice 6.3): when "true", a verification-driven execution cap
+  // is recorded as advisory_pending and does NOT alter the official score until
+  // a human confirms it in review. Off → caps apply directly (post-pilot).
+  PILOT_VERIFICATION_ADVISORY: z.string().optional(),
 });
 
 function loadEnv() {
