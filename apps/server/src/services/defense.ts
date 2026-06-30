@@ -89,11 +89,11 @@ export function capStatusFor(
  * do the work" band the verification probes. Items already at/below the cap are
  * unchanged, so this is idempotent.
  */
-export function applyExecutionCap<T extends { competency: string; score: number }>(
+export function applyExecutionCap<T extends { competency: string; score: number | null }>(
   items: T[],
 ): T[] {
   return items.map((it) =>
-    it.competency === "execution" && it.score > VERIFICATION_CAP_SCORE
+    it.competency === "execution" && it.score !== null && it.score > VERIFICATION_CAP_SCORE
       ? { ...it, score: VERIFICATION_CAP_SCORE }
       : it,
   );

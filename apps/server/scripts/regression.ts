@@ -62,6 +62,7 @@ const CORE: Verifier[] = [
   { name: "verification", file: "verify-verification.ts", note: "multi-turn WS + 2 evals" },
   { name: "verification-outcomes", file: "verify-verification-outcomes.ts", note: "RD2 defense logic + cap endpoint" },
   { name: "scorability", file: "verify-scorability.ts", note: "RD3 deterministic decision table" },
+  { name: "competency-gating", file: "verify-competency-gating.ts", note: "RD4 not_assessed + reweight" },
   { name: "rehydrate", file: "verify-rehydrate.ts" },
   { name: "scenario-state-race", file: "verify-scenario-state-race.ts" },
   { name: "discrimination", file: "verify-discrimination.ts" },

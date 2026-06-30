@@ -380,10 +380,11 @@ function CompleteScorecard({
   // Sort items by score × weight (descending) so the most-impactful
   // judgments come first. Recruiters can eyeball the top 3 to see what
   // moved the overall score.
+  // Assessed items first (sorted by impact); not_assessed sink to the bottom.
   const sortedItems = useMemo(() => {
-    return [...evaluation.items].sort(
-      (a, b) => b.score * b.weight - a.score * a.weight,
-    );
+    const impact = (it: ReviewEvaluationItem) =>
+      it.assessed === false || it.score === null ? -1 : it.score * it.weight;
+    return [...evaluation.items].sort((a, b) => impact(b) - impact(a));
   }, [evaluation.items]);
 
   return (
@@ -421,8 +422,11 @@ function ItemCard({
   item: ReviewEvaluationItem;
   eventBySeq: Map<number, ReviewEvent>;
 }) {
-  const color = scoreColor(item.score);
-  const stars = "★".repeat(item.score) + "☆".repeat(5 - item.score);
+  const notAssessed = item.assessed === false || item.score === null;
+  const color = notAssessed ? "#6a6a78" : scoreColor(item.score);
+  const stars = notAssessed
+    ? ""
+    : "★".repeat(item.score as number) + "☆".repeat(5 - (item.score as number));
 
   return (
     <div
@@ -447,15 +451,17 @@ function ItemCard({
         </span>
         <span
           style={{
-            fontSize: 14,
+            fontSize: notAssessed ? 11 : 14,
             fontWeight: 600,
             color,
             fontVariantNumeric: "tabular-nums",
+            textTransform: notAssessed ? "uppercase" : "none",
+            letterSpacing: notAssessed ? "0.04em" : undefined,
           }}
         >
-          {item.score}/5
+          {notAssessed ? "Not assessed" : `${item.score}/5`}
         </span>
-        <span style={{ fontSize: 11, color, letterSpacing: 1 }}>{stars}</span>
+        {!notAssessed && <span style={{ fontSize: 11, color, letterSpacing: 1 }}>{stars}</span>}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 10, color: "#6a6a78" }}>
           weight × {item.weight.toFixed(2)}

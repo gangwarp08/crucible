@@ -212,7 +212,7 @@ export async function reviewRoutes(server: FastifyInstance) {
       const evalRow = evalRes.data as Record<string, unknown>;
       const { data: itemsData, error: itemsErr } = await supabase
         .from("evaluation_items")
-        .select("competency, score, weight, rationale, evidence, created_at")
+        .select("competency, score, assessed, weight, rationale, evidence, created_at")
         .eq("evaluation_id", evalRow.id as string)
         .order("competency", { ascending: true });
       if (itemsErr) {
@@ -364,31 +364,33 @@ export async function reviewRoutes(server: FastifyInstance) {
 
       const { data: items, error: itemsErr } = await supabase
         .from("evaluation_items")
-        .select("id, competency, score, weight")
+        .select("id, competency, score, weight, assessed")
         .eq("evaluation_id", evalRow.id as string);
       if (itemsErr || !items) {
         server.log.error({ err: itemsErr, sessionId }, "[review] cap: items load failed");
         return reply.status(500).send({ error: "Failed to load evaluation items" });
       }
 
+      // Only an ASSESSED execution item with a real score above the cap moves.
       const execItem = items.find((it) => it.competency === "execution");
+      const execAssessed = !!execItem && execItem.assessed !== false && execItem.score !== null;
+      const priorExec = execAssessed ? Number(execItem!.score) : null;
       const newExecScore =
-        execItem && Number(execItem.score) > VERIFICATION_CAP_SCORE
-          ? VERIFICATION_CAP_SCORE
-          : execItem
-            ? Number(execItem.score)
-            : null;
+        priorExec !== null && priorExec > VERIFICATION_CAP_SCORE ? VERIFICATION_CAP_SCORE : priorExec;
 
-      // Recompute weighted overall with the capped execution score.
-      let overall = 0;
+      // Recompute weighted overall with the capped execution score — reweight
+      // over ASSESSED competencies only (RD4), mirroring weightedOverall().
+      let weighted = 0;
+      let totalWeight = 0;
       for (const it of items) {
-        const s =
-          it.competency === "execution" && newExecScore !== null ? newExecScore : Number(it.score);
-        overall += s * Number(it.weight);
+        if (it.assessed === false || it.score === null) continue;
+        const s = it.competency === "execution" && newExecScore !== null ? newExecScore : Number(it.score);
+        weighted += s * Number(it.weight);
+        totalWeight += Number(it.weight);
       }
-      overall = Math.round(overall * 100) / 100;
+      const overall = totalWeight > 0 ? Math.round((weighted / totalWeight) * 100) / 100 : 0;
 
-      if (execItem && newExecScore !== null && newExecScore !== Number(execItem.score)) {
+      if (execItem && newExecScore !== null && priorExec !== null && newExecScore !== priorExec) {
         const { error: updItemErr } = await supabase
           .from("evaluation_items")
           .update({ score: newExecScore })

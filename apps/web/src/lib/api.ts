@@ -497,7 +497,8 @@ export interface ReviewCostRow {
 
 export interface ReviewEvaluationItem {
   competency: string;             // e.g. "data_fluency"
-  score: number;                  // integer 1-5
+  score: number | null;           // integer 1-5, or null when not_assessed (RD4)
+  assessed?: boolean;             // false → scenario surfaced no evidence; score is null
   weight: number;                 // 0..1, from scenarios.rubric
   rationale: string;
   evidence: Array<{ event_seq: number; note: string }>;

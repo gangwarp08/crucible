@@ -55,7 +55,11 @@ export class AnalysisError extends Error {
 
 export interface EvaluationItem {
   competency: string;
-  score: number; // integer 1-5
+  // integer 1-5 when assessed; null when NOT assessed (RD4: the scenario never
+  // surfaced this competency, so we cannot score it — "no chance to demonstrate"
+  // is not "demonstrated poorly").
+  score: number | null;
+  assessed: boolean;
   weight: number;
   rationale: string;
   evidence: Array<{ event_seq: number; note: string }>;
@@ -80,7 +84,10 @@ const MODEL = "gemini-flash";
 // instruction — the verification cap is now a deterministic, human-gated
 // post-processing step (services/defense.ts), not a prompt rule. The judge now
 // reads the defense as qualitative evidence only.
-export const JUDGE_PROMPT_VERSION = "3";
+// v4 (RD4/6.5): competency gating — a competency with zero evidence units is
+// `not_assessed` (score null), not 1, and the overall reweights over assessed
+// competencies only. Scores aren't comparable to v3 (different denominator).
+export const JUDGE_PROMPT_VERSION = "4";
 // 8k headroom: 8 items × (rationale ~120 tok + 4 evidence × ~30 tok) +
 // overall_summary ~250 tok ≈ 2k of actual content, plus the JSON scaffolding.
 // 4k was too tight for dense sessions (15+ queries + 2 long AI prompts) — the
@@ -255,10 +262,11 @@ function clamp(n: number, lo: number, hi: number): number {
 /** Parse + validate the LLM response. Filters hallucinated evidence_seqs.
  *  Missing competencies get score=1 + a "(no item returned)" rationale —
  *  surfaces the gap rather than hiding it. */
-function parseAndValidate(
+export function parseAndValidate(
   raw: string,
   rubric: AnalysisInput["scenario"]["rubric"],
   surfacedSet: Set<number>,
+  assessedKeys: Set<string>,
 ): { items: EvaluationItem[]; summary: string } {
   let parsed: RawResponse;
   try {
@@ -280,12 +288,19 @@ function parseAndValidate(
     const weight =
       typeof rubric[competency]?.weight === "number" ? rubric[competency]!.weight : 0;
 
-    if (!raw || typeof raw !== "object") {
+    // RD4 competency gating: a competency with ZERO evidence units was never
+    // surfaced by this scenario run — score it `not_assessed` (null), NOT 1. A
+    // missing judge item is treated the same: we have no trustworthy score.
+    const hasEvidence = assessedKeys.has(competency);
+    if (!hasEvidence || !raw || typeof raw !== "object") {
       items.push({
         competency,
-        score: 1,
+        score: null,
+        assessed: false,
         weight,
-        rationale: "(no item returned by the judge)",
+        rationale: !hasEvidence
+          ? "(not assessed — the scenario surfaced no evidence for this competency)"
+          : "(not assessed — no item returned by the judge)",
         evidence: [],
       });
       continue;
@@ -315,16 +330,25 @@ function parseAndValidate(
       });
     }
 
-    items.push({ competency, score, weight, rationale, evidence });
+    items.push({ competency, score, assessed: true, weight, rationale, evidence });
   }
 
   return { items, summary };
 }
 
-function weightedOverall(items: EvaluationItem[]): number {
-  let total = 0;
-  for (const it of items) total += it.score * it.weight;
-  return Math.round(total * 100) / 100;
+// RD4: the overall reweights over ASSESSED competencies only — normalize by the
+// assessed weight so an un-surfaced dimension neither inflates nor deflates the
+// result. All-unassessed → 0 (scorability/RD3 excludes such a session anyway).
+export function weightedOverall(items: EvaluationItem[]): number {
+  let weighted = 0;
+  let totalWeight = 0;
+  for (const it of items) {
+    if (!it.assessed || it.score === null) continue;
+    weighted += it.score * it.weight;
+    totalWeight += it.weight;
+  }
+  if (totalWeight === 0) return 0;
+  return Math.round((weighted / totalWeight) * 100) / 100;
 }
 
 // ─── Persistence ───────────────────────────────────────────────────────────
@@ -384,6 +408,7 @@ async function persistEvaluation(
       evaluation_id: evaluationId,
       competency: it.competency,
       score: it.score,
+      assessed: it.assessed,
       weight: it.weight,
       rationale: it.rationale,
       evidence: it.evidence,
@@ -472,10 +497,13 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
   const latencyMs = Date.now() - t0;
 
   const surfacedSet = new Set<number>(input.surfaced_seqs);
+  // RD4: competencies the scenario actually surfaced (≥1 evidence unit). Drives
+  // both the not_assessed gating in parseAndValidate and the scorability floor.
+  const assessedKeys = new Set(input.evidence_units.map((u) => u.competency_key));
   let items: EvaluationItem[];
   let summary: string;
   try {
-    const parsed = parseAndValidate(result.text, input.scenario.rubric, surfacedSet);
+    const parsed = parseAndValidate(result.text, input.scenario.rubric, surfacedSet, assessedKeys);
     items = parsed.items;
     summary = parsed.summary;
   } catch (err) {
@@ -531,7 +559,7 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
   const del = input.signal.deliverable;
   const deliverableNonEmpty =
     del !== null && Object.values(del.data).some((v) => typeof v === "string" && v.trim().length > 0);
-  const loadBearingAssessedCount = new Set(input.evidence_units.map((u) => u.competency_key)).size;
+  const loadBearingAssessedCount = assessedKeys.size;
   const meaningfulEventCount =
     input.signal.db_queries.length +
     input.signal.messages.length +
