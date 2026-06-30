@@ -329,18 +329,17 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
   } else {
     const ss = sessionRow.scenario_state as Record<string, unknown>;
     const beats = (ss.scheduled_beats ?? []) as Array<Record<string, unknown>>;
-    // Slice 5.4b adds a verification beat (kind="verification") due near the
-    // deadline. It does NOT fire in this short verifier run, so assert only the
-    // two persona beats fired and the verification beat is present + unfired.
+    // Slice 5.4b's verification beat is now GATED behind VERIFICATION_ENABLED
+    // (off by default) + bypassed only by a per-session override. This run sets
+    // no verification override, so only the two persona beats should exist.
     const personaBeats = beats.filter((b) => b.kind !== "verification");
     const verifBeats = beats.filter((b) => b.kind === "verification");
     if (personaBeats.length === 2) pass(`scheduled_beats has 2 persona entries`);
     else fail(`persona scheduled_beats has ${personaBeats.length}, expected 2`);
     if (personaBeats.every((b) => b.fired === true)) pass("both persona scheduled_beats fired = true");
     else fail(`persona scheduled_beats fired status: ${JSON.stringify(personaBeats.map((b) => ({ id: b.id, fired: b.fired })))}`);
-    if (verifBeats.length === 1 && verifBeats[0]!.fired === false)
-      pass("verification beat present + unfired (due near deadline)");
-    else fail(`verification beats = ${JSON.stringify(verifBeats.map((b) => ({ id: b.id, fired: b.fired })))}, expected 1 unfired`);
+    if (verifBeats.length === 0) pass("no verification beat (gated off by default)");
+    else fail(`verification beats = ${JSON.stringify(verifBeats.map((b) => ({ id: b.id, fired: b.fired })))}, expected 0 (gated)`);
 
     const personas = ss.personas as {
       client?: { revealed_specifics?: boolean; requirement_changed?: boolean };
