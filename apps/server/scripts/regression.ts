@@ -47,6 +47,7 @@ interface Verifier {
 // Self-contained verifiers — each provisions its own session(s).
 const CORE: Verifier[] = [
   { name: "competency-model", file: "verify-competency-model.ts", note: "Supabase-only (no server/LLM)" },
+  { name: "session-lifecycle", file: "verify-session-lifecycle.ts", note: "deterministic; needs 0014" },
   { name: "evidence-units", file: "verify-evidence-units.ts", note: "deterministic, no LLM" },
   { name: "outcomes", file: "verify-outcomes.ts", note: "deterministic, no LLM/server" },
   { name: "outcome-invites", file: "verify-outcome-invites.ts", note: "deterministic, no LLM/server" },

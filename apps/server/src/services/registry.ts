@@ -76,7 +76,8 @@ export interface SessionEntry {
   deadline: Date;
   litellmKey: string;      // per-session minted key — server-only, never sent to browser
   spendTally: number;      // server-side USD accumulator (layer 2 stop)
-  status: "active" | "completed";
+  // Lifecycle phases (Slice 6.1): active → submitted → defending → completed.
+  status: "active" | "submitted" | "defending" | "completed";
   expiryTimer: ReturnType<typeof setTimeout>;
   ptySockets: Set<PtySocket>;
 

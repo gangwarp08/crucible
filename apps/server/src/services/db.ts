@@ -148,7 +148,18 @@ export async function loadNextTranscriptSeq(sessionId: string): Promise<number> 
 /** Update mutable fields (spend, status) — called on each spend change. */
 export async function persistSessionUpdate(
   sessionId: string,
-  fields: { spend_usd?: number; status?: string },
+  fields: {
+    spend_usd?: number;
+    status?: string;
+    end_reason?: string;
+    ended_at?: string;
+    // Lifecycle columns (Slice 6.1+).
+    deliverable_locked_at?: string | null;
+    defense_outcome?: string | null;
+    scorable?: boolean | null;
+    exclusion_reason?: string | null;
+    verification_cap_status?: string | null;
+  },
 ): Promise<void> {
   if (!supabase) return;
   try {
