@@ -22,6 +22,11 @@ import {
   correlateOutcomes,
   OutcomesError,
 } from "../services/outcomes.js";
+import {
+  resolveInvite,
+  submitInvite,
+  OutcomeInviteError,
+} from "../services/outcome-invites.js";
 
 /** Constant-time bearer-secret check. Returns false on any malformed header. */
 function authorized(request: FastifyRequest): boolean {
@@ -98,6 +103,51 @@ export async function outcomesRoutes(server: FastifyInstance) {
       const message = err instanceof Error ? err.message : String(err);
       request.log.error(`[outcomes] correlation failed: ${message}`);
       return reply.status(500).send({ error: "Correlation failed" });
+    }
+  });
+
+  // ─── Partner invite flow (token-gated; the token is the auth) ────────────
+  // The partner opens <web>/feedback/<token>; the page calls these. No account,
+  // no shared secret — possession of a valid, unexpired, unused token is the
+  // entire authorization.
+  const TokenParam = z.object({ token: z.string().min(20).max(200) });
+
+  server.get("/outcome-invites/:token", async (request, reply) => {
+    if (!supabase) return reply.status(503).send({ error: "Supabase unavailable" });
+    const p = TokenParam.safeParse(request.params);
+    if (!p.success) return reply.status(400).send({ error: "Invalid link" });
+    try {
+      const ctx = await resolveInvite(p.data.token);
+      return reply.send(ctx);
+    } catch (err) {
+      if (err instanceof OutcomeInviteError) {
+        return reply.status(404).send({ error: "This feedback link is invalid or no longer exists." });
+      }
+      request.log.error(`[outcomes] invite resolve failed: ${err instanceof Error ? err.message : String(err)}`);
+      return reply.status(500).send({ error: "Could not load link" });
+    }
+  });
+
+  server.post("/outcome-invites/:token/submit", async (request, reply) => {
+    if (!supabase) return reply.status(503).send({ error: "Supabase unavailable" });
+    const p = TokenParam.safeParse(request.params);
+    if (!p.success) return reply.status(400).send({ error: "Invalid link" });
+    const body = (request.body ?? {}) as { values?: Record<string, unknown>; candidate_ref?: string };
+    if (!body.values || typeof body.values !== "object") {
+      return reply.status(400).send({ error: "Missing outcome values" });
+    }
+    try {
+      const result = await submitInvite(p.data.token, body.values, body.candidate_ref);
+      return reply.status(201).send(result);
+    } catch (err) {
+      if (err instanceof OutcomeInviteError) {
+        const msg = err.message;
+        // Expired/revoked/used/empty/invalid-values → client error; unknown → 404.
+        const code = /invalid or unknown/.test(msg) ? 404 : 400;
+        return reply.status(code).send({ error: msg });
+      }
+      request.log.error(`[outcomes] invite submit failed: ${err instanceof Error ? err.message : String(err)}`);
+      return reply.status(500).send({ error: "Submission failed" });
     }
   });
 }

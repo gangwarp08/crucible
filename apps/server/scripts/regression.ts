@@ -49,6 +49,7 @@ const CORE: Verifier[] = [
   { name: "competency-model", file: "verify-competency-model.ts", note: "Supabase-only (no server/LLM)" },
   { name: "evidence-units", file: "verify-evidence-units.ts", note: "deterministic, no LLM" },
   { name: "outcomes", file: "verify-outcomes.ts", note: "deterministic, no LLM/server" },
+  { name: "outcome-invites", file: "verify-outcome-invites.ts", note: "deterministic, no LLM/server" },
   { name: "drift", file: "verify-drift.ts", note: "deterministic, no LLM/server" },
   { name: "fairness", file: "verify-fairness.ts", note: "deterministic seam, no LLM/server" },
   { name: "fde-db-triage", file: "verify-fde-db-triage.ts" },

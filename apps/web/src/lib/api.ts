@@ -552,3 +552,79 @@ export async function getReviewSessionDetail(id: string): Promise<ReviewSessionD
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json() as Promise<ReviewSessionDetail>;
 }
+
+// ─── Partner outcome-invite links ───────────────────────────────────────────
+// Admin generates a per-session link (open /api/review routes); the partner
+// opens <origin>/feedback/<token> and submits outcomes (token-gated /api routes).
+
+export type OutcomeInviteStatus = "active" | "submitted" | "expired" | "revoked";
+
+export interface OutcomeInviteSummary {
+  id: string;
+  session_id: string;
+  outcome_types: string[];
+  expires_at: string;
+  submitted_at: string | null;
+  status: OutcomeInviteStatus;
+}
+
+export async function generateOutcomeInvite(
+  sessionId: string,
+  outcomeTypes?: string[],
+): Promise<{ token: string; invite: OutcomeInviteSummary }> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(outcomeTypes ? { outcome_types: outcomeTypes } : {}),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<{ token: string; invite: OutcomeInviteSummary }>;
+}
+
+export async function listOutcomeInvites(sessionId: string): Promise<OutcomeInviteSummary[]> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invites`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { invites: OutcomeInviteSummary[] };
+  return json.invites;
+}
+
+export async function revokeOutcomeInvite(inviteId: string): Promise<OutcomeInviteSummary> {
+  const res = await fetch(`${SERVER_URL}/api/review/outcome-invites/${inviteId}/revoke`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { invite: OutcomeInviteSummary };
+  return json.invite;
+}
+
+export interface OutcomeInviteContext {
+  status: OutcomeInviteStatus;
+  session_id: string;
+  scenario_title: string | null;
+  outcome_types: string[];
+  expires_at: string;
+}
+
+export async function getOutcomeInvite(token: string): Promise<OutcomeInviteContext> {
+  const res = await fetch(`${SERVER_URL}/api/outcome-invites/${encodeURIComponent(token)}`);
+  if (res.status === 404) throw new NotFoundError("This feedback link is invalid or no longer exists.");
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<OutcomeInviteContext>;
+}
+
+export async function submitOutcomeInvite(
+  token: string,
+  values: Record<string, boolean | number>,
+  candidateRef?: string,
+): Promise<{ written: string[]; status: OutcomeInviteStatus }> {
+  const res = await fetch(`${SERVER_URL}/api/outcome-invites/${encodeURIComponent(token)}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ values, ...(candidateRef ? { candidate_ref: candidateRef } : {}) }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`${res.status}: ${body.slice(0, 300)}`);
+  }
+  return res.json() as Promise<{ written: string[]; status: OutcomeInviteStatus }>;
+}

@@ -6,6 +6,13 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { supabase } from "../services/supabase.js";
 import { runAnalysisAgent, reinterpretEvaluation, AnalysisError } from "../services/analysis-agent.js";
+import {
+  createInvite,
+  listInvites,
+  revokeInvite,
+  OutcomeInviteError,
+} from "../services/outcome-invites.js";
+import { OUTCOME_TYPES } from "../services/outcomes.js";
 
 const LIST_LIMIT = 100;
 // Cap for the per-table grouped-count scans below. Bigger than supabase-js's
@@ -281,6 +288,75 @@ export async function reviewRoutes(server: FastifyInstance) {
         }
         server.log.error({ err, sessionId }, "reinterpret failed");
         return reply.status(500).send({ error: "reinterpret failed", message: msg });
+      }
+    },
+  );
+
+  // ─── Partner outcome-invite links (admin side) ──────────────────────────
+  // Generate a single-use, expiring link for a session that a hiring partner
+  // opens (no account) to submit real-world outcomes. Returns the RAW token
+  // once; the browser builds <origin>/feedback/<token>. Same open posture as
+  // the rest of /api/review (internal tool); the partner side is token-gated.
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/outcome-invite",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const body = (request.body ?? {}) as { outcome_types?: unknown };
+      const requested = Array.isArray(body.outcome_types)
+        ? body.outcome_types.filter(
+            (t): t is (typeof OUTCOME_TYPES)[number] =>
+              typeof t === "string" && (OUTCOME_TYPES as readonly string[]).includes(t),
+          )
+        : undefined;
+      try {
+        const { token, invite } = await createInvite(
+          idParse.data.id,
+          requested ? { outcomeTypes: requested } : {},
+        );
+        return reply.status(201).send({ token, invite });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (err instanceof OutcomeInviteError && /not found/.test(msg)) {
+          return reply.status(404).send({ error: msg });
+        }
+        server.log.error({ err }, "outcome-invite create failed");
+        return reply.status(500).send({ error: "invite create failed", message: msg });
+      }
+    },
+  );
+
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/outcome-invites",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      try {
+        const invites = await listInvites(idParse.data.id);
+        return reply.send({ invites });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        server.log.error({ err }, "outcome-invites list failed");
+        return reply.status(500).send({ error: "invites list failed", message: msg });
+      }
+    },
+  );
+
+  server.post<{ Params: { inviteId: string } }>(
+    "/outcome-invites/:inviteId/revoke",
+    async (request, reply) => {
+      const idParse = z.object({ inviteId: z.string().uuid() }).safeParse(request.params);
+      if (!idParse.success) return reply.status(400).send({ error: "Invalid invite id" });
+      try {
+        const invite = await revokeInvite(idParse.data.inviteId);
+        return reply.send({ invite });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (err instanceof OutcomeInviteError && /not found/.test(msg)) {
+          return reply.status(404).send({ error: msg });
+        }
+        server.log.error({ err }, "outcome-invite revoke failed");
+        return reply.status(500).send({ error: "invite revoke failed", message: msg });
       }
     },
   );
