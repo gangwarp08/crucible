@@ -17,6 +17,9 @@ import { logEvent } from "../services/telemetry.js";
 import { persistScenarioStatePatch } from "../services/db.js";
 import { ensureWritable } from "../services/guards.js";
 import { transitionSession } from "../services/session-lifecycle.js";
+import { startVerification } from "../services/verifier-agent.js";
+import { broadcastToSession } from "../services/messaging.js";
+import { env } from "../env.js";
 
 const DeliverableDataSchema = z.object({
   corrected_monthly_revenue: z.string().max(20_000),
@@ -96,6 +99,23 @@ export async function deliverableRoutes(server: FastifyInstance) {
       // (The verifier defense then runs on the locked snapshot.)
       if (status === "submitted") {
         await transitionSession(sessionId, "submitted", { deliverableLockedAt: updated_at });
+
+        // RD2: on submit, open the defense immediately (don't wait for the
+        // deadline-lead beat) when verification is enabled. transitionSession →
+        // defending, then fire-and-forget startVerification (it makes an LLM
+        // call to pick questions + broadcasts the first one over the verifier
+        // channel). Idempotent with the scheduler beat: whichever fires first
+        // wins, the other no-ops. Failures here must NOT fail the submit — the
+        // work is already locked + snapshotted.
+        if ((env.VERIFICATION_ENABLED ?? "").toLowerCase() === "true") {
+          await transitionSession(sessionId, "defending").catch(() => {});
+          void startVerification(sessionId, broadcastToSession).catch((err) => {
+            console.error(
+              `[deliverable] startVerification on submit failed for ${sessionId}:`,
+              err instanceof Error ? err.message : String(err),
+            );
+          });
+        }
       }
 
       return reply.send({ deliverable: persisted, locked: status === "submitted" });

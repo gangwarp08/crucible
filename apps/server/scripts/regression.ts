@@ -60,6 +60,7 @@ const CORE: Verifier[] = [
   { name: "messages", file: "verify-messages.ts" },
   { name: "proactive-beats", file: "verify-proactive-beats.ts" },
   { name: "verification", file: "verify-verification.ts", note: "multi-turn WS + 2 evals" },
+  { name: "verification-outcomes", file: "verify-verification-outcomes.ts", note: "RD2 defense logic + cap endpoint" },
   { name: "rehydrate", file: "verify-rehydrate.ts" },
   { name: "scenario-state-race", file: "verify-scenario-state-race.ts" },
   { name: "discrimination", file: "verify-discrimination.ts" },

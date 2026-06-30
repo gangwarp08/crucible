@@ -37,6 +37,8 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
         <Scorecard
           evaluation={detail.evaluation}
           sessionId={detail.session.id}
+          defenseOutcome={detail.session.defense_outcome ?? null}
+          verificationCapStatus={detail.session.verification_cap_status ?? null}
           events={detail.events}
           onRefetch={onRefetch}
         />

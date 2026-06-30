@@ -13,6 +13,9 @@ import {
   OutcomeInviteError,
 } from "../services/outcome-invites.js";
 import { OUTCOME_TYPES, listSessionOutcomes } from "../services/outcomes.js";
+import { persistSessionUpdate } from "../services/db.js";
+import { appendEvent } from "../services/events-direct.js";
+import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
 
 const LIST_LIMIT = 100;
 // Cap for the per-table grouped-count scans below. Bigger than supabase-js's
@@ -289,6 +292,134 @@ export async function reviewRoutes(server: FastifyInstance) {
         server.log.error({ err, sessionId }, "reinterpret failed");
         return reply.status(500).send({ error: "reinterpret failed", message: msg });
       }
+    },
+  );
+
+  // ─── Verification advisory cap: confirm / override (RD2, Slice 6.3) ─────
+  // When a defense is weak/declined under the pilot advisory flag, the analysis
+  // agent records verification_cap_status='advisory_pending' WITHOUT touching
+  // the official score. A reviewer resolves it here:
+  //   confirm  → cap execution to VERIFICATION_CAP_SCORE, recompute overall,
+  //              persist, mark 'confirmed'.
+  //   override → leave the score untouched, mark 'overridden'.
+  // Idempotency: only an 'advisory_pending' session is resolvable (else 409),
+  // so a double-click can't double-cap. Cheap arithmetic re-score — no LLM.
+  const CapDecisionSchema = z.object({ decision: z.enum(["confirm", "override"]) });
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/verification-cap",
+    {
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      if (!supabase) return reply.status(500).send({ error: "Supabase not configured" });
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const bodyParse = CapDecisionSchema.safeParse(request.body);
+      if (!bodyParse.success) {
+        return reply.status(400).send({ error: "Body must be { decision: 'confirm' | 'override' }" });
+      }
+      const sessionId = idParse.data.id;
+      const { decision } = bodyParse.data;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, verification_cap_status, defense_outcome")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, sessionId }, "[review] cap: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (!sess) return reply.status(404).send({ error: "Session not found" });
+      if (sess.verification_cap_status !== "advisory_pending") {
+        return reply.status(409).send({
+          error: "no_pending_cap",
+          message: `verification_cap_status is '${sess.verification_cap_status ?? "none"}', not 'advisory_pending'`,
+        });
+      }
+
+      if (decision === "override") {
+        await persistSessionUpdate(sessionId, { verification_cap_status: "overridden" });
+        void appendEvent(sessionId, "verification.cap_overridden", "system", {
+          defense_outcome: sess.defense_outcome,
+        });
+        return reply.send({ verification_cap_status: "overridden" });
+      }
+
+      // confirm → cap execution + recompute overall on the latest evaluation.
+      const { data: evalRow, error: evalErr } = await supabase
+        .from("evaluations")
+        .select("id, overall_score")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (evalErr) {
+        server.log.error({ err: evalErr, sessionId }, "[review] cap: evaluation lookup failed");
+        return reply.status(500).send({ error: "Failed to load evaluation" });
+      }
+      if (!evalRow) {
+        return reply.status(409).send({ error: "no_evaluation", message: "Session has no evaluation to cap" });
+      }
+
+      const { data: items, error: itemsErr } = await supabase
+        .from("evaluation_items")
+        .select("id, competency, score, weight")
+        .eq("evaluation_id", evalRow.id as string);
+      if (itemsErr || !items) {
+        server.log.error({ err: itemsErr, sessionId }, "[review] cap: items load failed");
+        return reply.status(500).send({ error: "Failed to load evaluation items" });
+      }
+
+      const execItem = items.find((it) => it.competency === "execution");
+      const newExecScore =
+        execItem && Number(execItem.score) > VERIFICATION_CAP_SCORE
+          ? VERIFICATION_CAP_SCORE
+          : execItem
+            ? Number(execItem.score)
+            : null;
+
+      // Recompute weighted overall with the capped execution score.
+      let overall = 0;
+      for (const it of items) {
+        const s =
+          it.competency === "execution" && newExecScore !== null ? newExecScore : Number(it.score);
+        overall += s * Number(it.weight);
+      }
+      overall = Math.round(overall * 100) / 100;
+
+      if (execItem && newExecScore !== null && newExecScore !== Number(execItem.score)) {
+        const { error: updItemErr } = await supabase
+          .from("evaluation_items")
+          .update({ score: newExecScore })
+          .eq("id", execItem.id as string);
+        if (updItemErr) {
+          server.log.error({ err: updItemErr, sessionId }, "[review] cap: item update failed");
+          return reply.status(500).send({ error: "Failed to apply cap" });
+        }
+      }
+      const { error: updEvalErr } = await supabase
+        .from("evaluations")
+        .update({ overall_score: overall })
+        .eq("id", evalRow.id as string);
+      if (updEvalErr) {
+        server.log.error({ err: updEvalErr, sessionId }, "[review] cap: overall update failed");
+        return reply.status(500).send({ error: "Failed to update overall score" });
+      }
+
+      await persistSessionUpdate(sessionId, { verification_cap_status: "confirmed" });
+      void appendEvent(sessionId, "verification.cap_confirmed", "system", {
+        defense_outcome: sess.defense_outcome,
+        execution_score: newExecScore,
+        overall_score: overall,
+        prior_overall_score: Number(evalRow.overall_score),
+      });
+
+      return reply.send({
+        verification_cap_status: "confirmed",
+        execution_score: newExecScore,
+        overall_score: overall,
+      });
     },
   );
 

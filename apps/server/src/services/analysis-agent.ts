@@ -30,6 +30,12 @@ import {
   AnalysisInputError,
   type AnalysisInput,
 } from "./analysis-input.js";
+import { persistSessionUpdate } from "./db.js";
+import {
+  computeDefenseOutcome,
+  capStatusFor,
+  applyExecutionCap,
+} from "./defense.js";
 
 export class AnalysisError extends Error {
   constructor(msg: string) {
@@ -69,7 +75,11 @@ const MODEL = "gemini-flash";
 // re-scoring + drift detection (Slice 5.7) can tell prompt revisions apart.
 // v2: tightened the "3 = meets bar is EARNED" floor so a near-empty run can't
 // score 3 on process competencies (was inflating WEAK process scores).
-export const JUDGE_PROMPT_VERSION = "2";
+// v3 (RD2/6.3): removed the hard "undefended result CAPS execution at 3"
+// instruction — the verification cap is now a deterministic, human-gated
+// post-processing step (services/defense.ts), not a prompt rule. The judge now
+// reads the defense as qualitative evidence only.
+export const JUDGE_PROMPT_VERSION = "3";
 // 8k headroom: 8 items × (rationale ~120 tok + 4 evidence × ~30 tok) +
 // overall_summary ~250 tok ≈ 2k of actual content, plus the JSON scaffolding.
 // 4k was too tight for dense sessions (15+ queries + 2 long AI prompts) — the
@@ -183,17 +193,17 @@ is wrong for a nameable reason. This is genuinely mid, not a failure.
 
 INTERACTIVE VERIFICATION (signal.verification): near the end a reviewer asked \
 the candidate to DEFEND 2-3 consequential decisions, one answer each. When \
-\`signal.verification.prompted\` is true, weigh the defense heavily: a \
-deliverable that LOOKS correct but that the candidate CANNOT defend — vague or \
-evasive answers, "I don't know", crediting the work to the AI, or contradicting \
-their own queries — is NOT evidence of mastery. Such an undefended result CAPS \
-the relevant competency (especially execution) at roughly 3, even if the figure \
-matches ground truth, because we cannot trust an answer the candidate can't \
-explain. The deterministic \`defense_weak\` evidence unit flags which \
-competencies had a weak defense. Conversely, a specific, correct defense that \
-shows real understanding is STRONG positive evidence for execution and \
-data_fluency. When \`prompted\` is false, no verification occurred — ignore this \
-section entirely and score on the rest of the signal as usual.
+\`signal.verification.prompted\` is true, READ the defense as qualitative \
+evidence of genuine understanding: a specific, correct defense that explains \
+the candidate's own queries and trade-offs is STRONG positive evidence for \
+execution and data_fluency; vague or evasive answers, "I don't know", crediting \
+the work to the AI, or contradicting their own queries are NEGATIVE evidence \
+that should temper an otherwise strong-looking result. Do NOT mechanically force \
+a numeric cap for a weak defense — a separate deterministic step records the \
+defense outcome and applies any execution cap under human review, so just let \
+the defense inform (not override) your read of each competency. When \
+\`prompted\` is false, no verification occurred — ignore this section entirely \
+and score on the rest of the signal as usual.
 
 If the scenario's rubric includes per-competency \`anchors\`, treat those as \
 authoritative for that scenario — they override these global anchors when \
@@ -489,7 +499,19 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
     throw new AnalysisError(message);
   }
 
-  const overallScore = weightedOverall(items);
+  // RD2 (Slice 6.3): the verification cap is deterministic + human-gated, not a
+  // judge-prompt rule. Classify the defense from the SAME transcript the judge
+  // saw, then decide the cap status. Under the pilot advisory flag a cappable
+  // outcome is recorded as `advisory_pending` and does NOT touch the official
+  // score until a human confirms in review; with the flag off it applies
+  // immediately (legacy auto-cap). coherent / not_reached / no-verification
+  // never cap.
+  const defenseOutcome = computeDefenseOutcome(input.signal.verification);
+  const advisory = (env.PILOT_VERIFICATION_ADVISORY ?? "").toLowerCase() === "true";
+  const capStatus = capStatusFor(defenseOutcome, advisory);
+  const scoredItems = capStatus === "applied" ? applyExecutionCap(items) : items;
+
+  const overallScore = weightedOverall(scoredItems);
 
   const evaluationId = await persistEvaluation(
     sessionId,
@@ -497,9 +519,25 @@ async function runStageB(sessionId: string): Promise<EvaluationResult> {
     overallScore,
     summary,
     "complete",
-    items,
+    scoredItems,
     versions,
   );
+
+  // Stamp the defense verdict on the session so review can surface it (and the
+  // verification-cap endpoint can confirm/override an advisory cap). Best-effort
+  // + non-fatal: a stamp failure must never lose the evaluation we just wrote.
+  // Only write when verification actually fired (outcome non-null).
+  if (defenseOutcome !== null) {
+    await persistSessionUpdate(sessionId, {
+      defense_outcome: defenseOutcome,
+      verification_cap_status: capStatus,
+    }).catch((err) => {
+      console.error(
+        `[analysis] defense-outcome stamp failed for ${sessionId}:`,
+        (err as Error).message,
+      );
+    });
+  }
 
   // Refresh the scenario's running aggregates (Slice 5.7). Fire-and-forget +
   // non-fatal: a stats failure must never block the evaluation result.

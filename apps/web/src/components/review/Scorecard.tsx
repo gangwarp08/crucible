@@ -1,7 +1,8 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   postEvaluate,
+  postVerificationCap,
   type ReviewEvaluation,
   type ReviewEvaluationItem,
   type ReviewEvent,
@@ -12,6 +13,8 @@ import { scrollToHighlight } from "./Timeline";
 interface Props {
   evaluation: ReviewEvaluation | null;
   sessionId: string;
+  defenseOutcome?: string | null;
+  verificationCapStatus?: string | null;
   events: ReviewEvent[];
   onRefetch: () => Promise<void> | void;
 }
@@ -21,7 +24,14 @@ type RunState =
   | { kind: "running" }
   | { kind: "error"; message: string };
 
-export default function Scorecard({ evaluation, sessionId, events, onRefetch }: Props) {
+export default function Scorecard({
+  evaluation,
+  sessionId,
+  defenseOutcome,
+  verificationCapStatus,
+  events,
+  onRefetch,
+}: Props) {
   const [run, setRun] = useState<RunState>({ kind: "idle" });
 
   // For evidence-chip wiring: build the set of seqs + a seq→event lookup so
@@ -41,6 +51,18 @@ export default function Scorecard({ evaluation, sessionId, events, onRefetch }: 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setRun({ kind: "error", message });
+    }
+  }
+
+  const [cap, setCap] = useState<RunState>({ kind: "idle" });
+  async function resolveCap(decision: "confirm" | "override") {
+    setCap({ kind: "running" });
+    try {
+      await postVerificationCap(sessionId, decision);
+      await onRefetch();
+      setCap({ kind: "idle" });
+    } catch (err) {
+      setCap({ kind: "error", message: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -155,6 +177,17 @@ export default function Scorecard({ evaluation, sessionId, events, onRefetch }: 
           </div>
         )}
 
+        {(verificationCapStatus === "advisory_pending" ||
+          verificationCapStatus === "confirmed" ||
+          verificationCapStatus === "overridden") && (
+          <VerificationCapBanner
+            status={verificationCapStatus}
+            defenseOutcome={defenseOutcome ?? null}
+            cap={cap}
+            onResolve={(d) => { void resolveCap(d); }}
+          />
+        )}
+
         {!evaluation ? (
           <EmptyState />
         ) : evaluation.status === "error" ? (
@@ -168,6 +201,95 @@ export default function Scorecard({ evaluation, sessionId, events, onRefetch }: 
       </div>
     </section>
   );
+}
+
+// ─── Verification advisory cap (RD2, Slice 6.3) ──────────────────────────────
+
+function VerificationCapBanner({
+  status,
+  defenseOutcome,
+  cap,
+  onResolve,
+}: {
+  status: string;
+  defenseOutcome: string | null;
+  cap: RunState;
+  onResolve: (decision: "confirm" | "override") => void;
+}) {
+  const pending = status === "advisory_pending";
+  // amber for pending action, neutral once resolved
+  const accent = pending ? "#e0a83a" : status === "confirmed" ? "#ff7a7a" : "#6a6a78";
+  const reason =
+    defenseOutcome === "declined"
+      ? "The candidate declined to defend their key decisions"
+      : "The candidate could not coherently defend their key decisions";
+
+  return (
+    <div
+      style={{
+        background: pending ? "rgba(224, 168, 58, 0.08)" : "#0c0c10",
+        border: `1px solid ${pending ? "rgba(224, 168, 58, 0.35)" : "#22222b"}`,
+        borderRadius: 4,
+        padding: "10px 14px",
+        marginBottom: 14,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: accent, letterSpacing: "0.04em" }}>
+          {pending
+            ? "ADVISORY CAP PENDING"
+            : status === "confirmed"
+              ? "VERIFICATION CAP APPLIED"
+              : "VERIFICATION CAP OVERRIDDEN"}
+        </span>
+        {defenseOutcome && (
+          <span style={{ fontSize: 11, color: "#9999a3" }}>defense: {defenseOutcome}</span>
+        )}
+        <div style={{ flex: 1 }} />
+        {pending && (
+          <>
+            <button
+              onClick={() => onResolve("confirm")}
+              disabled={cap.kind === "running"}
+              style={capBtn("#ff7a7a", cap.kind === "running")}
+            >
+              {cap.kind === "running" ? "…" : "Confirm cap (exec → 3)"}
+            </button>
+            <button
+              onClick={() => onResolve("override")}
+              disabled={cap.kind === "running"}
+              style={capBtn("#7c7fff", cap.kind === "running")}
+            >
+              Override (keep score)
+            </button>
+          </>
+        )}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#9999a3", marginTop: 6, lineHeight: 1.5 }}>
+        {pending
+          ? `${reason}. The score below is UNCAPPED — confirm to cap execution at 3 and recompute the overall, or override to keep it as judged.`
+          : status === "confirmed"
+            ? "Execution was capped at 3 and the overall score recomputed."
+            : "A reviewer kept the as-judged score despite a weak defense."}
+      </div>
+      {cap.kind === "error" && (
+        <div style={{ fontSize: 11, color: "#ff7a7a", marginTop: 6 }}>{cap.message}</div>
+      )}
+    </div>
+  );
+}
+
+function capBtn(color: string, disabled: boolean): CSSProperties {
+  return {
+    background: disabled ? "#1c1c24" : color,
+    color: disabled ? "#9999a3" : "#0c0c10",
+    border: "none",
+    borderRadius: 4,
+    padding: "5px 12px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
 }
 
 // ─── States ────────────────────────────────────────────────────────────────

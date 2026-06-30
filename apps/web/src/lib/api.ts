@@ -440,6 +440,9 @@ export interface ReviewSessionFull {
   created_at: string;
   started_at: string | null;
   updated_at: string;
+  // Lifecycle / verification (Slice 6.1–6.3). Present once migration 0014 ran.
+  defense_outcome?: string | null;          // coherent | weak | declined | not_reached
+  verification_cap_status?: string | null;  // none | applied | advisory_pending | confirmed | overridden
 }
 
 export interface ReviewEvent {
@@ -537,6 +540,24 @@ export async function postEvaluate(sessionId: string): Promise<unknown> {
     throw new Error(`Re-evaluate failed: ${res.status} ${body.slice(0, 200)}`);
   }
   return res.json();
+}
+
+/** RD2 (Slice 6.3): a reviewer resolves an advisory verification cap.
+ *  confirm → caps execution + recomputes overall; override → leaves it. */
+export async function postVerificationCap(
+  sessionId: string,
+  decision: "confirm" | "override",
+): Promise<{ verification_cap_status: string; execution_score?: number; overall_score?: number }> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/verification-cap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Verification cap ${decision} failed: ${res.status} ${body.slice(0, 200)}`);
+  }
+  return res.json() as Promise<{ verification_cap_status: string; execution_score?: number; overall_score?: number }>;
 }
 
 export class NotFoundError extends Error {
