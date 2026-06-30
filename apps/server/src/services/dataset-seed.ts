@@ -31,6 +31,15 @@ const SCHEMA_PATH = `${STAGING_DIR}/schema.sql`;
 const SEED_PATH = `${STAGING_DIR}/seed.sql`;
 const DB_PATH = "/workspace/customer.db";
 
+/** A scenario's dataset fixtures aren't present on the server's disk — the
+ *  scenario can't be provisioned. Surfaced as a 422 by the start route. */
+export class DatasetUnavailableError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = "DatasetUnavailableError";
+  }
+}
+
 export async function seedScenarioDataset(
   sandbox: Sandbox,
   datasetRef: string,
@@ -44,7 +53,10 @@ export async function seedScenarioDataset(
     schemaSql = readFileSync(resolve(fixtureDir, "schema.sql"), "utf8");
     seedSql = readFileSync(resolve(fixtureDir, "seed.sql"), "utf8");
   } catch (err) {
-    throw new Error(
+    // Missing fixture files on the server's disk (e.g. a scenario row whose
+    // dataset_ref hasn't been deployed). Typed so the route can return a clean
+    // 4xx instead of a raw 500.
+    throw new DatasetUnavailableError(
       `[dataset-seed] fixture read failed for dataset_ref="${datasetRef}" ` +
         `at ${fixtureDir}: ${(err as Error).message}`,
     );

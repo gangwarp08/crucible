@@ -67,9 +67,15 @@ export interface ScenarioCatalogRow {
 
 export async function listScenarios(): Promise<ScenarioCatalogRow[]> {
   if (!supabase) return [];
+  // Exclude ISOMORPHS (isomorph_of IS NOT NULL): they are alternate forms of an
+  // existing scenario used for measurement equivalence, not standalone catalog
+  // entries — a candidate should never pick "isomorph B" directly (the system
+  // assigns one). Canonical scenarios (incl. cross-band variants like -pro,
+  // which have isomorph_of = null) still list.
   const { data, error } = await supabase
     .from("scenarios")
     .select("slug, title, role, difficulty, created_at")
+    .is("isomorph_of", null)
     .order("created_at", { ascending: true });
   if (error) {
     console.error("[scenarios] list failed", error.message);
