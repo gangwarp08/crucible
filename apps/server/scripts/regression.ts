@@ -54,6 +54,7 @@ const CORE: Verifier[] = [
   { name: "drift", file: "verify-drift.ts", note: "deterministic, no LLM/server" },
   { name: "fairness", file: "verify-fairness.ts", note: "deterministic seam, no LLM/server" },
   { name: "fde-db-triage", file: "verify-fde-db-triage.ts" },
+  { name: "submit-lock", file: "verify-submit-lock.ts", note: "server + 1 E2B session" },
   { name: "candidate-surfaces", file: "verify-candidate-surfaces.ts" },
   { name: "ai-assistant", file: "verify-ai-assistant.ts" },
   { name: "messages", file: "verify-messages.ts" },

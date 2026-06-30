@@ -5,6 +5,7 @@ import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { verifyWsToken } from "../services/session-token.js";
 import { appendPtyData, flushAllPtyBuffers } from "../services/telemetry.js";
 import { deductComputeMinutes } from "../services/compute-tracker.js";
+import { isWritable } from "../services/guards.js";
 import { env } from "../env.js";
 
 // xterm sends `\r` (0x0d, carriage return) on Enter — we treat every \r in a
@@ -65,6 +66,10 @@ export async function ptyRoutes(server: FastifyInstance) {
       }
 
       socket.on("message", (msg: Buffer) => {
+        // RD1: once the workspace is locked (submitted/defending/ended), drop
+        // terminal input frame-level — the handshake gate only catches sessions
+        // already ended at connect, not a submit that happens mid-session.
+        if (!isWritable(entry)) return;
         appendPtyData(sessionId, "input", msg);
 
         // Compute mechanic: deduct one command's worth per carriage-return

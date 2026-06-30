@@ -18,6 +18,7 @@ import {
 } from "../services/telemetry.js";
 import { env } from "../env.js";
 import { supabase } from "../services/supabase.js";
+import { ensureWritable } from "../services/guards.js";
 
 const ChatBodySchema = z.object({
   sessionId: z.string().min(1),
@@ -55,18 +56,10 @@ export async function chatRoutes(server: FastifyInstance) {
     const { sessionId, prompt } = parsed.data;
 
     const entry = await getOrRehydrateSession(sessionId);
-    if (!entry) {
-      return reply.status(404).send({ error: "Session not found" });
-    }
-
-    if (entry.status === "completed") {
-      return reply.status(402).send({
-        error: "session_ended",
-        message: "This session has ended.",
-        spend: entry.spendTally,
-        budget: env.SESSION_BUDGET_USD,
-      });
-    }
+    // RD1: the AI assistant is blocked once the work is locked
+    // (submitted/defending/ended) — defense questions can't be laundered through
+    // the assistant into fresh edits.
+    if (!ensureWritable(entry, reply)) return;
 
     if (entry.spendTally >= env.SESSION_BUDGET_USD) {
       return reply.status(402).send({

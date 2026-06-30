@@ -4,6 +4,7 @@ import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { requireSessionToken } from "../services/session-token.js";
 import { recordFileSnapshot } from "../services/telemetry.js";
+import { ensureWritable } from "../services/guards.js";
 
 const SessionQuerySchema = z.object({
   sessionId: z.string().min(1),
@@ -81,6 +82,8 @@ export async function fileRoutes(server: FastifyInstance) {
     const { sessionId, path, content } = parsed.data;
     const entry = await requireSession(sessionId, reply);
     if (!entry) return;
+    // RD1: no file writes once the work is locked (submitted/defending/ended).
+    if (!ensureWritable(entry, reply)) return;
 
     await entry.sandbox.files.write(path, content);
     void recordFileSnapshot(sessionId, path, content); // best-effort, never blocks

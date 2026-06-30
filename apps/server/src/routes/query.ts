@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { ensureWritable } from "../services/guards.js";
 import { requireSessionToken } from "../services/session-token.js";
 import { runSqliteQuery } from "../services/query-runner.js";
 import { logEvent } from "../services/telemetry.js";
@@ -55,15 +56,8 @@ export async function queryRoutes(server: FastifyInstance) {
       const { sql } = parsed.data;
 
       const entry = await getOrRehydrateSession(sessionId);
-      if (!entry) {
-        return reply.status(404).send({ error: "Session not found" });
-      }
-      if (entry.status === "completed") {
-        return reply.status(410).send({
-          error: "session_ended",
-          message: "This session has ended.",
-        });
-      }
+      // RD1: queries are blocked once the work is locked (submitted/defending/ended).
+      if (!ensureWritable(entry, reply)) return;
 
       try {
         const result = await runSqliteQuery(entry.sandbox, sql);

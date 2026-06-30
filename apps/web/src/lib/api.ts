@@ -113,7 +113,7 @@ export interface SessionInfo {
   deadline: string;
   budget: number;
   spend: number;
-  status: "active" | "completed";
+  status: "active" | "submitted" | "defending" | "completed";
   // null when this session has no scenario (legacy generic mode); otherwise
   // the live game-mechanic token balance the AI assistant draws from.
   scenarioTokensRemaining: number | null;
