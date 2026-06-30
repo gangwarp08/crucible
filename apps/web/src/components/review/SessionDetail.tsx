@@ -41,7 +41,14 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
           onRefetch={onRefetch}
         />
 
-        <OutcomeInvitePanel sessionId={detail.session.id} />
+        <OutcomeInvitePanel
+          sessionId={detail.session.id}
+          overallScore={
+            detail.evaluation && detail.evaluation.status === "complete"
+              ? Number(detail.evaluation.overall_score)
+              : null
+          }
+        />
 
         <div
           style={{

@@ -628,3 +628,18 @@ export async function submitOutcomeInvite(
   }
   return res.json() as Promise<{ written: string[]; status: OutcomeInviteStatus }>;
 }
+
+// ─── Captured outcomes for a session (review page) ──────────────────────────
+export interface SessionOutcome {
+  outcome_type: string;
+  value: boolean | number | null;
+  source: string;
+  captured_at: string;
+}
+
+export async function listSessionOutcomes(sessionId: string): Promise<SessionOutcome[]> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcomes`);
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  const body = (await res.json()) as { outcomes: SessionOutcome[] };
+  return body.outcomes;
+}

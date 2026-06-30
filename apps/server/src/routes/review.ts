@@ -12,7 +12,7 @@ import {
   revokeInvite,
   OutcomeInviteError,
 } from "../services/outcome-invites.js";
-import { OUTCOME_TYPES } from "../services/outcomes.js";
+import { OUTCOME_TYPES, listSessionOutcomes } from "../services/outcomes.js";
 
 const LIST_LIMIT = 100;
 // Cap for the per-table grouped-count scans below. Bigger than supabase-js's
@@ -357,6 +357,25 @@ export async function reviewRoutes(server: FastifyInstance) {
         }
         server.log.error({ err }, "outcome-invite revoke failed");
         return reply.status(500).send({ error: "invite revoke failed", message: msg });
+      }
+    },
+  );
+
+  // Captured real-world outcomes for a session (partner-form / webhook / csv) —
+  // the review page renders these next to the assessment score so "scored X,
+  // real outcome Y" lives in one place.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/outcomes",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      try {
+        const outcomes = await listSessionOutcomes(idParse.data.id);
+        return reply.send({ outcomes });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        server.log.error({ err }, "session outcomes read failed");
+        return reply.status(500).send({ error: "outcomes read failed", message: msg });
       }
     },
   );
