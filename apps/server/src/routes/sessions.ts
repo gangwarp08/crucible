@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createSandbox, destroySandbox } from "../services/sandbox.js";
+import { DatasetUnavailableError } from "../services/dataset-seed.js";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { signToken, requireSessionToken } from "../services/session-token.js";
@@ -45,7 +46,20 @@ export async function sessionRoutes(server: FastifyInstance) {
     const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;
     const tokenBudgetOverride = parsed.data?.tokenBudgetOverride;
     const sessionId = randomUUID();
-    await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride);
+    try {
+      await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride);
+    } catch (err) {
+      if (err instanceof DatasetUnavailableError) {
+        // Scenario row exists but its dataset isn't deployed on this server —
+        // a config/deploy mismatch, not a candidate error. Clean 422 instead
+        // of a raw 500 leaking the server path.
+        request.log.error({ err, scenarioId }, "scenario dataset unavailable");
+        return reply.status(422).send({
+          error: "This assessment is temporarily unavailable. Please pick another or try again later.",
+        });
+      }
+      throw err;
+    }
     const entry = sessionRegistry.get(sessionId)!;
     // Mint a session-bound JWT. The token is the ONLY thing that lets the
     // candidate use the protected routes — a leaked session UUID alone can
