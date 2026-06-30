@@ -9,7 +9,10 @@ import { getMessageHistory, getSessionToken } from "@/lib/api";
 
 interface Props { sessionId: string; }
 
-type Channel = "client" | "team";
+// "verifier" is the L4 end-of-session defense channel (Slice 5.4b). Its tab only
+// appears once the reviewer first speaks — candidates aren't shown an empty
+// Reviewer tab during normal work.
+type Channel = "client" | "team" | "verifier";
 
 interface PersonaMessage {
   role: "candidate" | "persona";
@@ -22,7 +25,7 @@ type Inbound =
   | {
       type?: undefined;
       channel: Channel;
-      role: "persona";
+      role: "persona" | "verifier";
       persona_name: string;
       text: string;
       ts: string;
@@ -30,14 +33,19 @@ type Inbound =
   | { type: "error"; code: string; message: string };
 
 const CHANNEL_META: Record<Channel, { label: string; sublabel: string }> = {
-  client: { label: "Client", sublabel: "Dana, VP Finance" },
-  team:   { label: "Team",   sublabel: "Sam, senior engineer" },
+  client:   { label: "Client",   sublabel: "Dana, VP Finance" },
+  team:     { label: "Team",     sublabel: "Sam, senior engineer" },
+  verifier: { label: "Reviewer", sublabel: "End-of-session check — defend your key decisions" },
 };
 
+const VERIFIER_COLOR = "#6e9bff"; // cool blue — distinct from the warm personas
 const PERSONA_COLOR: Record<Channel, string> = {
-  client: color.persona.client,
-  team:   color.persona.team,
+  client:   color.persona.client,
+  team:     color.persona.team,
+  verifier: VERIFIER_COLOR,
 };
+
+const ALL_CHANNELS = ["client", "team", "verifier"] as const;
 
 const SERVER_URL = process.env["NEXT_PUBLIC_SERVER_URL"] ?? "http://localhost:3001";
 
@@ -47,12 +55,16 @@ function fmtTime(iso: string): string {
   } catch { return ""; }
 }
 
+function emptyByChannel<T>(make: () => T): Record<Channel, T> {
+  return { client: make(), team: make(), verifier: make() };
+}
+
 export default function Messages({ sessionId }: Props) {
   const [active, setActive] = useState<Channel>("client");
-  const [threads, setThreads] = useState<Record<Channel, PersonaMessage[]>>({ client: [], team: [] });
-  const [awaiting, setAwaiting] = useState<Record<Channel, boolean>>({ client: false, team: false });
-  const [drafts, setDrafts] = useState<Record<Channel, string>>({ client: "", team: "" });
-  const [unread, setUnread] = useState<Record<Channel, number>>({ client: 0, team: 0 });
+  const [threads, setThreads] = useState<Record<Channel, PersonaMessage[]>>(emptyByChannel(() => []));
+  const [awaiting, setAwaiting] = useState<Record<Channel, boolean>>(emptyByChannel(() => false));
+  const [drafts, setDrafts] = useState<Record<Channel, string>>(emptyByChannel(() => ""));
+  const [unread, setUnread] = useState<Record<Channel, number>>(emptyByChannel(() => 0));
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
 
@@ -62,33 +74,34 @@ export default function Messages({ sessionId }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const clientBottom = useRef<HTMLDivElement>(null);
   const teamBottom = useRef<HTMLDivElement>(null);
+  const verifierBottom = useRef<HTMLDivElement>(null);
+  const bottomRef = {
+    client: clientBottom,
+    team: teamBottom,
+    verifier: verifierBottom,
+  } as const;
 
   useEffect(() => {
-    const r = active === "client" ? clientBottom : teamBottom;
-    r.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef[active].current?.scrollIntoView({ behavior: "smooth" });
   }, [active, threads]);
 
   // Hydrate persisted message history on mount/refresh, THEN open the WS.
   // Dedup guard: if a WS persona reply lands during the history fetch and
   // the same row was already persisted to events, we'd render it twice.
-  // Keep a per-channel set of `${ts}|${textHead}` keys for the in-flight
-  // window and skip WS pushes that match.
-  const seenKeysRef = useRef<Record<Channel, Set<string>>>({
-    client: new Set(),
-    team:   new Set(),
-  });
-  function msgKey(channel: Channel, m: { text: string; ts: string }): string {
+  const seenKeysRef = useRef<Record<Channel, Set<string>>>(emptyByChannel(() => new Set<string>()));
+  function msgKey(_channel: Channel, m: { text: string; ts: string }): string {
     return `${m.ts}|${m.text.slice(0, 64)}`;
   }
 
   useEffect(() => {
     let cancelled = false;
-    seenKeysRef.current = { client: new Set(), team: new Set() };
-    // Hydrate first.
+    seenKeysRef.current = emptyByChannel(() => new Set<string>());
+    // Hydrate first. (History only carries client/team persona chat; the
+    // verifier exchange is live-only over the WS.)
     getMessageHistory(sessionId)
       .then((items) => {
         if (cancelled) return;
-        const next: Record<Channel, PersonaMessage[]> = { client: [], team: [] };
+        const next: Record<Channel, PersonaMessage[]> = emptyByChannel(() => []);
         for (const it of items) {
           const msg: PersonaMessage = {
             role: it.role,
@@ -107,8 +120,6 @@ export default function Messages({ sessionId }: Props) {
 
   useEffect(() => {
     const wsBase = SERVER_URL.replace(/^http/, "ws");
-    // Pass the per-session JWT as a WS subprotocol — the server's handshake
-    // verifies it before the socket is accepted (services/session-token.ts).
     const token = getSessionToken(sessionId);
     const protocols = token ? [`bearer.${token}`] : undefined;
     const ws = new WebSocket(`${wsBase}/messages/${sessionId}`, protocols);
@@ -121,26 +132,26 @@ export default function Messages({ sessionId }: Props) {
       catch { return; }
       if (parsed.type === "error") {
         setError(parsed.message);
-        setAwaiting({ client: false, team: false });
+        setAwaiting(emptyByChannel(() => false));
         return;
       }
-      const key = msgKey(parsed.channel, { text: parsed.text, ts: parsed.ts });
-      if (seenKeysRef.current[parsed.channel].has(key)) {
-        // history hydration already covered this row — skip dup.
-        setAwaiting((prev) => ({ ...prev, [parsed.channel]: false }));
+      const channel = parsed.channel;
+      const key = msgKey(channel, { text: parsed.text, ts: parsed.ts });
+      if (seenKeysRef.current[channel].has(key)) {
+        setAwaiting((prev) => ({ ...prev, [channel]: false }));
         return;
       }
-      seenKeysRef.current[parsed.channel].add(key);
+      seenKeysRef.current[channel].add(key);
       setThreads((prev) => ({
         ...prev,
-        [parsed.channel]: [
-          ...prev[parsed.channel],
+        [channel]: [
+          ...prev[channel],
           { role: "persona", text: parsed.text, personaName: parsed.persona_name, ts: parsed.ts },
         ],
       }));
-      setAwaiting((prev) => ({ ...prev, [parsed.channel]: false }));
-      if (parsed.channel !== activeRef.current) {
-        setUnread((prev) => ({ ...prev, [parsed.channel]: prev[parsed.channel] + 1 }));
+      setAwaiting((prev) => ({ ...prev, [channel]: false }));
+      if (channel !== activeRef.current) {
+        setUnread((prev) => ({ ...prev, [channel]: prev[channel] + 1 }));
       }
     });
     ws.addEventListener("close", () => setConnected(false));
@@ -160,7 +171,11 @@ export default function Messages({ sessionId }: Props) {
     wsRef.current.send(JSON.stringify({ channel, text: draft }));
   }
 
-  const tabs: TabSpec<Channel>[] = (["client", "team"] as const).map((c) => ({
+  // The verifier tab is hidden until the reviewer first speaks (or it's active).
+  const showVerifier = threads.verifier.length > 0 || active === "verifier";
+  const visibleChannels = ALL_CHANNELS.filter((c) => c !== "verifier" || showVerifier);
+
+  const tabs: TabSpec<Channel>[] = visibleChannels.map((c) => ({
     id: c,
     label: CHANNEL_META[c].label,
     badge: c !== active && unread[c] > 0 ? unread[c] : null,
@@ -169,6 +184,19 @@ export default function Messages({ sessionId }: Props) {
   function switchTo(c: Channel) {
     setActive(c);
     if (unread[c] > 0) setUnread((prev) => ({ ...prev, [c]: 0 }));
+  }
+
+  function emptyHint(c: Channel): string {
+    if (c === "client") return "Start a conversation with the client (Dana).";
+    if (c === "team") return "Ping your teammate (Sam).";
+    return "The reviewer will ask you to defend a few key decisions before the session ends.";
+  }
+  function placeholder(c: Channel): string {
+    if (!connected) return "Disconnected";
+    if (awaiting[c]) return "Waiting for reply…";
+    if (c === "client") return "Message Dana…";
+    if (c === "team") return "Message Sam…";
+    return "Answer the reviewer…";
   }
 
   return (
@@ -183,7 +211,7 @@ export default function Messages({ sessionId }: Props) {
       </div>
 
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-        {(["client", "team"] as const).map((c) => (
+        {visibleChannels.map((c) => (
           <div
             key={c}
             style={{
@@ -217,7 +245,7 @@ export default function Messages({ sessionId }: Props) {
             }}>
               {threads[c].length === 0 && (
                 <div style={{ color: color.text.muted, fontSize: 12, textAlign: "center", padding: "32px 12px", lineHeight: 1.6 }}>
-                  {c === "client" ? "Start a conversation with the client (Dana)." : "Ping your teammate (Sam)."}
+                  {emptyHint(c)}
                 </div>
               )}
               {threads[c].map((m, i) => (
@@ -232,11 +260,11 @@ export default function Messages({ sessionId }: Props) {
                 </Bubble>
               ))}
               {awaiting[c] && (
-                <Bubble role="other" accentColor={PERSONA_COLOR[c]} label={CHANNEL_META[c].label.split(",")[0]}>
+                <Bubble role="other" accentColor={PERSONA_COLOR[c]} label={CHANNEL_META[c].label}>
                   <span style={{ color: color.text.muted, fontSize: 13 }}>···</span>
                 </Bubble>
               )}
-              <div ref={c === "client" ? clientBottom : teamBottom} />
+              <div ref={bottomRef[c]} />
             </div>
 
             <div style={{
@@ -250,11 +278,7 @@ export default function Messages({ sessionId }: Props) {
                 onChange={(e) => setDrafts((prev) => ({ ...prev, [c]: e.target.value }))}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(c); } }}
                 disabled={!connected || awaiting[c]}
-                placeholder={
-                  !connected ? "Disconnected"
-                  : awaiting[c] ? "Waiting for reply…"
-                  : c === "client" ? "Message Dana…" : "Message Sam…"
-                }
+                placeholder={placeholder(c)}
                 style={{
                   flex: 1,
                   background: color.bg.input,
