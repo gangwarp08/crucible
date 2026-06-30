@@ -110,6 +110,38 @@ export async function insertOutcome(input: OutcomeInput, source: OutcomeSource):
   return inserted.data as unknown as OutcomeRow;
 }
 
+// ─── Per-session read (recruiter review) ─────────────────────────────────────
+
+export interface SessionOutcome {
+  outcome_type: string;
+  value: boolean | number | null;
+  source: string;
+  captured_at: string;
+}
+
+/** All captured outcomes for one session, newest first — powers the review
+ *  page's "real-world outcome" view next to the assessment score. */
+export async function listSessionOutcomes(sessionId: string): Promise<SessionOutcome[]> {
+  if (!supabase) throw new OutcomesError("Supabase service-role client unavailable");
+  const { data, error } = await supabase
+    .from("outcomes")
+    .select("outcome_type, outcome_value, source, captured_at")
+    .eq("session_id", sessionId)
+    .order("captured_at", { ascending: false });
+  if (error) throw new OutcomesError(`session outcomes read failed: ${error.message}`);
+  return ((data ?? []) as Array<{
+    outcome_type: string;
+    outcome_value: { value: boolean | number } | null;
+    source: string;
+    captured_at: string;
+  }>).map((r) => ({
+    outcome_type: r.outcome_type,
+    value: r.outcome_value?.value ?? null,
+    source: r.source,
+    captured_at: r.captured_at,
+  }));
+}
+
 // ─── Correlation ─────────────────────────────────────────────────────────────
 
 export interface CorrelationPair {
