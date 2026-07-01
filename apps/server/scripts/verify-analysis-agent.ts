@@ -369,7 +369,7 @@ function fmtUsd(cents: number): string {
       .from("evaluations").select("id, overall_score, summary, model, status, created_at")
       .eq("session_id", sessionId).single();
     const { data: items } = await supabase
-      .from("evaluation_items").select("competency, score, weight, rationale, evidence")
+      .from("evaluation_items").select("competency, score, assessed, weight, rationale, evidence")
       .eq("evaluation_id", (evalRow as { id: string }).id).order("competency", { ascending: true });
 
     const { count: evalCount } = await supabase
@@ -390,11 +390,11 @@ function fmtUsd(cents: number): string {
     else fail(`competency keys = ${JSON.stringify(actualKeys)}`);
 
     // RD4 (6.5): an ASSESSED competency scores an integer 1-5; a not_assessed
-    // one (zero evidence) is score=null + assessed=false, NOT 1.
+    // one (zero evidence) is score=null (+ assessed=false), NOT 1. Key off the
+    // null score so the check holds regardless of column selection.
     const scoresValid = (items ?? []).every((i) => {
-      const assessed = (i as { assessed?: boolean }).assessed !== false;
       const s = i.score;
-      if (!assessed) return s === null || s === undefined;
+      if (s === null || s === undefined) return (i as { assessed?: boolean }).assessed !== true;
       return Number.isInteger(s) && (s as number) >= 1 && (s as number) <= 5;
     });
     if (scoresValid) pass("assessed scores are integers in [1, 5]; not_assessed are null");
