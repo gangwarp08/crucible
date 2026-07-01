@@ -56,6 +56,12 @@ const EnvSchema = z.object({
   // does NOT alter the official score until a human confirms it in review.
   PILOT_VERIFICATION_ADVISORY: z.string().optional(),
 
+  // RD6 (Slice 6.7): when "true", starting a session REQUIRES a valid single-use
+  // session link (linkToken). Off by default so the shared INVITE_CODE path
+  // keeps working during rollout. SESSION_LINK_TTL_MINUTES (read directly in
+  // session-link.ts) tunes link lifetime; default 120.
+  SESSION_LINK_REQUIRED: z.string().optional(),
+
   // Deployed commit SHA for /health (Slice 6.8e). Railway sets
   // RAILWAY_GIT_COMMIT_SHA on git-triggered deploys; our `railway up` (CLI)
   // deploys don't, so the deploy step sets GIT_COMMIT_SHA explicitly. Either is

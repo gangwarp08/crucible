@@ -6,6 +6,11 @@ import { DatasetUnavailableError } from "../services/dataset-seed.js";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { signToken, requireSessionToken } from "../services/session-token.js";
+import {
+  peekSessionLink,
+  consumeSessionLink,
+  SessionLinkError,
+} from "../services/session-link.js";
 import { env } from "../env.js";
 
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
@@ -26,6 +31,9 @@ const PostSessionBody = z
     tokenBudgetOverride: z.number().int().nonnegative().optional(),
     // Shared invite code. Required only when env.INVITE_CODE is set.
     inviteCode: z.string().optional(),
+    // RD6: single-use, candidate-bound session link. Required when
+    // env.SESSION_LINK_REQUIRED is set; consumed atomically on first start.
+    linkToken: z.string().optional(),
   })
   .optional();
 
@@ -42,6 +50,30 @@ export async function sessionRoutes(server: FastifyInstance) {
     if (env.INVITE_CODE && parsed.data?.inviteCode !== env.INVITE_CODE) {
       return reply.status(401).send({ error: "Invalid invite code" });
     }
+
+    // RD6 single-use session link. When SESSION_LINK_REQUIRED, a link is
+    // mandatory. Pre-validate here (cheap read) so a dead link never pays for a
+    // sandbox; the authoritative single-use consume happens AFTER creation and
+    // atomically binds the link to this session.
+    const linkToken = parsed.data?.linkToken;
+    const linkRequired = (env.SESSION_LINK_REQUIRED ?? "").toLowerCase() === "true";
+    if (linkRequired && !linkToken) {
+      return reply.status(401).send({ error: "session_link_required", message: "A session link is required to start." });
+    }
+    if (linkToken) {
+      try {
+        await peekSessionLink(linkToken);
+      } catch (err) {
+        if (err instanceof SessionLinkError) {
+          return reply.status(err.code === "invalid" ? 401 : 409).send({
+            error: `session_link_${err.code}`,
+            message: err.message,
+          });
+        }
+        throw err;
+      }
+    }
+
     const scenarioId = parsed.data?.scenarioId;
     const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;
     const tokenBudgetOverride = parsed.data?.tokenBudgetOverride;
@@ -60,6 +92,25 @@ export async function sessionRoutes(server: FastifyInstance) {
       }
       throw err;
     }
+    // RD6: atomically consume the link + bind it to this session. This is the
+    // real single-use guard — if a concurrent start already consumed it we lose
+    // the race here; tear the sandbox back down and 409 rather than leak a
+    // second session off one link.
+    if (linkToken) {
+      try {
+        await consumeSessionLink(linkToken, sessionId);
+      } catch (err) {
+        await destroySandbox(sessionId).catch(() => {});
+        if (err instanceof SessionLinkError) {
+          return reply.status(err.code === "invalid" ? 401 : 409).send({
+            error: `session_link_${err.code}`,
+            message: err.message,
+          });
+        }
+        throw err;
+      }
+    }
+
     const entry = sessionRegistry.get(sessionId)!;
     // Mint a session-bound JWT. The token is the ONLY thing that lets the
     // candidate use the protected routes — a leaked session UUID alone can

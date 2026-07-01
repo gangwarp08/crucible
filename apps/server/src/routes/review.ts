@@ -13,6 +13,12 @@ import {
   OutcomeInviteError,
 } from "../services/outcome-invites.js";
 import { OUTCOME_TYPES, listSessionOutcomes } from "../services/outcomes.js";
+import {
+  createSessionLink,
+  listSessionLinks,
+  revokeSessionLink,
+  SessionLinkError,
+} from "../services/session-link.js";
 import { persistSessionUpdate } from "../services/db.js";
 import { appendEvent } from "../services/events-direct.js";
 import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
@@ -424,6 +430,55 @@ export async function reviewRoutes(server: FastifyInstance) {
       });
     },
   );
+
+  // ─── Candidate session links (RD6, Slice 6.7) — admin side ──────────────
+  // Issue a single-use, candidate-bound, time-boxed start link. Returns the RAW
+  // token once; the browser builds <origin>/?link=<token> (or similar). Same
+  // open posture as the rest of /api/review (internal tool).
+  const CreateLinkSchema = z.object({
+    candidateLabel: z.string().min(1).max(200),
+    scenarioId: z.string().uuid().optional(),
+    ttlMinutes: z.number().int().positive().max(1440).optional(),
+  });
+  server.post("/session-links", async (request, reply) => {
+    const parse = CreateLinkSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid body", details: parse.error.flatten().fieldErrors });
+    }
+    try {
+      const { token, link } = await createSessionLink({
+        candidateLabel: parse.data.candidateLabel,
+        scenarioId: parse.data.scenarioId ?? null,
+        ...(parse.data.ttlMinutes !== undefined ? { ttlMinutes: parse.data.ttlMinutes } : {}),
+      });
+      return reply.status(201).send({ token, link });
+    } catch (err) {
+      if (err instanceof SessionLinkError) return reply.status(400).send({ error: err.code, message: err.message });
+      server.log.error({ err }, "session-link create failed");
+      return reply.status(500).send({ error: "session_link create failed" });
+    }
+  });
+
+  server.get("/session-links", async (_request, reply) => {
+    try {
+      return reply.send({ links: await listSessionLinks() });
+    } catch (err) {
+      server.log.error({ err }, "session-links list failed");
+      return reply.status(500).send({ error: "session_links list failed" });
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/session-links/:id/revoke", async (request, reply) => {
+    const idParse = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!idParse.success) return reply.status(400).send({ error: "Invalid link id" });
+    try {
+      return reply.send({ link: await revokeSessionLink(idParse.data.id) });
+    } catch (err) {
+      if (err instanceof SessionLinkError) return reply.status(404).send({ error: err.code, message: err.message });
+      server.log.error({ err }, "session-link revoke failed");
+      return reply.status(500).send({ error: "session_link revoke failed" });
+    }
+  });
 
   // ─── Partner outcome-invite links (admin side) ──────────────────────────
   // Generate a single-use, expiring link for a session that a hiring partner

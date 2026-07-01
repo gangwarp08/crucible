@@ -37,6 +37,7 @@ export async function healthRoutes(server: FastifyInstance) {
     flags: {
       verification_enabled: env.VERIFICATION_ENABLED === "true",
       pilot_verification_advisory: env.PILOT_VERIFICATION_ADVISORY === "true",
+      session_link_required: env.SESSION_LINK_REQUIRED === "true",
       outcome_webhook: Boolean(env.OUTCOMES_WEBHOOK_SECRET),
     },
   }));

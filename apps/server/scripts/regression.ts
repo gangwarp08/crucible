@@ -64,6 +64,7 @@ const CORE: Verifier[] = [
   { name: "scorability", file: "verify-scorability.ts", note: "RD3 deterministic decision table" },
   { name: "competency-gating", file: "verify-competency-gating.ts", note: "RD4 not_assessed + reweight" },
   { name: "judge-injection", file: "verify-judge-injection.ts", note: "RD5 fence + injection canary" },
+  { name: "session-link", file: "verify-session-link.ts", note: "RD6 single-use start links" },
   { name: "rehydrate", file: "verify-rehydrate.ts" },
   { name: "scenario-state-race", file: "verify-scenario-state-race.ts" },
   { name: "discrimination", file: "verify-discrimination.ts" },
