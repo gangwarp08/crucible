@@ -177,20 +177,22 @@ async function cleanup(): Promise<void> {
 
   // ── [c] correlation runs end-to-end ─────────────────────────────────────
   console.log("\n[c] correlateOutcomes (outcome ↔ overall / competency)");
-  const mrCorr = await correlateOutcomes("manager_rating_90d");
+  // Scope every correlation to THIS run's seeded candidate_ref prefix so real
+  // outcome rows in the shared DB can't pollute the counts / coefficients.
+  const mrCorr = await correlateOutcomes("manager_rating_90d", null, CAND_PREFIX);
   if (mrCorr.n === N) pass(`manager_rating_90d: n=${N} pairs linked`);
   else fail(`manager_rating_90d: n=${mrCorr.n}, expected ${N}`);
   near(mrCorr.pearson_r, 1, 0.05, "manager_rating_90d ↔ overall is strongly positive");
 
-  const rampCorr = await correlateOutcomes("ramp_weeks");
+  const rampCorr = await correlateOutcomes("ramp_weeks", null, CAND_PREFIX);
   near(rampCorr.pearson_r, -1, 0.05, "ramp_weeks ↔ overall is strongly negative");
 
-  const hiredCorr = await correlateOutcomes("hired");
+  const hiredCorr = await correlateOutcomes("hired", null, CAND_PREFIX);
   if (hiredCorr.pearson_r !== null && hiredCorr.pearson_r > 0)
     pass(`hired ↔ overall is positive (r=${hiredCorr.pearson_r})`);
   else fail(`hired ↔ overall expected positive, got ${hiredCorr.pearson_r}`);
 
-  const compCorr = await correlateOutcomes("manager_rating_90d", "execution");
+  const compCorr = await correlateOutcomes("manager_rating_90d", "execution", CAND_PREFIX);
   if (compCorr.n === N) pass(`competency correlation linked n=${N}`);
   else fail(`competency correlation n=${compCorr.n}, expected ${N}`);
   near(compCorr.pearson_r, 1, 0.05, "manager_rating_90d ↔ execution is strongly positive");

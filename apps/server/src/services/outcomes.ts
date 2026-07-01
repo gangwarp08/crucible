@@ -182,14 +182,23 @@ function pearson(xs: number[], ys: number[]): number | null {
 export async function correlateOutcomes(
   outcomeType: OutcomeType,
   competency: string | null = null,
+  // Optional scoping: restrict the correlation to outcomes whose candidate_ref
+  // starts with this prefix. Default null = correlate over ALL outcomes of the
+  // type (production behaviour). Used by tests to isolate their seeded rows from
+  // real data in the shared DB.
+  candidateRefPrefix: string | null = null,
 ): Promise<CorrelationResult> {
   if (!supabase) throw new OutcomesError("Supabase service-role client unavailable");
 
-  const { data: outcomeRows, error: oErr } = await supabase
+  let outcomeQuery = supabase
     .from("outcomes")
     .select("session_id, candidate_ref, outcome_value")
     .eq("outcome_type", outcomeType)
     .not("session_id", "is", null);
+  if (candidateRefPrefix) {
+    outcomeQuery = outcomeQuery.like("candidate_ref", `${candidateRefPrefix}%`);
+  }
+  const { data: outcomeRows, error: oErr } = await outcomeQuery;
   if (oErr) throw new OutcomesError(`outcomes read failed: ${oErr.message}`);
 
   const outcomes = (outcomeRows ?? []) as Array<{
