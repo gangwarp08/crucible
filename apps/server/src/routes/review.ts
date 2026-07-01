@@ -13,6 +13,15 @@ import {
   OutcomeInviteError,
 } from "../services/outcome-invites.js";
 import { OUTCOME_TYPES, listSessionOutcomes } from "../services/outcomes.js";
+import {
+  createSessionLink,
+  listSessionLinks,
+  revokeSessionLink,
+  SessionLinkError,
+} from "../services/session-link.js";
+import { persistSessionUpdate } from "../services/db.js";
+import { appendEvent } from "../services/events-direct.js";
+import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
 
 const LIST_LIMIT = 100;
 // Cap for the per-table grouped-count scans below. Bigger than supabase-js's
@@ -209,7 +218,7 @@ export async function reviewRoutes(server: FastifyInstance) {
       const evalRow = evalRes.data as Record<string, unknown>;
       const { data: itemsData, error: itemsErr } = await supabase
         .from("evaluation_items")
-        .select("competency, score, weight, rationale, evidence, created_at")
+        .select("competency, score, assessed, weight, rationale, evidence, created_at")
         .eq("evaluation_id", evalRow.id as string)
         .order("competency", { ascending: true });
       if (itemsErr) {
@@ -291,6 +300,185 @@ export async function reviewRoutes(server: FastifyInstance) {
       }
     },
   );
+
+  // ─── Verification advisory cap: confirm / override (RD2, Slice 6.3) ─────
+  // When a defense is weak/declined under the pilot advisory flag, the analysis
+  // agent records verification_cap_status='advisory_pending' WITHOUT touching
+  // the official score. A reviewer resolves it here:
+  //   confirm  → cap execution to VERIFICATION_CAP_SCORE, recompute overall,
+  //              persist, mark 'confirmed'.
+  //   override → leave the score untouched, mark 'overridden'.
+  // Idempotency: only an 'advisory_pending' session is resolvable (else 409),
+  // so a double-click can't double-cap. Cheap arithmetic re-score — no LLM.
+  const CapDecisionSchema = z.object({ decision: z.enum(["confirm", "override"]) });
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/verification-cap",
+    {
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      if (!supabase) return reply.status(500).send({ error: "Supabase not configured" });
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const bodyParse = CapDecisionSchema.safeParse(request.body);
+      if (!bodyParse.success) {
+        return reply.status(400).send({ error: "Body must be { decision: 'confirm' | 'override' }" });
+      }
+      const sessionId = idParse.data.id;
+      const { decision } = bodyParse.data;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, verification_cap_status, defense_outcome")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, sessionId }, "[review] cap: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (!sess) return reply.status(404).send({ error: "Session not found" });
+      if (sess.verification_cap_status !== "advisory_pending") {
+        return reply.status(409).send({
+          error: "no_pending_cap",
+          message: `verification_cap_status is '${sess.verification_cap_status ?? "none"}', not 'advisory_pending'`,
+        });
+      }
+
+      if (decision === "override") {
+        await persistSessionUpdate(sessionId, { verification_cap_status: "overridden" });
+        void appendEvent(sessionId, "verification.cap_overridden", "system", {
+          defense_outcome: sess.defense_outcome,
+        });
+        return reply.send({ verification_cap_status: "overridden" });
+      }
+
+      // confirm → cap execution + recompute overall on the latest evaluation.
+      const { data: evalRow, error: evalErr } = await supabase
+        .from("evaluations")
+        .select("id, overall_score")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (evalErr) {
+        server.log.error({ err: evalErr, sessionId }, "[review] cap: evaluation lookup failed");
+        return reply.status(500).send({ error: "Failed to load evaluation" });
+      }
+      if (!evalRow) {
+        return reply.status(409).send({ error: "no_evaluation", message: "Session has no evaluation to cap" });
+      }
+
+      const { data: items, error: itemsErr } = await supabase
+        .from("evaluation_items")
+        .select("id, competency, score, weight, assessed")
+        .eq("evaluation_id", evalRow.id as string);
+      if (itemsErr || !items) {
+        server.log.error({ err: itemsErr, sessionId }, "[review] cap: items load failed");
+        return reply.status(500).send({ error: "Failed to load evaluation items" });
+      }
+
+      // Only an ASSESSED execution item with a real score above the cap moves.
+      const execItem = items.find((it) => it.competency === "execution");
+      const execAssessed = !!execItem && execItem.assessed !== false && execItem.score !== null;
+      const priorExec = execAssessed ? Number(execItem!.score) : null;
+      const newExecScore =
+        priorExec !== null && priorExec > VERIFICATION_CAP_SCORE ? VERIFICATION_CAP_SCORE : priorExec;
+
+      // Recompute weighted overall with the capped execution score — reweight
+      // over ASSESSED competencies only (RD4), mirroring weightedOverall().
+      let weighted = 0;
+      let totalWeight = 0;
+      for (const it of items) {
+        if (it.assessed === false || it.score === null) continue;
+        const s = it.competency === "execution" && newExecScore !== null ? newExecScore : Number(it.score);
+        weighted += s * Number(it.weight);
+        totalWeight += Number(it.weight);
+      }
+      const overall = totalWeight > 0 ? Math.round((weighted / totalWeight) * 100) / 100 : 0;
+
+      if (execItem && newExecScore !== null && priorExec !== null && newExecScore !== priorExec) {
+        const { error: updItemErr } = await supabase
+          .from("evaluation_items")
+          .update({ score: newExecScore })
+          .eq("id", execItem.id as string);
+        if (updItemErr) {
+          server.log.error({ err: updItemErr, sessionId }, "[review] cap: item update failed");
+          return reply.status(500).send({ error: "Failed to apply cap" });
+        }
+      }
+      const { error: updEvalErr } = await supabase
+        .from("evaluations")
+        .update({ overall_score: overall })
+        .eq("id", evalRow.id as string);
+      if (updEvalErr) {
+        server.log.error({ err: updEvalErr, sessionId }, "[review] cap: overall update failed");
+        return reply.status(500).send({ error: "Failed to update overall score" });
+      }
+
+      await persistSessionUpdate(sessionId, { verification_cap_status: "confirmed" });
+      void appendEvent(sessionId, "verification.cap_confirmed", "system", {
+        defense_outcome: sess.defense_outcome,
+        execution_score: newExecScore,
+        overall_score: overall,
+        prior_overall_score: Number(evalRow.overall_score),
+      });
+
+      return reply.send({
+        verification_cap_status: "confirmed",
+        execution_score: newExecScore,
+        overall_score: overall,
+      });
+    },
+  );
+
+  // ─── Candidate session links (RD6, Slice 6.7) — admin side ──────────────
+  // Issue a single-use, candidate-bound, time-boxed start link. Returns the RAW
+  // token once; the browser builds <origin>/?link=<token> (or similar). Same
+  // open posture as the rest of /api/review (internal tool).
+  const CreateLinkSchema = z.object({
+    candidateLabel: z.string().min(1).max(200),
+    scenarioId: z.string().uuid().optional(),
+    ttlMinutes: z.number().int().positive().max(1440).optional(),
+  });
+  server.post("/session-links", async (request, reply) => {
+    const parse = CreateLinkSchema.safeParse(request.body);
+    if (!parse.success) {
+      return reply.status(400).send({ error: "Invalid body", details: parse.error.flatten().fieldErrors });
+    }
+    try {
+      const { token, link } = await createSessionLink({
+        candidateLabel: parse.data.candidateLabel,
+        scenarioId: parse.data.scenarioId ?? null,
+        ...(parse.data.ttlMinutes !== undefined ? { ttlMinutes: parse.data.ttlMinutes } : {}),
+      });
+      return reply.status(201).send({ token, link });
+    } catch (err) {
+      if (err instanceof SessionLinkError) return reply.status(400).send({ error: err.code, message: err.message });
+      server.log.error({ err }, "session-link create failed");
+      return reply.status(500).send({ error: "session_link create failed" });
+    }
+  });
+
+  server.get("/session-links", async (_request, reply) => {
+    try {
+      return reply.send({ links: await listSessionLinks() });
+    } catch (err) {
+      server.log.error({ err }, "session-links list failed");
+      return reply.status(500).send({ error: "session_links list failed" });
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/session-links/:id/revoke", async (request, reply) => {
+    const idParse = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!idParse.success) return reply.status(400).send({ error: "Invalid link id" });
+    try {
+      return reply.send({ link: await revokeSessionLink(idParse.data.id) });
+    } catch (err) {
+      if (err instanceof SessionLinkError) return reply.status(404).send({ error: err.code, message: err.message });
+      server.log.error({ err }, "session-link revoke failed");
+      return reply.status(500).send({ error: "session_link revoke failed" });
+    }
+  });
 
   // ─── Partner outcome-invite links (admin side) ──────────────────────────
   // Generate a single-use, expiring link for a session that a hiring partner

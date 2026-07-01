@@ -178,9 +178,16 @@ export async function createSandbox(
     }
   }
 
+  // H3 (6.8c): default-deny candidate egress. The assessment needs ZERO
+  // outbound network from inside the microVM — the dataset is a local SQLite
+  // file the server seeds, and every model call is server-proxied
+  // (browser → server → LiteLLM), never made from the sandbox. Denying egress
+  // removes exfiltration + arbitrary-fetch abuse from untrusted candidate code
+  // with no loss of assessment functionality.
   const sandbox = await Sandbox.create("crucible-dev", {
     timeoutMs,
     metadata: { sessionId },
+    allowInternetAccess: false,
   });
 
   let litellmKey: string;

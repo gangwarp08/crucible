@@ -2,6 +2,7 @@
 import { useRef, useCallback } from "react";
 import MonacoEditor from "@monaco-editor/react";
 import { writeFile } from "@/lib/api";
+import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
 
 interface Props {
   sessionId: string;
@@ -27,18 +28,21 @@ function langForPath(p: string): string {
 
 export default function Editor({ sessionId, path, content, onChange }: Props) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // RD1: once the work is locked (submitted/defending/ended) the editor is
+  // read-only; writes would 409 server-side anyway.
+  const writable = useSessionStore((s) => isWorkspaceWritable(s.status));
 
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (value === undefined) return;
       onChange(value);
-      if (!path) return;
+      if (!path || !writable) return;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
         writeFile(sessionId, path, value).catch(console.error);
       }, 500);
     },
-    [sessionId, path, onChange],
+    [sessionId, path, onChange, writable],
   );
 
   if (!path) {
@@ -68,6 +72,7 @@ export default function Editor({ sessionId, path, content, onChange }: Props) {
       theme="vs-dark"
       onChange={handleChange}
       options={{
+        readOnly: !writable,
         minimap: { enabled: false },
         fontSize: 14,
         lineHeight: 22,

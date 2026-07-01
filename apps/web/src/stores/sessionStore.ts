@@ -9,9 +9,16 @@ export interface Message {
 
 export type SessionStatus =
   | "active"
+  | "locked"                // RD1: deliverable submitted / defending — workspace read-only
   | "budget_exhausted"      // USD platform budget hit; session over
   | "token_exhausted"       // scenario AI token budget hit; session continues but assistant disabled
   | "ended";
+
+/** Workspace mutations (edit/terminal/AI/query/deliverable) are only allowed
+ *  while truly active. locked/ended/exhausted are read-only. */
+export function isWorkspaceWritable(status: SessionStatus): boolean {
+  return status === "active";
+}
 
 export interface ScenarioPresentation {
   title:      string | null;

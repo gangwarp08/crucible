@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import { runQuery, type QueryResult } from "@/lib/api";
 import { color, font, radius } from "@/styles/tokens";
 import Button from "@/components/ui/Button";
+import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
 
 interface Props { sessionId: string; }
 
@@ -14,8 +15,10 @@ export default function DataExplorer({ sessionId }: Props) {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // RD1: queries blocked once the work is locked (server 409s anyway).
+  const writable = useSessionStore((s) => isWorkspaceWritable(s.status));
 
-  const canRun = !running && sql.trim().length > 0;
+  const canRun = !running && writable && sql.trim().length > 0;
 
   async function handleRun() {
     if (!canRun) return;

@@ -77,6 +77,29 @@ export interface SessionRowFull extends SessionRowMinimal {
   deadline:          string;
   scenario_state:    Record<string, unknown> | null;
 }
+/**
+ * Sum today's spend (UTC day) across every session, from the cost_ledger — the
+ * most real-time tally (includes in-flight costs). Powers the H2 global daily
+ * circuit breaker. FAIL-CLOSED: if Supabase is unavailable or the query errors,
+ * this THROWS — the caller must treat "can't measure spend" as "deny", never
+ * "allow". Never swallow the error into a 0.
+ */
+export async function sumTodaySpendUsd(): Promise<number> {
+  if (!supabase) throw new Error("sumTodaySpendUsd: Supabase client unavailable (fail-closed)");
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const { data, error } = await supabase
+    .from("cost_ledger")
+    .select("cost_usd")
+    .gte("ts", dayStart.toISOString());
+  if (error) throw new Error(`sumTodaySpendUsd query failed (fail-closed): ${error.message}`);
+  let total = 0;
+  for (const row of (data ?? []) as Array<{ cost_usd: number | string | null }>) {
+    total += Number(row.cost_usd) || 0;
+  }
+  return total;
+}
+
 export async function loadSessionRowFull(
   sessionId: string,
 ): Promise<SessionRowFull | null> {
@@ -148,7 +171,20 @@ export async function loadNextTranscriptSeq(sessionId: string): Promise<number> 
 /** Update mutable fields (spend, status) — called on each spend change. */
 export async function persistSessionUpdate(
   sessionId: string,
-  fields: { spend_usd?: number; status?: string },
+  fields: {
+    spend_usd?: number;
+    status?: string;
+    end_reason?: string;
+    ended_at?: string;
+    // Rotated per-session LiteLLM key alias (H1/6.8a rehydration key rotation).
+    litellm_key_alias?: string;
+    // Lifecycle columns (Slice 6.1+).
+    deliverable_locked_at?: string | null;
+    defense_outcome?: string | null;
+    scorable?: boolean | null;
+    exclusion_reason?: string | null;
+    verification_cap_status?: string | null;
+  },
 ): Promise<void> {
   if (!supabase) return;
   try {
@@ -230,6 +266,16 @@ export async function finalizeSession(
     const durationMs = endedAt.getTime() - entry.createdAt.getTime();
     const status = endReason === "timeout" ? "timed_out" : "completed";
 
+    // H6 (6.8d): fail clean + attributable. An UNCLEAN terminal (budget /
+    // orphaned — anything other than manual/timeout) is charged to us and
+    // excluded up-front, so it can never be silently scored 0 against the
+    // candidate even if the analysis agent never runs for it. Clean terminals
+    // are left for scorability to decide from the full signal (Slice 6.4).
+    const dirty = endReason !== "manual" && endReason !== "timeout";
+    const infraFields = dirty
+      ? { scorable: false, exclusion_reason: "excluded_infra" }
+      : {};
+
     const { error } = await supabase
       .from("sessions")
       .update({
@@ -239,6 +285,7 @@ export async function finalizeSession(
         duration_ms: durationMs,
         spend_usd: entry.spendTally,
         updated_at: endedAt.toISOString(),
+        ...infraFields,
       })
       .eq("id", sessionId);
 

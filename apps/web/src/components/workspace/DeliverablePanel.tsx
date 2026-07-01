@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  getDeliverable, saveDeliverable, endSession,
+  getDeliverable, saveDeliverable,
   type DeliverableData, type DeliverableStatus,
 } from "@/lib/api";
 import { color, font, radius } from "@/styles/tokens";
-import { useSessionStore } from "@/stores/sessionStore";
+import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 
@@ -38,6 +38,8 @@ export default function DeliverablePanel({ sessionId }: Props) {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const setSessionStatus = useSessionStore((s) => s.setStatus);
+  const sessionStatus = useSessionStore((s) => s.status);
+  const writable = isWorkspaceWritable(sessionStatus);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,35 +75,32 @@ export default function DeliverablePanel({ sessionId }: Props) {
     }
   }
 
-  /** Submit is terminal — persists the deliverable as status='submitted',
-   *  DELETEs the session (triggers server expireSession: sandbox killed,
-   *  LiteLLM key revoked, telemetry flushed, Analysis Agent auto-eval),
-   *  and flips local status to "ended" optimistically so the EndScreen
-   *  renders immediately. There is no resubmit after Submit — the
+  /** Submit LOCKS the work (RD1) — persists status='submitted' (the immutable
+   *  snapshot) and freezes the whole workspace read-only. It does NOT end the
+   *  session: a reviewer then asks the candidate to defend a couple of decisions
+   *  (the Reviewer tab) before it completes. No resubmit after this — the
    *  confirmation makes that explicit. */
   async function submit() {
-    if (busy) return;
+    if (busy || !writable) return;
     if (!window.confirm(
-      "Submit and end the session?\n\n" +
-      "This is final — your work is sent for review, the sandbox closes, " +
-      "and the session cannot be reopened.",
+      "Submit your deliverable?\n\n" +
+      "This LOCKS your work — files, terminal, AI assistant, and queries become " +
+      "read-only and you can't re-edit. A reviewer will then ask you to defend a " +
+      "couple of your key decisions before the session ends.",
     )) return;
     setBusy(true);
     setFeedback(null);
     try {
-      await saveDeliverable(sessionId, { status: "submitted", data });
+      const result = await saveDeliverable(sessionId, { status: "submitted", data });
+      setStatus(result.status);
+      setUpdatedAt(result.updated_at);
+      // Lock the workspace immediately (read-only). The session stays alive for
+      // the reviewer defense; it completes later (defense done / deadline).
+      setSessionStatus("locked");
+      setFeedback({ kind: "ok", text: "Submitted — work locked. Check the Reviewer tab." });
     } catch (err) {
       setFeedback({ kind: "err", text: err instanceof Error ? err.message : "Submit failed" });
-      setBusy(false);
-      return;
-    }
-    try {
-      await endSession(sessionId);
-      // Flip the global status synchronously so EndScreen renders without
-      // waiting for the PTY WS close to bounce back.
-      setSessionStatus("ended");
-    } catch (err) {
-      setFeedback({ kind: "err", text: err instanceof Error ? err.message : "Failed to end session" });
+    } finally {
       setBusy(false);
     }
   }
@@ -147,8 +146,11 @@ export default function DeliverablePanel({ sessionId }: Props) {
               onChange={(e) => setData({ ...data, [f.key]: e.target.value })}
               rows={f.rows}
               spellCheck={false}
+              readOnly={!writable}
+              disabled={!writable}
               style={{
                 width: "100%",
+                opacity: writable ? 1 : 0.6,
                 background: color.bg.input,
                 border: `1px solid ${color.border.default}`,
                 borderRadius: radius.sm,
@@ -173,9 +175,14 @@ export default function DeliverablePanel({ sessionId }: Props) {
         display: "flex", alignItems: "center", gap: 10,
         flexShrink: 0,
       }}>
-        <Button variant="secondary" size="md" disabled={busy} onClick={() => void saveDraft()}>
+        <Button variant="secondary" size="md" disabled={busy || !writable} onClick={() => void saveDraft()}>
           Save draft
         </Button>
+        {!writable && (
+          <span style={{ fontSize: 11, color: color.text.muted }}>
+            Locked — submitted for review
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         {feedback && (
           <div style={{
@@ -191,9 +198,9 @@ export default function DeliverablePanel({ sessionId }: Props) {
         <Button
           variant="primary"
           size="md"
-          disabled={busy}
+          disabled={busy || !writable}
           onClick={() => void submit()}
-          title="Submit and end the session. This is final."
+          title="Submit and lock your work for review. This is final."
         >
           {busy ? "Submitting…" : "Submit"}
         </Button>

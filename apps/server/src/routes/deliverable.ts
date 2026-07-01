@@ -3,8 +3,10 @@
 // The candidate can Save Draft repeatedly and Submit; both flow through the
 // same POST and both fire telemetry. Latest-wins on the mirrored state in
 // scenarioState.deliverable; the events table retains every draft+submit so
-// recruiter timeline shows iteration. Submitting does NOT end the session —
-// the candidate can keep iterating after submission if they want.
+// recruiter timeline shows iteration. SUBMIT now LOCKS the workspace (RD1,
+// Slice 6.2): drafts iterate while active, but a 'submitted' POST freezes the
+// deliverable, transitions active→submitted, and read-only-locks the rest of the
+// workspace so defense questions can't be used as edit hints.
 
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
@@ -13,6 +15,11 @@ import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { requireSessionToken } from "../services/session-token.js";
 import { logEvent } from "../services/telemetry.js";
 import { persistScenarioStatePatch } from "../services/db.js";
+import { ensureWritable } from "../services/guards.js";
+import { transitionSession } from "../services/session-lifecycle.js";
+import { startVerification } from "../services/verifier-agent.js";
+import { broadcastToSession } from "../services/messaging.js";
+import { env } from "../env.js";
 
 const DeliverableDataSchema = z.object({
   corrected_monthly_revenue: z.string().max(20_000),
@@ -63,10 +70,9 @@ export async function deliverableRoutes(server: FastifyInstance) {
 
       const sessionId = request.params.id;
       const entry = await getOrRehydrateSession(sessionId);
-      if (!entry) return reply.status(404).send({ error: "Session not found" });
-      if (entry.status === "completed") {
-        return reply.status(410).send({ error: "session_ended" });
-      }
+      // Drafts + the submit itself require an active (writable) session; once
+      // submitted/defending/ended, further edits are 409 (RD1).
+      if (!ensureWritable(entry, reply)) return;
 
       const updated_at = new Date().toISOString();
       const persisted: PersistedDeliverable = { status, data, updated_at };
@@ -87,10 +93,32 @@ export async function deliverableRoutes(server: FastifyInstance) {
         { data, updated_at },
       );
 
-      // NOTE: submission does NOT auto-end the session. Candidate can keep
-      // iterating and resubmit; latest wins.
+      // RD1: a submit LOCKS the workspace. The deliverable.submit event above is
+      // the immutable snapshot (append-only); transition active→submitted stamps
+      // deliverable_locked_at and flips status so every mutating route now 409s.
+      // (The verifier defense then runs on the locked snapshot.)
+      if (status === "submitted") {
+        await transitionSession(sessionId, "submitted", { deliverableLockedAt: updated_at });
 
-      return reply.send({ deliverable: persisted });
+        // RD2: on submit, open the defense immediately (don't wait for the
+        // deadline-lead beat) when verification is enabled. transitionSession →
+        // defending, then fire-and-forget startVerification (it makes an LLM
+        // call to pick questions + broadcasts the first one over the verifier
+        // channel). Idempotent with the scheduler beat: whichever fires first
+        // wins, the other no-ops. Failures here must NOT fail the submit — the
+        // work is already locked + snapshotted.
+        if ((env.VERIFICATION_ENABLED ?? "").toLowerCase() === "true") {
+          await transitionSession(sessionId, "defending").catch(() => {});
+          void startVerification(sessionId, broadcastToSession).catch((err) => {
+            console.error(
+              `[deliverable] startVerification on submit failed for ${sessionId}:`,
+              err instanceof Error ? err.message : String(err),
+            );
+          });
+        }
+      }
+
+      return reply.send({ deliverable: persisted, locked: status === "submitted" });
     },
   );
 }

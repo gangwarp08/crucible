@@ -119,6 +119,7 @@ export default function Workspace({ sessionId }: Props) {
           },
         );
         if (s.status === "completed") setStatus("ended");
+        else if (s.status === "submitted" || s.status === "defending") setStatus("locked");
         else if (s.scenarioTokensRemaining !== null && s.scenarioTokensRemaining <= 0) {
           setStatus("token_exhausted");
         }

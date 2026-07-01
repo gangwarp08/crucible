@@ -113,7 +113,7 @@ export interface SessionInfo {
   deadline: string;
   budget: number;
   spend: number;
-  status: "active" | "completed";
+  status: "active" | "submitted" | "defending" | "completed";
   // null when this session has no scenario (legacy generic mode); otherwise
   // the live game-mechanic token balance the AI assistant draws from.
   scenarioTokensRemaining: number | null;
@@ -440,6 +440,11 @@ export interface ReviewSessionFull {
   created_at: string;
   started_at: string | null;
   updated_at: string;
+  // Lifecycle / verification / scorability (Slice 6.1–6.4). Present once 0014 ran.
+  defense_outcome?: string | null;          // coherent | weak | declined | not_reached
+  verification_cap_status?: string | null;  // none | applied | advisory_pending | confirmed | overridden
+  scorable?: boolean | null;                // RD3: in the validity dataset?
+  exclusion_reason?: string | null;         // excluded_infra | excluded_abandoned | ...
 }
 
 export interface ReviewEvent {
@@ -492,7 +497,8 @@ export interface ReviewCostRow {
 
 export interface ReviewEvaluationItem {
   competency: string;             // e.g. "data_fluency"
-  score: number;                  // integer 1-5
+  score: number | null;           // integer 1-5, or null when not_assessed (RD4)
+  assessed?: boolean;             // false → scenario surfaced no evidence; score is null
   weight: number;                 // 0..1, from scenarios.rubric
   rationale: string;
   evidence: Array<{ event_seq: number; note: string }>;
@@ -537,6 +543,24 @@ export async function postEvaluate(sessionId: string): Promise<unknown> {
     throw new Error(`Re-evaluate failed: ${res.status} ${body.slice(0, 200)}`);
   }
   return res.json();
+}
+
+/** RD2 (Slice 6.3): a reviewer resolves an advisory verification cap.
+ *  confirm → caps execution + recomputes overall; override → leaves it. */
+export async function postVerificationCap(
+  sessionId: string,
+  decision: "confirm" | "override",
+): Promise<{ verification_cap_status: string; execution_score?: number; overall_score?: number }> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/verification-cap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Verification cap ${decision} failed: ${res.status} ${body.slice(0, 200)}`);
+  }
+  return res.json() as Promise<{ verification_cap_status: string; execution_score?: number; overall_score?: number }>;
 }
 
 export class NotFoundError extends Error {

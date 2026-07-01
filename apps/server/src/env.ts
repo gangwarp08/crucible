@@ -24,6 +24,12 @@ const EnvSchema = z.object({
   SESSION_BUDGET_USD: z.coerce.number().positive().default(1.0),
   SESSION_TIMEOUT_MIN: z.coerce.number().int().positive().default(60),
 
+  // H2 (6.8b): global daily spend circuit breaker. Before creating a session
+  // the server sums today's spend; at/above this ceiling it refuses new
+  // sessions (503) — a platform-wide runaway-cost backstop on top of the
+  // per-session cap. Generous default so it never trips in normal pilot use.
+  GLOBAL_DAILY_SPEND_CEILING_USD: z.coerce.number().positive().default(50.0),
+
   // JWT secret for server↔browser session tokens. REQUIRED — the server
   // refuses to boot without it once per-session JWTs are enforced on the
   // protected routes (services/session-token.ts).
@@ -55,6 +61,12 @@ const EnvSchema = z.object({
   // cap is recorded as advisory (verification_cap_status=advisory_pending) and
   // does NOT alter the official score until a human confirms it in review.
   PILOT_VERIFICATION_ADVISORY: z.string().optional(),
+
+  // RD6 (Slice 6.7): when "true", starting a session REQUIRES a valid single-use
+  // session link (linkToken). Off by default so the shared INVITE_CODE path
+  // keeps working during rollout. SESSION_LINK_TTL_MINUTES (read directly in
+  // session-link.ts) tunes link lifetime; default 120.
+  SESSION_LINK_REQUIRED: z.string().optional(),
 
   // Deployed commit SHA for /health (Slice 6.8e). Railway sets
   // RAILWAY_GIT_COMMIT_SHA on git-triggered deploys; our `railway up` (CLI)
