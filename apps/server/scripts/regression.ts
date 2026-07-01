@@ -61,6 +61,7 @@ const CORE: Verifier[] = [
   { name: "proactive-beats", file: "verify-proactive-beats.ts" },
   { name: "fork-content", file: "verify-fork-content.ts", note: "7.1 shortcut beat (dev clone; skips if unseeded)" },
   { name: "ps-fork-units", file: "verify-ps-fork-units.ts", note: "7.2 product-sense fork detectors (deterministic)" },
+  { name: "ps-binding", file: "verify-ps-binding.ts", note: "7.3 fork anchors + dissociability (skips config if unseeded)" },
   { name: "verification", file: "verify-verification.ts", note: "multi-turn WS + 2 evals" },
   { name: "verification-outcomes", file: "verify-verification-outcomes.ts", note: "RD2 defense logic + cap endpoint" },
   { name: "scorability", file: "verify-scorability.ts", note: "RD3 deterministic decision table" },
