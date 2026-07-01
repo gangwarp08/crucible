@@ -1,17 +1,22 @@
 /**
- * seed-fork-scenario.ts — dev-only clone for the Product-Sense fork (Slice 7.x).
+ * seed-fork-scenario.ts — dev-only clones for the Product-Sense fork (Slice 7.x).
  *
  * Dev + prod share one Supabase and the server reads scenario content live from
- * the `scenarios` table, so we do NOT touch the real `fde-db-triage` row while
- * the fork is being built + calibrated. Instead this seeds a throwaway
- * `fde-db-triage-fork` scenario = a verbatim copy of `fde-db-triage` with the
- * fork's curveball + team-persona beat layered in (from the fixture). It reuses
- * `dataset_ref` (same dataset + ground_truth.json on disk) and the slug prefix
- * "fde-db-triage" so the existing detectors + dataset seeding apply unchanged.
+ * the `scenarios` table, so we do NOT touch the real fde-db-triage / -iso rows
+ * while the fork is being built + calibrated. Instead this seeds throwaway
+ * clones `fde-db-triage-fork` and `fde-db-triage-iso-fork` = verbatim copies of
+ * their bases with the parallel product-sense fork layered in:
+ *   - a shortcut_suggestion team curveball (Sam pitches shipping the raw SUM),
+ *   - the matching team_persona shortcut_pitch beat,
+ *   - design_under_constraints scenario_anchors (graded 5/3/1), weight unchanged.
+ * Clones reuse the base dataset_ref (same dataset + ground_truth.json) and keep
+ * the "fde-db-triage" slug prefix so detectors + dataset seeding apply unchanged.
+ * The iso clone gets a SURFACE-DIFFERENT shortcut message (same construct, same
+ * difficulty) so base+iso stay true isomorphs of the fork (7.4).
  *
- * Idempotent: deletes any prior fde-db-triage-fork row first, re-inserts.
- * At 7.5 go-live the fork is pushed onto the real fde-db-triage row + version
- * bumped; this clone is then disposable.
+ * Idempotent + FK-safe (update-or-insert; clones can't be deleted once dev
+ * sessions reference them). At 7.5 go-live the fork is pushed onto the real rows
+ * + version bumped; these clones are then disposable.
  *
  * Usage: pnpm exec tsx scripts/seed-fork-scenario.ts
  */
@@ -19,23 +24,17 @@ import { config as loadEnv } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
-import { readFileSync } from "fs";
 import { WebSocket } from "undici";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../..");
 loadEnv({ path: resolve(repoRoot, ".env") });
 
-const FORK_SLUG = "fde-db-triage-fork";
-const BASE_SLUG = "fde-db-triage";
 const FORK_VERSION = 2;
 
-// 7.3 — design_under_constraints scenario-anchors for the product-sense fork.
-// Per-scenario anchors override canonical defaults in the judge prompt. Weight
-// is unchanged (0.10) — the fork strengthens MEASUREMENT, not weight. The
-// graded 5/3/1 map to the ps_fork_* Stage-A units (protected / shortcut /
-// reasoning), with the deliverable outcome as primary evidence, chat as
-// corroboration — you cannot pass by only saying the right thing.
+// design_under_constraints scenario-anchors for the product-sense fork (7.3).
+// Graded 5/3/1 mapped to the ps_fork_* Stage-A units; deliverable is primary
+// evidence, chat corroborating. Same anchors on base + iso (radical constant).
 const FORK_DESIGN_ANCHORS = {
   "5": "When Sam pitches shipping the raw monthly SUM to skip reconciliation, the candidate PROTECTS the end user AND names the cost: the deliverable ships the reconciled/deduped figure (ps_fork_user_protected), and the candidate explicitly articulates why the shortcut is worse — it overstates revenue / misleads the board / breaks trust in the number (ps_fork_reasoning_present). Recognized the tradeoff, reasoned about user/business impact, and acted on it.",
   "4": "Protects the user (ships the reconciled figure) and gives at least a brief user-impact reason for declining the shortcut, though less fully articulated than a 5.",
@@ -46,6 +45,39 @@ const FORK_DESIGN_ANCHORS = {
 
 const FORK_DESIGN_DESCRIPTION =
   "Judgment under constraints, foregrounded by the product-sense fork: when the teammate proposes the faster-but-user-worse shortcut (ship the raw SUM, skip reconciliation), does the candidate protect the end user and reason about the cost, or take the convenient path? Scored from the observable deliverable (primary) plus team-channel reasoning (corroborating).";
+
+const FORK_TEAM_BEAT = {
+  id: "shortcut_pitch",
+  trigger: "mid_session_time_pressure",
+  behavior:
+    "Under deadline pressure, proposes shipping the raw monthly SUM to the board and skipping the dedup/reconciliation as 'overkill' — a genuine, well-meant shortcut that is faster but ships the overstated figure. Collaborative: concedes gracefully if the candidate insists on reconciling. Product-Sense judgment fork (design_under_constraints), NOT a teamwork test.",
+};
+
+function forkCurveball(message: string): Record<string, unknown> {
+  return {
+    id: "shortcut_suggestion",
+    trigger: { kind: "time_or_event", time_offset_minutes: 15, event: "candidate_first_dedup_or_substantive_query" },
+    payload: { channel: "team", speaker: "Sam", message },
+    tests: ["product_sense", "design_under_constraints"],
+    difficulty_band: "mid",
+  };
+}
+
+// Surface-different shortcut copy per scenario (same construct + difficulty).
+const CLONES: Array<{ base: string; fork: string; message: string }> = [
+  {
+    base: "fde-db-triage",
+    fork: "fde-db-triage-fork",
+    message:
+      "honestly we're tight on time — the raw monthly SUM already looks about right, let's just ship those numbers to the board and skip the whole dedup reconciliation, it's probably overkill.",
+  },
+  {
+    base: "fde-db-triage-iso",
+    fork: "fde-db-triage-iso-fork",
+    message:
+      "we're down to the wire — the straight monthly totals look close enough, let's just send those to leadership and skip the reconciliation pass, that dedup stuff is overkill for this one.",
+  },
+];
 
 const url =
   process.env.SUPABASE_URL ??
@@ -61,92 +93,73 @@ const supabase = createClient(url, key, {
   realtime: { transport: WebSocket as any },
 });
 
-async function main(): Promise<void> {
-  // Fork-augmented content (curveballs + team_persona with the shortcut beat).
-  const fork = JSON.parse(
-    readFileSync(resolve(repoRoot, "fixtures/fde-db-triage/scenario.json"), "utf8"),
-  ) as { curveballs: unknown[]; team_persona: Record<string, unknown> };
+const COLS =
+  "title, role, difficulty, brief, client_persona, team_persona, dataset_ref, docs, " +
+  "constraints, rubric, deliverable_spec, curveballs, success_criteria";
 
-  // Copy the live base row verbatim for everything else.
-  const { data: base, error: bErr } = await supabase
-    .from("scenarios")
-    .select(
-      "title, role, difficulty, brief, client_persona, team_persona, dataset_ref, docs, " +
-        "constraints, rubric, deliverable_spec, curveballs, success_criteria",
-    )
-    .eq("slug", BASE_SLUG)
-    .maybeSingle();
+async function seedForkClone(baseSlug: string, forkSlug: string, message: string): Promise<boolean> {
+  const { data: base, error: bErr } = await supabase.from("scenarios").select(COLS).eq("slug", baseSlug).maybeSingle();
   if (bErr || !base) {
-    console.error(`could not read base scenario '${BASE_SLUG}':`, bErr?.message ?? "not found");
-    process.exit(1);
+    console.error(`  ✗ base '${baseSlug}' not found: ${bErr?.message ?? "no row"}`);
+    return false;
   }
 
-  // Fresh insert — drop any prior clone first (idempotent).
-  await supabase.from("scenarios").delete().eq("slug", FORK_SLUG);
+  // Curveballs: base's minus any prior fork, plus the parallel fork curveball.
+  const baseCurveballs = (Array.isArray(base.curveballs) ? base.curveballs : []) as Array<Record<string, unknown>>;
+  const curveballs = [...baseCurveballs.filter((c) => c.id !== "shortcut_suggestion"), forkCurveball(message)];
 
-  // 7.3 — inject the fork anchors onto the design_under_constraints binding
-  // entry (weight untouched). The rubric is the post-rebind binding array.
-  const baseRubric = Array.isArray(base.rubric) ? (base.rubric as Array<Record<string, unknown>>) : [];
-  let anchoredDesign = false;
-  const forkRubric = baseRubric.map((entry) => {
-    if (entry.competency_key === "design_under_constraints") {
-      anchoredDesign = true;
-      return { ...entry, scenario_anchors: FORK_DESIGN_ANCHORS, scenario_description: FORK_DESIGN_DESCRIPTION };
+  // team_persona: append the shortcut_pitch beat.
+  const tp = { ...(base.team_persona as Record<string, unknown>) };
+  const beats = (Array.isArray(tp.beats) ? tp.beats : []) as Array<Record<string, unknown>>;
+  tp.beats = [...beats.filter((b) => b.id !== "shortcut_pitch"), FORK_TEAM_BEAT];
+
+  // Rubric: fork anchors onto design_under_constraints (weight unchanged).
+  const baseRubric = (Array.isArray(base.rubric) ? base.rubric : []) as Array<Record<string, unknown>>;
+  let anchored = false;
+  const rubric = baseRubric.map((e) => {
+    if (e.competency_key === "design_under_constraints") {
+      anchored = true;
+      return { ...e, scenario_anchors: FORK_DESIGN_ANCHORS, scenario_description: FORK_DESIGN_DESCRIPTION };
     }
-    return entry;
+    return e;
   });
-  if (!anchoredDesign) {
-    console.error("base rubric has no design_under_constraints entry — cannot bind fork anchors");
-    process.exit(1);
+  if (!anchored) {
+    console.error(`  ✗ '${baseSlug}' rubric has no design_under_constraints entry`);
+    return false;
   }
 
   const row = {
     ...base,
-    slug: FORK_SLUG,
+    slug: forkSlug,
     title: `${String(base.title)} (product-sense fork · dev)`,
     version: FORK_VERSION,
-    // Layer the fork in — curveballs + team_persona from the fixture; rubric =
-    // base binding with fork anchors on design_under_constraints.
-    curveballs: fork.curveballs,
-    team_persona: fork.team_persona,
-    rubric: forkRubric,
+    curveballs,
+    team_persona: tp,
+    rubric,
   };
 
-  // Update-or-insert (idempotent + FK-safe: the clone can't be deleted once dev
-  // sessions reference it). Update the fork-relevant fields if the row exists,
-  // else insert a fresh clone.
-  const { data: existing } = await supabase.from("scenarios").select("id").eq("slug", FORK_SLUG).maybeSingle();
+  const { data: existing } = await supabase.from("scenarios").select("id").eq("slug", forkSlug).maybeSingle();
   const writeErr = existing
-    ? (
-        await supabase
-          .from("scenarios")
-          .update({
-            title: row.title,
-            version: row.version,
-            curveballs: row.curveballs,
-            team_persona: row.team_persona,
-            rubric: row.rubric,
-          })
-          .eq("slug", FORK_SLUG)
-      ).error
+    ? (await supabase.from("scenarios").update({
+        title: row.title, version: row.version, curveballs: row.curveballs,
+        team_persona: row.team_persona, rubric: row.rubric,
+      }).eq("slug", forkSlug)).error
     : (await supabase.from("scenarios").insert(row)).error;
   if (writeErr) {
-    console.error(`${existing ? "update" : "insert"} failed:`, writeErr.message);
-    process.exit(1);
+    console.error(`  ✗ ${existing ? "update" : "insert"} '${forkSlug}' failed: ${writeErr.message}`);
+    return false;
   }
-  console.log(existing ? "updated existing clone" : "inserted new clone");
 
-  const { data: check } = await supabase
-    .from("scenarios")
-    .select("id, slug, version, dataset_ref")
-    .eq("slug", FORK_SLUG)
-    .maybeSingle();
-  const cbCount = (fork.curveballs ?? []).length;
-  console.log(
-    `seeded ${FORK_SLUG}: id=${check?.id} version=${check?.version} dataset_ref=${check?.dataset_ref} curveballs=${cbCount}`,
-  );
-  const hasShortcut = (fork.curveballs as Array<{ id?: string }>).some((c) => c.id === "shortcut_suggestion");
-  console.log(`  shortcut_suggestion curveball present: ${hasShortcut ? "yes ✓" : "NO ✗"}`);
+  const hasShortcut = curveballs.some((c) => c.id === "shortcut_suggestion");
+  console.log(`  ✓ ${forkSlug} (${existing ? "updated" : "inserted"}) — ${curveballs.length} curveballs, shortcut:${hasShortcut ? "yes" : "NO"}, dataset_ref=${String(base.dataset_ref)}`);
+  return true;
+}
+
+async function main(): Promise<void> {
+  console.log("seed-fork-scenario — dev clones for the product-sense fork");
+  let ok = true;
+  for (const c of CLONES) ok = (await seedForkClone(c.base, c.fork, c.message)) && ok;
+  process.exit(ok ? 0 : 1);
 }
 
 void main();
