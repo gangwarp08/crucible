@@ -67,6 +67,7 @@ const CORE: Verifier[] = [
   { name: "session-link", file: "verify-session-link.ts", note: "RD6 single-use start links" },
   { name: "budget-failclosed", file: "verify-budget-failclosed.ts", note: "H2 global spend breaker" },
   { name: "failmodes", file: "verify-failmodes.ts", note: "H6 fail-clean invariants" },
+  { name: "egress", file: "verify-egress.ts", note: "H3 sandbox default-deny egress (1 sandbox)" },
   { name: "rehydrate", file: "verify-rehydrate.ts" },
   { name: "scenario-state-race", file: "verify-scenario-state-race.ts" },
   { name: "discrimination", file: "verify-discrimination.ts" },
