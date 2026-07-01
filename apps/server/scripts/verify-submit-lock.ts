@@ -84,7 +84,11 @@ const auth = (sid: string) => ({ Authorization: `Bearer ${tokens.get(sid) ?? ""}
   console.log("\n[e] lifecycle state");
   const { data: row } = await supabase.from("sessions").select("status, deliverable_locked_at").eq("id", sessionId).maybeSingle();
   const r = row as { status?: string; deliverable_locked_at?: string | null } | null;
-  if (r?.status === "submitted") pass("session.status = submitted"); else fail(`status=${r?.status}`);
+  // 'submitted' when verification is off; 'defending' when VERIFICATION_ENABLED
+  // fires the defense immediately on submit (RD2/6.3). Both are locked terminals
+  // of the submit transition — either is correct.
+  if (r?.status === "submitted" || r?.status === "defending") pass(`session.status = ${r.status} (locked)`);
+  else fail(`status=${r?.status} (expected submitted or defending)`);
   if (r?.deliverable_locked_at) pass("deliverable_locked_at stamped"); else fail("no deliverable_locked_at");
 
   // cleanup: end + delete the session
