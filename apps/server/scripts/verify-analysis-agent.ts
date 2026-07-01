@@ -389,12 +389,16 @@ function fmtUsd(cents: number): string {
       pass("competency keys match the 8-spec exactly");
     else fail(`competency keys = ${JSON.stringify(actualKeys)}`);
 
-    const allInt15 = (items ?? []).every((i) => {
-      const s = i.score as number;
-      return Number.isInteger(s) && s >= 1 && s <= 5;
+    // RD4 (6.5): an ASSESSED competency scores an integer 1-5; a not_assessed
+    // one (zero evidence) is score=null + assessed=false, NOT 1.
+    const scoresValid = (items ?? []).every((i) => {
+      const assessed = (i as { assessed?: boolean }).assessed !== false;
+      const s = i.score;
+      if (!assessed) return s === null || s === undefined;
+      return Number.isInteger(s) && (s as number) >= 1 && (s as number) <= 5;
     });
-    if (allInt15) pass("all scores are integers in [1, 5]");
-    else fail("scores not all integers in [1, 5]");
+    if (scoresValid) pass("assessed scores are integers in [1, 5]; not_assessed are null");
+    else fail("scores invalid (assessed must be int 1-5, not_assessed must be null)");
 
     // Evidence grounding — every event_seq must exist in this session's events.
     const { data: allEvents } = await supabase
@@ -413,12 +417,18 @@ function fmtUsd(cents: number): string {
       pass(`all ${evidenceCount} evidence event_seqs reference real events in this session`);
     else fail(`${hallucinated} of ${evidenceCount} evidence event_seqs are not real`);
 
-    // Server-side weighted overall math.
-    const computed = (items ?? []).reduce(
-      (acc, i) => acc + (i.score as number) * (i.weight as number),
-      0,
-    );
-    const computedRounded = Math.round(computed * 100) / 100;
+    // Server-side weighted overall math (RD4/6.5): reweight over ASSESSED
+    // competencies only — normalize by the assessed weight, skip null scores.
+    let weightedSum = 0;
+    let assessedWeight = 0;
+    for (const i of items ?? []) {
+      const assessed = (i as { assessed?: boolean }).assessed !== false;
+      if (!assessed || i.score === null || i.score === undefined) continue;
+      weightedSum += (i.score as number) * (i.weight as number);
+      assessedWeight += i.weight as number;
+    }
+    const computedRounded =
+      assessedWeight > 0 ? Math.round((weightedSum / assessedWeight) * 100) / 100 : 0;
     const persistedOverall = Number((evalRow as { overall_score: number }).overall_score);
     if (Math.abs(computedRounded - persistedOverall) < 0.005)
       pass(`server-side weighted overall (${computedRounded}) matches evaluations.overall_score (${persistedOverall})`);

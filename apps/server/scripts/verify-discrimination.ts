@@ -563,6 +563,13 @@ function printReport(strong: PlayResult, weak: PlayResult): { verdict: string; f
         console.log(`  ${pad(key, 26)} MISSING (s=${!!s} w=${!!w})`);
         continue;
       }
+      // RD4 (6.5): a not_assessed competency (score null — the scenario surfaced
+      // no evidence in that run) can't be compared. Skip it; comparing "no chance
+      // to demonstrate" would fabricate strictness/inversion flags from nulls.
+      if (s.score === null || s.score === undefined || w.score === null || w.score === undefined) {
+        console.log(`  ${pad(key, 26)} not_assessed (STRONG=${s.score ?? "null"} WEAK=${w.score ?? "null"}) — skipped`);
+        continue;
+      }
       const delta = s.score - w.score;
       rows.push({ key, weight: s.weight, sScore: s.score, wScore: w.score, delta });
       const rowFlags: string[] = [];

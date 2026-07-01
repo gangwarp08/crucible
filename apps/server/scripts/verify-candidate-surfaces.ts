@@ -157,8 +157,13 @@ async function asJson(res: Response): Promise<unknown> {
     pass("doc.view events carry doc_id + title and actor=candidate");
   }
 
-  // ── [d] Deliverable: draft → submit → resubmit ─────────────────────────
-  console.log("\n[d] deliverable draft → submit → resubmit");
+  // ── [d] Deliverable: draft → draft (latest-wins) ───────────────────────
+  // RD1 (6.2): a `submitted` deliverable LOCKS the whole workspace read-only,
+  // so this surface/telemetry check uses DRAFTS only (they iterate while
+  // active) and leaves the session active for [e]/[f]. The submit-and-lock
+  // behaviour (submit → 409 on subsequent writes/queries) is covered end-to-end
+  // by verify-submit-lock.ts.
+  console.log("\n[d] deliverable draft → draft (latest-wins, stays active)");
   const draft1 = {
     status: "draft" as const,
     data: {
@@ -171,26 +176,11 @@ async function asJson(res: Response): Promise<unknown> {
   let r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
     method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(draft1),
   });
-  if (r.ok) pass("draft save returned 200");
-  else { fail(`draft save returned ${r.status}: ${await r.text()}`); }
+  if (r.ok) pass("first draft save returned 200");
+  else { fail(`first draft save returned ${r.status}: ${await r.text()}`); }
 
-  const submit1 = {
-    status: "submitted" as const,
-    data: {
-      corrected_monthly_revenue: "SELECT ... GROUP BY external_payment_id",
-      root_cause_finding: "Duplicate succeeded payments inflate the SUM.",
-      client_facing_summary: "Numbers were overstated by ~$260K across Apr+May due to a recording bug.",
-      decisions_and_tradeoffs: "Kept MIN(id) per external_payment_id; recommended idempotency upstream.",
-    },
-  };
-  r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(submit1),
-  });
-  if (r.ok) pass("submit returned 200");
-  else { fail(`submit returned ${r.status}: ${await r.text()}`); }
-
-  const submit2 = {
-    status: "submitted" as const,
+  const draft2 = {
+    status: "draft" as const,
     data: {
       corrected_monthly_revenue: "REVISED query v2",
       root_cause_finding: "REVISED finding",
@@ -199,9 +189,10 @@ async function asJson(res: Response): Promise<unknown> {
     },
   };
   r = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, {
-    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(submit2),
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(sessionId) }, body: JSON.stringify(draft2),
   });
-  if (r.ok) pass("resubmit returned 200");
+  if (r.ok) pass("second draft save returned 200");
+  else { fail(`second draft save returned ${r.status}: ${await r.text()}`); }
 
   await sleep(1_000);
   const { data: delivEvents } = await supabase
@@ -209,11 +200,8 @@ async function asJson(res: Response): Promise<unknown> {
     .eq("session_id", sessionId).like("type", "deliverable.%")
     .order("seq", { ascending: true });
   const drafts = delivEvents?.filter((e) => e.type === "deliverable.draft").length ?? 0;
-  const submits = delivEvents?.filter((e) => e.type === "deliverable.submit").length ?? 0;
-  if (drafts === 1) pass("1 deliverable.draft event persisted");
-  else fail(`expected 1 deliverable.draft, got ${drafts}`);
-  if (submits === 2) pass("2 deliverable.submit events persisted (initial + resubmit)");
-  else fail(`expected 2 deliverable.submit, got ${submits}`);
+  if (drafts === 2) pass("2 deliverable.draft events persisted");
+  else fail(`expected 2 deliverable.draft, got ${drafts}`);
 
   // Latest-wins in scenario_state.
   const { data: sessRow } = await supabase
@@ -221,12 +209,12 @@ async function asJson(res: Response): Promise<unknown> {
     .eq("id", sessionId).single();
   const ss = sessRow!.scenario_state as Record<string, unknown>;
   const persistedDeliverable = ss.deliverable as { status: string; data: { root_cause_finding: string } } | null;
-  if (persistedDeliverable?.status === "submitted" && persistedDeliverable.data.root_cause_finding === "REVISED finding") {
-    pass("scenario_state.deliverable mirrors latest resubmit (latest-wins)");
+  if (persistedDeliverable?.data.root_cause_finding === "REVISED finding") {
+    pass("scenario_state.deliverable mirrors latest draft (latest-wins)");
   } else {
     fail(`scenario_state.deliverable mismatch: ${JSON.stringify(persistedDeliverable)?.slice(0, 200)}`);
   }
-  if (sessRow!.status === "active") pass("session still active after submit (no auto-end)");
+  if (sessRow!.status === "active") pass("session still active after drafts (not locked)");
   else fail(`session.status = ${sessRow!.status}, expected active`);
 
   // ── [e] Query deductions ───────────────────────────────────────────────
