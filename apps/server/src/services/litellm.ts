@@ -84,6 +84,31 @@ export async function revokeSessionKey(key: string): Promise<void> {
   }
 }
 
+/**
+ * Revoke a session key by its ALIAS (H1, Slice 6.8a). Teardown paths that only
+ * have the alias — orphan cleanup + rehydration, where the raw key value is no
+ * longer in memory — use this so an abandoned key doesn't stay live until its
+ * mint-time TTL. Best-effort: a failure is logged, never thrown.
+ */
+export async function revokeSessionKeyByAlias(alias: string): Promise<void> {
+  if (!alias) return;
+  try {
+    const res = await fetch(`${env.LITELLM_BASE_URL}/key/delete`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.LITELLM_MASTER_KEY}`,
+      },
+      body: JSON.stringify({ key_aliases: [alias] }),
+    });
+    if (!res.ok) {
+      console.warn(`LiteLLM key/delete by alias failed (${res.status}) — key may already be expired`);
+    }
+  } catch (err) {
+    console.warn(`LiteLLM key/delete by alias threw: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /** Return the authoritative spend (USD) for a session key from the gateway. */
 export async function getKeySpend(key: string): Promise<number | null> {
   const res = await fetch(

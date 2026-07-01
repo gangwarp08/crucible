@@ -24,6 +24,12 @@ const EnvSchema = z.object({
   SESSION_BUDGET_USD: z.coerce.number().positive().default(1.0),
   SESSION_TIMEOUT_MIN: z.coerce.number().int().positive().default(60),
 
+  // H2 (6.8b): global daily spend circuit breaker. Before creating a session
+  // the server sums today's spend; at/above this ceiling it refuses new
+  // sessions (503) — a platform-wide runaway-cost backstop on top of the
+  // per-session cap. Generous default so it never trips in normal pilot use.
+  GLOBAL_DAILY_SPEND_CEILING_USD: z.coerce.number().positive().default(50.0),
+
   // JWT secret for server↔browser session tokens. REQUIRED — the server
   // refuses to boot without it once per-session JWTs are enforced on the
   // protected routes (services/session-token.ts).

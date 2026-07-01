@@ -32,7 +32,7 @@ import {
   loadNextTranscriptSeq,
   persistSessionUpdate,
 } from "./db.js";
-import { mintSessionKey } from "./litellm.js";
+import { mintSessionKey, revokeSessionKeyByAlias } from "./litellm.js";
 import { loadScenarioById } from "./scenarios.js";
 import { expireSession } from "./session.js";
 import { appendEvent } from "./events-direct.js";
@@ -91,7 +91,15 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
     console.log(
       `[rehydrate] ${sessionId} — budget exhausted (spent ${alreadySpent}), marking completed`,
     );
-    await persistSessionUpdate(sessionId, { status: "completed" });
+    // H6: budget-out during downtime is an unclean terminal → exclude, never a
+    // silent zero against the candidate.
+    await revokeSessionKeyByAlias(row.litellm_key_alias);
+    await persistSessionUpdate(sessionId, {
+      status: "completed",
+      end_reason: "budget",
+      scorable: false,
+      exclusion_reason: "excluded_infra",
+    });
     return null;
   }
 
@@ -105,16 +113,27 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
       `[rehydrate] ${sessionId} — Sandbox.connect(${row.sandbox_id}) threw, sandbox is gone:`,
       err instanceof Error ? err.message : String(err),
     );
-    await persistSessionUpdate(sessionId, { status: "completed" });
+    // H6: the sandbox is unrecoverable → orphaned infra terminal, excluded.
+    await revokeSessionKeyByAlias(row.litellm_key_alias);
+    await persistSessionUpdate(sessionId, {
+      status: "completed",
+      end_reason: "orphaned",
+      scorable: false,
+      exclusion_reason: "excluded_infra",
+    });
     return null;
   }
 
-  // Re-mint the per-session LiteLLM key. Unique alias suffix avoids the
-  // LiteLLM uniqueness clash with the original `session-${id}` alias.
+  // H1 (6.8a): rotate the LiteLLM key. Revoke the PRIOR key by its stored alias
+  // BEFORE minting the replacement so keys don't accumulate across restarts (a
+  // fresh mint per rehydration left the old one live until its TTL). Unique
+  // alias suffix avoids the LiteLLM uniqueness clash with the prior alias.
+  await revokeSessionKeyByAlias(row.litellm_key_alias);
+  const newAlias = `session-${sessionId}-r${Date.now()}`;
   let litellmKey: string;
   try {
     litellmKey = await mintSessionKey(sessionId, {
-      aliasOverride: `session-${sessionId}-r${Date.now()}`,
+      aliasOverride: newAlias,
       maxBudgetUsd: remainingBudget,
       durationMinutes: Math.max(1, Math.ceil((deadlineMs - now) / 60_000)),
     });
@@ -125,6 +144,9 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
     );
     return null;
   }
+  // Persist the rotated alias so the NEXT rehydration revokes THIS key (not the
+  // long-gone original) — closes the accumulation gap across repeated restarts.
+  await persistSessionUpdate(sessionId, { litellm_key_alias: newAlias }).catch(() => {});
 
   // Re-fetch scenario for scenarioMeta (cheap; one Supabase call).
   let scenarioMeta: SessionEntry["scenarioMeta"] = null;

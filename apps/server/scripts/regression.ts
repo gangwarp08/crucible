@@ -65,6 +65,8 @@ const CORE: Verifier[] = [
   { name: "competency-gating", file: "verify-competency-gating.ts", note: "RD4 not_assessed + reweight" },
   { name: "judge-injection", file: "verify-judge-injection.ts", note: "RD5 fence + injection canary" },
   { name: "session-link", file: "verify-session-link.ts", note: "RD6 single-use start links" },
+  { name: "budget-failclosed", file: "verify-budget-failclosed.ts", note: "H2 global spend breaker" },
+  { name: "failmodes", file: "verify-failmodes.ts", note: "H6 fail-clean invariants" },
   { name: "rehydrate", file: "verify-rehydrate.ts" },
   { name: "scenario-state-race", file: "verify-scenario-state-race.ts" },
   { name: "discrimination", file: "verify-discrimination.ts" },

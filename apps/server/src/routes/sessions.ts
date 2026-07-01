@@ -5,6 +5,7 @@ import { createSandbox, destroySandbox } from "../services/sandbox.js";
 import { DatasetUnavailableError } from "../services/dataset-seed.js";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
+import { sumTodaySpendUsd } from "../services/db.js";
 import { signToken, requireSessionToken } from "../services/session-token.js";
 import {
   peekSessionLink,
@@ -49,6 +50,29 @@ export async function sessionRoutes(server: FastifyInstance) {
     }
     if (env.INVITE_CODE && parsed.data?.inviteCode !== env.INVITE_CODE) {
       return reply.status(401).send({ error: "Invalid invite code" });
+    }
+
+    // H2 (6.8b): global daily spend circuit breaker — refuse new sessions once
+    // the platform's spend for the day hits the ceiling. FAIL-CLOSED: if we
+    // can't measure spend, deny rather than risk an unbounded-cost run.
+    try {
+      const todaySpend = await sumTodaySpendUsd();
+      if (todaySpend >= env.GLOBAL_DAILY_SPEND_CEILING_USD) {
+        request.log.warn(
+          { todaySpend, ceiling: env.GLOBAL_DAILY_SPEND_CEILING_USD },
+          "global daily spend ceiling reached — refusing new session",
+        );
+        return reply.status(503).send({
+          error: "global_spend_ceiling",
+          message: "The platform has reached its daily spend limit. Please try again tomorrow.",
+        });
+      }
+    } catch (err) {
+      request.log.error({ err }, "global spend check failed — failing closed (503)");
+      return reply.status(503).send({
+        error: "spend_check_unavailable",
+        message: "Unable to verify platform capacity right now. Please try again shortly.",
+      });
     }
 
     // RD6 single-use session link. When SESSION_LINK_REQUIRED, a link is
