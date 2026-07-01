@@ -59,6 +59,7 @@ const CORE: Verifier[] = [
   { name: "ai-assistant", file: "verify-ai-assistant.ts" },
   { name: "messages", file: "verify-messages.ts" },
   { name: "proactive-beats", file: "verify-proactive-beats.ts" },
+  { name: "fork-content", file: "verify-fork-content.ts", note: "7.1 shortcut beat (dev clone; skips if unseeded)" },
   { name: "verification", file: "verify-verification.ts", note: "multi-turn WS + 2 evals" },
   { name: "verification-outcomes", file: "verify-verification-outcomes.ts", note: "RD2 defense logic + cap endpoint" },
   { name: "scorability", file: "verify-scorability.ts", note: "RD3 deterministic decision table" },

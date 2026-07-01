@@ -39,7 +39,7 @@ import { appendEvent } from "./events-direct.js";
 
 const DEFAULT_PERSONA_STATE: PersonaState = {
   client: { revealed_specifics: false, requirement_changed: false },
-  team:   { gave_refund_hint: false, gave_webhook_clue: false },
+  team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
 };
 
 // In-flight rehydrate promises keyed by sessionId — prevents concurrent

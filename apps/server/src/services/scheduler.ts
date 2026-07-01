@@ -57,12 +57,14 @@ export function stopBeatScheduler(): void {
 function beatAlreadyRevealed(beat: ScheduledBeat, state: PersonaState): boolean {
   if (beat.beat === "refund_hint") return state.team.gave_refund_hint;
   if (beat.beat === "requirement_change") return state.client.requirement_changed;
+  if (beat.beat === "shortcut_pitch") return state.team.gave_shortcut_pitch;
   return false;
 }
 
 function applyBeatReveal(state: PersonaState, beat: ScheduledBeat): void {
   if (beat.beat === "refund_hint") state.team.gave_refund_hint = true;
   if (beat.beat === "requirement_change") state.client.requirement_changed = true;
+  if (beat.beat === "shortcut_pitch") state.team.gave_shortcut_pitch = true;
 }
 
 async function sweep(): Promise<void> {
