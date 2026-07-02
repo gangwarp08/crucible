@@ -106,8 +106,8 @@ function renderInline(text: string): React.ReactNode[] {
       <code
         key={key++}
         style={{
-          background: "#FBF7EF",
-          color: "#DDA75C",
+          background: "#0f0f14",
+          color: "#e0b66e",
           padding: "1px 5px",
           borderRadius: 3,
           fontSize: "0.92em",
@@ -130,7 +130,7 @@ export default function MarkdownView({ source }: Props) {
   return (
     <div
       style={{
-        color: "#28352F",
+        color: "#e6e6ea",
         fontSize: 13,
         lineHeight: 1.55,
         fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
@@ -145,10 +145,10 @@ export default function MarkdownView({ source }: Props) {
                 style={{
                   fontSize: 15,
                   fontWeight: 600,
-                  color: "#28352F",
+                  color: "#e6e6ea",
                   margin: i === 0 ? "0 0 8px" : "20px 0 8px",
                   paddingBottom: 4,
-                  borderBottom: "1px solid #FFFDF9",
+                  borderBottom: "1px solid #1c1c24",
                 }}
               >
                 {renderInline(b.lines[0]!)}
@@ -165,13 +165,13 @@ export default function MarkdownView({ source }: Props) {
               <pre
                 key={i}
                 style={{
-                  background: "#FBF6EA",
-                  border: "1px solid #DED3BF",
+                  background: "#15151b",
+                  border: "1px solid #2a2a36",
                   borderRadius: 4,
                   padding: "8px 12px",
                   margin: "0 0 12px",
                   overflow: "auto",
-                  color: "#28352F",
+                  color: "#e6e6ea",
                   fontSize: 12,
                   fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
                   lineHeight: 1.45,
@@ -187,9 +187,9 @@ export default function MarkdownView({ source }: Props) {
                 style={{
                   margin: "0 0 12px",
                   padding: "6px 12px",
-                  borderLeft: "3px solid #C67C5B",
-                  background: "#FBF6EA",
-                  color: "#28352F",
+                  borderLeft: "3px solid #7c7fff",
+                  background: "#15151b",
+                  color: "#e6e6ea",
                   fontStyle: "normal",
                 }}
               >

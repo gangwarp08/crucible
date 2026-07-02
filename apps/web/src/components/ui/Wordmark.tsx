@@ -27,9 +27,9 @@ export function FlamingCube({ size = 22 }: CubeProps): React.ReactElement {
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id={`flm-${gid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#DDA75C" />
-            <stop offset="0.55" stopColor="#DDA75C" />
-            <stop offset="1" stopColor="#B85C3A" />
+            <stop offset="0" stopColor="#ffd400" />
+            <stop offset="0.55" stopColor="#ff8a00" />
+            <stop offset="1" stopColor="#ff4d00" />
           </linearGradient>
         </defs>
         <path
@@ -51,7 +51,7 @@ export function FlamingCube({ size = 22 }: CubeProps): React.ReactElement {
           />
           <path
             d="M12 3.9 C12.95 5.1 13.4 5.8 13.4 6.8 C13.4 7.8 12.8 8.4 12 8.4 C11.2 8.4 10.6 7.8 10.6 6.9 C10.6 6.2 10.9 5.8 11.3 5.4 C11.4 6 11.7 6.3 12 6.3 C11.7 5.4 11.7 4.6 12 3.9 Z"
-            fill="#E8C07A"
+            fill="#ffe487"
           />
         </g>
       </svg>

@@ -150,7 +150,7 @@ export default function DataExplorer({ sessionId }: Props) {
                       key={ri}
                       style={{
                         borderBottom: ri < result.rows.length - 1 ? `1px solid ${color.border.subtle}` : "none",
-                        background: ri % 2 === 0 ? "transparent" : "rgba(40, 53, 47, 0.015)",
+                        background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
                       }}
                     >
                       {result.columns.map((_, ci) => (

@@ -32,10 +32,10 @@ export default function TerminalReplay({ events }: Props) {
 
     const term = new XTerm({
       theme: {
-        background: "#FBF7EF",
-        foreground: "#28352F",
-        cursor: "#FBF7EF", // hide cursor (read-only)
-        selectionBackground: "rgba(198, 124, 91, 0.30)",
+        background: "#0c0c10",
+        foreground: "#e6e6ea",
+        cursor: "#0c0c10", // hide cursor (read-only)
+        selectionBackground: "rgba(124, 127, 255, 0.30)",
       },
       fontSize: 12,
       fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
@@ -75,8 +75,8 @@ export default function TerminalReplay({ events }: Props) {
   return (
     <section
       style={{
-        background: "#FBF6EA",
-        border: "1px solid #DED3BF",
+        background: "#15151b",
+        border: "1px solid #2a2a36",
         borderRadius: 6,
         marginBottom: 16,
         overflow: "hidden",
@@ -85,24 +85,24 @@ export default function TerminalReplay({ events }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#FFFDF9",
-          borderBottom: "1px solid #DED3BF",
+          background: "#1c1c24",
+          borderBottom: "1px solid #2a2a36",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#5E6B64", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Terminal (final state)
         </span>
-        <span style={{ fontSize: 11, color: "#8A9389", fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)" }}>
+        <span style={{ fontSize: 11, color: "#6a6a78", fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)" }}>
           {outputEvents.length} output frames · {totalBytes.toLocaleString()} bytes
         </span>
       </header>
 
-      <div style={{ padding: "8px 8px 4px", background: "#FBF7EF" }}>
+      <div style={{ padding: "8px 8px 4px", background: "#0c0c10" }}>
         {outputEvents.length === 0 ? (
-          <div style={{ padding: 24, color: "#8A9389", fontSize: 13, textAlign: "center" }}>
+          <div style={{ padding: 24, color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
             No terminal output recorded
           </div>
         ) : (

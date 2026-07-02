@@ -29,7 +29,7 @@ export default function Card({
         // Subtle top-down gradient on a panel base — matches the design's
         // 180deg fade. Renders almost invisible on near-black but adds depth.
         background:
-          "linear-gradient(180deg, rgba(40, 53, 47, 0.012), rgba(40, 53, 47, 0)), " +
+          "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0)), " +
           color.bg.panel,
         border: `1px solid ${color.border.default}`,
         borderRadius: radius.md,

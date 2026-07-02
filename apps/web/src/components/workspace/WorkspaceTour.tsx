@@ -78,7 +78,7 @@ export default function WorkspaceTour({ onDismiss }: Props): React.ReactElement 
         position: "fixed",
         inset: 0,
         zIndex: 1000,
-        background: "rgba(40, 53, 47, 0.78)",
+        background: "rgba(0, 0, 0, 0.78)",
         backdropFilter: "blur(6px)",
         WebkitBackdropFilter: "blur(6px)",
         display: "flex",
@@ -97,11 +97,11 @@ export default function WorkspaceTour({ onDismiss }: Props): React.ReactElement 
           maxHeight: "calc(100vh - 48px)",
           overflowY: "auto",
           background:
-            "linear-gradient(180deg, rgba(40, 53, 47, 0.012), rgba(40, 53, 47, 0)), " +
+            "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0)), " +
             color.bg.panel,
           border: `1px solid ${color.border.strong}`,
           borderRadius: radius.md,
-          boxShadow: "0 24px 80px -20px rgba(40, 53, 47, 0.6), 0 0 60px -20px rgba(198, 124, 91, 0.20)",
+          boxShadow: "0 24px 80px -20px rgba(0,0,0,0.6), 0 0 60px -20px rgba(255,106,0,0.20)",
           padding: 32,
           fontFamily: font.sans,
           color: color.text.primary,

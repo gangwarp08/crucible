@@ -12,10 +12,10 @@ import {
 } from "@/lib/api";
 
 const STATUS_COLOR: Record<OutcomeInviteStatus, string> = {
-  active: "#4E8A63",
+  active: "#3fb950",
   submitted: "#58a6ff",
-  expired: "#5E6B64",
-  revoked: "#BC4B3C",
+  expired: "#8b949e",
+  revoked: "#f85149",
 };
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -121,8 +121,8 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
   return (
     <section
       style={{
-        background: "#FBF6EA",
-        border: "1px solid #E7DDCB",
+        background: "#16161c",
+        border: "1px solid #26262e",
         borderRadius: 10,
         padding: 16,
         marginBottom: 16,
@@ -134,7 +134,7 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
           onClick={() => void onGenerate()}
           disabled={generating}
           style={{
-            background: generating ? "#E0D6C4" : "#C67C5B",
+            background: generating ? "#23304a" : "#1f6feb",
             color: "#fff",
             border: "none",
             borderRadius: 6,
@@ -146,21 +146,21 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
           {generating ? "Generating…" : "Generate link"}
         </button>
       </div>
-      <p style={{ fontSize: 12, color: "#5E6B64", margin: "0 0 12px" }}>
+      <p style={{ fontSize: 12, color: "#8b949e", margin: "0 0 12px" }}>
         Create a single-use link to send a hiring partner so they can report real-world outcomes
         (hired, ramp time, 90-day rating, retention) for this candidate. No account needed.
       </p>
 
       {error && (
-        <p style={{ color: "#BC4B3C", fontSize: 12, marginBottom: 12 }}>Error: {error}</p>
+        <p style={{ color: "#f85149", fontSize: 12, marginBottom: 12 }}>Error: {error}</p>
       )}
 
       {/* Captured real-world outcomes — the payoff: score vs. reality in one place. */}
       {outcomes.length > 0 && (
         <div
           style={{
-            background: "#FBF7EF",
-            border: "1px solid #3F6E4F",
+            background: "#0c0c10",
+            border: "1px solid #238636",
             borderRadius: 6,
             padding: 12,
             marginBottom: 12,
@@ -174,13 +174,13 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
               marginBottom: 8,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#4E8A63" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#3fb950" }}>
               Reported outcomes
             </span>
             {overallScore !== null && overallScore !== undefined && (
-              <span style={{ fontSize: 12, color: "#5E6B64" }}>
+              <span style={{ fontSize: 12, color: "#8b949e" }}>
                 assessment score:{" "}
-                <strong style={{ color: "#28352F" }}>{overallScore.toFixed(2)} / 5</strong>
+                <strong style={{ color: "#e6e6ea" }}>{overallScore.toFixed(2)} / 5</strong>
               </span>
             )}
           </div>
@@ -189,18 +189,18 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
               <div
                 key={`${o.outcome_type}-${i}`}
                 style={{
-                  background: "#FBF6EA",
-                  border: "1px solid #E7DDCB",
+                  background: "#16161c",
+                  border: "1px solid #26262e",
                   borderRadius: 6,
                   padding: "6px 10px",
                   minWidth: 110,
                 }}
                 title={`source: ${o.source} · ${fmtDate(o.captured_at)}`}
               >
-                <div style={{ fontSize: 11, color: "#5E6B64" }}>
+                <div style={{ fontSize: 11, color: "#8b949e" }}>
                   {OUTCOME_LABEL[o.outcome_type] ?? o.outcome_type}
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: "#28352F" }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "#e6e6ea" }}>
                   {fmtOutcomeValue(o.outcome_type, o.value)}
                 </div>
               </div>
@@ -212,14 +212,14 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
       {freshLink && (
         <div
           style={{
-            background: "#FBF7EF",
-            border: "1px solid #C67C5B55",
+            background: "#0c0c10",
+            border: "1px solid #1f6feb55",
             borderRadius: 6,
             padding: 12,
             marginBottom: 12,
           }}
         >
-          <div style={{ fontSize: 12, color: "#5E6B64", marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 6 }}>
             Copy this link now — it won&apos;t be shown again:
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -227,7 +227,7 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
               style={{
                 flex: 1,
                 fontSize: 12,
-                color: "#28352F",
+                color: "#e6e6ea",
                 wordBreak: "break-all",
                 fontFamily: "var(--font-mono, ui-monospace, monospace)",
               }}
@@ -237,7 +237,7 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
             <button
               onClick={() => void onCopy()}
               style={{
-                background: copied ? "#3F6E4F" : "#D8CCB6",
+                background: copied ? "#238636" : "#30363d",
                 color: "#fff",
                 border: "none",
                 borderRadius: 6,
@@ -254,13 +254,13 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
       )}
 
       {loading ? (
-        <p style={{ fontSize: 12, color: "#5E6B64" }}>Loading…</p>
+        <p style={{ fontSize: 12, color: "#8b949e" }}>Loading…</p>
       ) : invites.length === 0 ? (
-        <p style={{ fontSize: 12, color: "#5E6B64", margin: 0 }}>No links issued yet.</p>
+        <p style={{ fontSize: 12, color: "#8b949e", margin: 0 }}>No links issued yet.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
-            <tr style={{ color: "#5E6B64", textAlign: "left" }}>
+            <tr style={{ color: "#8b949e", textAlign: "left" }}>
               <th style={{ padding: "4px 8px", fontWeight: 500 }}>Status</th>
               <th style={{ padding: "4px 8px", fontWeight: 500 }}>Outcomes requested</th>
               <th style={{ padding: "4px 8px", fontWeight: 500 }}>Expires</th>
@@ -269,20 +269,20 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
           </thead>
           <tbody>
             {invites.map((inv) => (
-              <tr key={inv.id} style={{ borderTop: "1px solid #E7DDCB" }}>
+              <tr key={inv.id} style={{ borderTop: "1px solid #26262e" }}>
                 <td style={{ padding: "6px 8px" }}>
                   <span style={{ color: STATUS_COLOR[inv.status], fontWeight: 600 }}>{inv.status}</span>
                 </td>
-                <td style={{ padding: "6px 8px", color: "#28352F" }}>{inv.outcome_types.join(", ")}</td>
-                <td style={{ padding: "6px 8px", color: "#5E6B64" }}>{fmtDate(inv.expires_at)}</td>
+                <td style={{ padding: "6px 8px", color: "#c9d1d9" }}>{inv.outcome_types.join(", ")}</td>
+                <td style={{ padding: "6px 8px", color: "#8b949e" }}>{fmtDate(inv.expires_at)}</td>
                 <td style={{ padding: "6px 8px", textAlign: "right" }}>
                   {inv.status === "active" && (
                     <button
                       onClick={() => void onRevoke(inv.id)}
                       style={{
                         background: "transparent",
-                        color: "#BC4B3C",
-                        border: "1px solid #BC4B3C55",
+                        color: "#f85149",
+                        border: "1px solid #f8514955",
                         borderRadius: 5,
                         padding: "3px 8px",
                         fontSize: 11,

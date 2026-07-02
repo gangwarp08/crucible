@@ -15,14 +15,14 @@ export default function ReviewPage() {
             style={{
               fontSize: 26,
               fontWeight: 600,
-              color: "#28352F",
+              color: "#e6e6ea",
               margin: 0,
               letterSpacing: "-0.4px",
             }}
           >
             Sessions
           </h1>
-          <p style={{ color: "#5E6B64", fontSize: 13, margin: "8px 0 0" }}>
+          <p style={{ color: "#9999a3", fontSize: 13, margin: "8px 0 0" }}>
             Recruiter review · all sessions across candidates
           </p>
         </header>
