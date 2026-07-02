@@ -57,6 +57,7 @@ const CORE: Verifier[] = [
   { name: "submit-lock", file: "verify-submit-lock.ts", note: "server + 1 E2B session" },
   { name: "candidate-surfaces", file: "verify-candidate-surfaces.ts" },
   { name: "ai-assistant", file: "verify-ai-assistant.ts" },
+  { name: "ai-assistant-injection", file: "verify-ai-assistant-injection.ts", note: "assistant prompt-injection + leak canary" },
   { name: "messages", file: "verify-messages.ts" },
   { name: "proactive-beats", file: "verify-proactive-beats.ts" },
   { name: "fork-content", file: "verify-fork-content.ts", note: "7.1 shortcut beat (dev clone; skips if unseeded)" },
