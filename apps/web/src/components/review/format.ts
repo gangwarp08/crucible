@@ -65,14 +65,14 @@ export function formatRelativeMs(deltaMs: number): string {
 }
 
 /** Color-code an evaluation score 1-5. Aligns with the StatusBadge palette
- *  used elsewhere in /review (#4ec9b0 / #3794ff / #dcb67a / #f48771). */
+ *  used elsewhere in /review (#5E9179 / #C67C5B / #DDA75C / #C0674E). */
 export function scoreColor(score: number | null | undefined): string {
-  if (typeof score !== "number" || Number.isNaN(score)) return "#858585";
+  if (typeof score !== "number" || Number.isNaN(score)) return "#8A9389";
   const s = Math.round(score);
-  if (s >= 5) return "#4ec9b0";
-  if (s >= 4) return "#3794ff";
-  if (s >= 3) return "#dcb67a";
-  return "#f48771";
+  if (s >= 5) return "#5E9179";
+  if (s >= 4) return "#C67C5B";
+  if (s >= 3) return "#DDA75C";
+  return "#C0674E";
 }
 
 /** "data_fluency" → "Data Fluency"; "ai_orchestration" → "Ai Orchestration"

@@ -31,7 +31,7 @@ const SECTION_PAD = "clamp(72px, 11vw, 150px) 0";
 export default function LandingPage(): React.ReactElement {
   return (
     <>
-      <EmberCanvas intensity={45} hue={28} />
+      <EmberCanvas intensity={45} hue={34} />
       <div className="landing-vignette" />
       <div style={{ position: "relative", zIndex: 2 }}>
         <Nav />
@@ -62,7 +62,7 @@ function Nav() {
         position: "fixed",
         top: 0, left: 0, right: 0,
         zIndex: 40,
-        background: "rgba(4, 3, 2, 0.72)",
+        background: "rgba(40, 53, 47, 0.72)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         borderBottom: `1px solid ${color.border.default}`,
@@ -113,7 +113,7 @@ function Hero() {
     >
       <div style={{ ...WRAP_STYLE, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
         <div style={{ marginTop: -36, marginBottom: -78 }}>
-          <FlameCube size={150} intensity={60} hue={28} />
+          <FlameCube size={150} intensity={60} hue={34} />
         </div>
         <div style={{ maxWidth: 900 }}>
           <span style={{
@@ -212,7 +212,7 @@ function Problem() {
             <div key={it.t} className="card-fire-interactive" style={{
               border: `1px solid ${color.border.default}`,
               background:
-                "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0)), " +
+                "linear-gradient(180deg, rgba(40, 53, 47, 0.012), rgba(40, 53, 47, 0)), " +
                 color.bg.panel,
               padding: "26px 26px 28px",
               borderRadius: radius.md,
@@ -222,7 +222,7 @@ function Problem() {
               <span style={{
                 fontFamily: font.mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.18em",
                 textTransform: "uppercase", color: color.accent.base,
-                border: `1px solid rgba(255,106,0,0.45)`, borderRadius: 4, padding: "4px 9px",
+                border: `1px solid rgba(198, 124, 91, 0.45)`, borderRadius: 4, padding: "4px 9px",
               }}>
                 {it.badge}
               </span>
@@ -255,7 +255,7 @@ function StatBar({ n, p }: { n: string; p: React.ReactNode }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 18,
-      border: `1px solid rgba(255,106,0,0.30)`, background: "rgba(255,106,0,0.04)",
+      border: `1px solid rgba(198, 124, 91, 0.30)`, background: "rgba(198, 124, 91, 0.04)",
       borderRadius: radius.md, padding: "20px 24px",
     }}>
       <span style={{
@@ -300,9 +300,9 @@ function Engine() {
         }}>
           {steps.map((s) => (
             <div key={s.n} style={{
-              background: s.hot ? "linear-gradient(180deg, rgba(255,106,0,0.06), transparent)" : "#050403",
+              background: s.hot ? "linear-gradient(180deg, rgba(198, 124, 91, 0.06), transparent)" : "#F4ECDE",
               padding: "32px 28px 36px",
-              boxShadow: s.hot ? "inset 0 0 0 1px rgba(255,106,0,0.25)" : undefined,
+              boxShadow: s.hot ? "inset 0 0 0 1px rgba(198, 124, 91, 0.25)" : undefined,
             }}>
               <div style={{
                 fontFamily: font.mono, fontSize: 12, letterSpacing: "0.20em",
@@ -320,7 +320,7 @@ function Engine() {
                   display: "inline-block", marginBottom: 12,
                   fontFamily: font.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.14em",
                   textTransform: "uppercase", color: color.accent.base,
-                  border: `1px solid rgba(255,106,0,0.45)`, borderRadius: 5, padding: "5px 10px",
+                  border: `1px solid rgba(198, 124, 91, 0.45)`, borderRadius: 5, padding: "5px 10px",
                 }}>{s.tag}</span>
               )}
               <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.95rem", lineHeight: 1.55 }}>{s.p}</p>
@@ -366,7 +366,7 @@ function Simulation() {
           borderRadius: radius.md, overflow: "hidden",
         }}>
           {tiles.map((t) => (
-            <div key={t} style={{ background: "#050403", padding: "26px 24px", minHeight: 96, display: "flex", alignItems: "flex-end" }}>
+            <div key={t} style={{ background: "#F4ECDE", padding: "26px 24px", minHeight: 96, display: "flex", alignItems: "flex-end" }}>
               <span style={{
                 fontFamily: font.mono, fontSize: 13, fontWeight: 600, letterSpacing: "0.06em",
                 textTransform: "uppercase", color: color.text.secondary,
@@ -439,10 +439,10 @@ function Signal() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {pillars.map((p) => (
             <div key={p.n} style={{
-              border: `1px solid ${p.hot ? "rgba(255,106,0,0.5)" : color.border.default}`,
-              background: p.hot ? "linear-gradient(180deg, rgba(255,106,0,0.05), transparent)" : color.bg.panel,
+              border: `1px solid ${p.hot ? "rgba(198, 124, 91, 0.5)" : color.border.default}`,
+              background: p.hot ? "linear-gradient(180deg, rgba(198, 124, 91, 0.05), transparent)" : color.bg.panel,
               borderRadius: radius.md, padding: "26px 26px 28px",
-              boxShadow: p.hot ? "0 30px 80px -50px rgba(255,106,0,0.45)" : undefined,
+              boxShadow: p.hot ? "0 30px 80px -50px rgba(198, 124, 91, 0.45)" : undefined,
             }}>
               <div style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: p.hot ? color.accent.base : color.text.muted }}>
                 {p.n} · {p.s}
@@ -478,8 +478,8 @@ function FluencyIndex() {
     tone === "hot" ? color.accent.base : tone === "mid" ? color.text.primary : color.text.muted;
   return (
     <div style={{
-      marginTop: 20, border: `1px solid rgba(255,106,0,0.30)`, borderRadius: radius.md,
-      padding: "28px 30px 30px", background: "rgba(255,106,0,0.02)",
+      marginTop: 20, border: `1px solid rgba(198, 124, 91, 0.30)`, borderRadius: radius.md,
+      padding: "28px 30px 30px", background: "rgba(198, 124, 91, 0.02)",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
         <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1.4rem", letterSpacing: "-0.02em", color: color.text.primary }}>
@@ -491,7 +491,7 @@ function FluencyIndex() {
       </div>
       {/* spectrum bar */}
       <div style={{ position: "relative", margin: "30px 0 24px" }}>
-        <div style={{ height: 10, borderRadius: 6, background: "linear-gradient(90deg, #45403b 0%, #5f5346 28%, #9a6526 58%, #ff6a00 86%, #ff9500 100%)" }} />
+        <div style={{ height: 10, borderRadius: 6, background: "linear-gradient(90deg, #45403b 0%, #5f5346 28%, #B98330 58%, #C67C5B 86%, #DDA75C 100%)" }} />
         {[20, 55, 90].map((left, i) => (
           <span key={left} style={{
             position: "absolute", left: `${left}%`, top: "50%", transform: "translate(-50%, -50%)",
@@ -544,7 +544,7 @@ function Proof() {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 1, background: color.border.default, border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
           {metrics.map((m) => (
-            <div key={m.l} style={{ background: "#050403", padding: "34px 28px 36px" }}>
+            <div key={m.l} style={{ background: "#F4ECDE", padding: "34px 28px 36px" }}>
               <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base }}>{m.n}</div>
               <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: color.text.secondary, marginTop: 14 }}>{m.l}</div>
             </div>
@@ -571,7 +571,7 @@ function CTABand() {
     }}>
       <div style={{ ...WRAP_STYLE, position: "relative", zIndex: 2 }}>
         <div style={{ display: "flex", justifyContent: "center", marginTop: -28, marginBottom: -34 }}>
-          <FlameCube size={120} intensity={70} hue={26} />
+          <FlameCube size={120} intensity={70} hue={34} />
         </div>
         <span style={{
           fontFamily: font.mono, fontSize: 11.5, fontWeight: 500,

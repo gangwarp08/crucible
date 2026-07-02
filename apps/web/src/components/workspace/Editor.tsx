@@ -54,9 +54,9 @@ export default function Editor({ sessionId, path, content, onChange }: Props) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "#858585",
+          color: "#8A9389",
           fontSize: 14,
-          background: "#1e1e1e",
+          background: "#FBF7EF",
         }}
       >
         Select a file to edit
@@ -69,7 +69,7 @@ export default function Editor({ sessionId, path, content, onChange }: Props) {
       height="100%"
       language={langForPath(path)}
       value={content}
-      theme="vs-dark"
+      theme="vs"
       onChange={handleChange}
       options={{
         readOnly: !writable,

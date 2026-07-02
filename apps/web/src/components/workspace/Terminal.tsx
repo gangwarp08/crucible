@@ -21,20 +21,20 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
 
     const term = new XTerm({
       theme: {
-        background: "#0c0c10",         // tokens.color.bg.page
-        foreground: "#e6e6ea",         // tokens.color.text.primary
-        cursor: "#7c7fff",             // tokens.color.accent.base
-        cursorAccent: "#0c0c10",
-        selectionBackground: "rgba(124, 127, 255, 0.30)",
-        black: "#0c0c10",
-        red: "#ff7a7a",
-        green: "#56d6a8",
-        yellow: "#e0b66e",
-        blue: "#7c7fff",
-        magenta: "#b48ce6",
+        background: "#FBF7EF",         // tokens.color.bg.page
+        foreground: "#28352F",         // tokens.color.text.primary
+        cursor: "#C67C5B",             // tokens.color.accent.base
+        cursorAccent: "#FBF7EF",
+        selectionBackground: "rgba(198, 124, 91, 0.30)",
+        black: "#FBF7EF",
+        red: "#BC4B3C",
+        green: "#5E9179",
+        yellow: "#DDA75C",
+        blue: "#C67C5B",
+        magenta: "#C67C5B",
         cyan: "#5cc8d7",
-        white: "#e6e6ea",
-        brightBlack: "#6a6a78",
+        white: "#28352F",
+        brightBlack: "#8A9389",
       },
       fontSize: 13,
       fontFamily: "var(--font-mono, 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace)",

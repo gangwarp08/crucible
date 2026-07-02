@@ -17,8 +17,8 @@ const LABELS: Record<string, string> = {
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background: "#0c0c10",
-  color: "#e6e6ea",
+  background: "#FBF7EF",
+  color: "#28352F",
   fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
   display: "flex",
   alignItems: "flex-start",
@@ -28,19 +28,19 @@ const page: React.CSSProperties = {
 const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 520,
-  background: "#16161c",
-  border: "1px solid #26262e",
+  background: "#FBF6EA",
+  border: "1px solid #E7DDCB",
   borderRadius: 12,
   padding: 28,
 };
 const fieldWrap: React.CSSProperties = { marginBottom: 18 };
-const labelStyle: React.CSSProperties = { display: "block", fontSize: 14, marginBottom: 6, color: "#c9d1d9" };
+const labelStyle: React.CSSProperties = { display: "block", fontSize: 14, marginBottom: 6, color: "#28352F" };
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "#0c0c10",
-  border: "1px solid #30363d",
+  background: "#FBF7EF",
+  border: "1px solid #D8CCB6",
   borderRadius: 6,
-  color: "#e6e6ea",
+  color: "#28352F",
   padding: "8px 10px",
   fontSize: 14,
 };
@@ -105,7 +105,7 @@ export default function FeedbackForm({ token }: { token: string }) {
     return (
       <Shell>
         <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Link not found</h1>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>
+        <p style={{ color: "#5E6B64", fontSize: 14 }}>
           This feedback link is invalid or no longer exists. Please ask for a new one.
         </p>
       </Shell>
@@ -115,14 +115,14 @@ export default function FeedbackForm({ token }: { token: string }) {
     return (
       <Shell>
         <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Something went wrong</h1>
-        <p style={{ color: "#f85149", fontSize: 14 }}>{loadErr}</p>
+        <p style={{ color: "#BC4B3C", fontSize: 14 }}>{loadErr}</p>
       </Shell>
     );
   }
   if (!ctx) {
     return (
       <Shell>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: "#5E6B64", fontSize: 14 }}>Loading…</p>
       </Shell>
     );
   }
@@ -130,7 +130,7 @@ export default function FeedbackForm({ token }: { token: string }) {
     return (
       <Shell>
         <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Thank you ✓</h1>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>
+        <p style={{ color: "#5E6B64", fontSize: 14 }}>
           Your feedback has been recorded. You can close this page.
         </p>
       </Shell>
@@ -142,7 +142,7 @@ export default function FeedbackForm({ token }: { token: string }) {
         <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>
           This link is no longer active
         </h1>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>
+        <p style={{ color: "#5E6B64", fontSize: 14 }}>
           The feedback link has {ctx.status === "expired" ? "expired" : "been revoked"}. Please ask
           for a new one.
         </p>
@@ -154,7 +154,7 @@ export default function FeedbackForm({ token }: { token: string }) {
   return (
     <Shell>
       <h1 style={{ fontSize: 18, margin: "0 0 4px" }}>Candidate outcome feedback</h1>
-      <p style={{ color: "#8b949e", fontSize: 13, margin: "0 0 20px" }}>
+      <p style={{ color: "#5E6B64", fontSize: 13, margin: "0 0 20px" }}>
         {ctx.scenario_title ? `Assessment: ${ctx.scenario_title}. ` : ""}
         Fill in whatever you know — every field is optional, but please provide at least one.
       </p>
@@ -209,14 +209,14 @@ export default function FeedbackForm({ token }: { token: string }) {
         />
       </div>
 
-      {submitErr && <p style={{ color: "#f85149", fontSize: 13, marginBottom: 12 }}>{submitErr}</p>}
+      {submitErr && <p style={{ color: "#BC4B3C", fontSize: 13, marginBottom: 12 }}>{submitErr}</p>}
 
       <button
         onClick={() => void onSubmit()}
         disabled={submitting}
         style={{
           width: "100%",
-          background: submitting ? "#23304a" : "#1f6feb",
+          background: submitting ? "#E0D6C4" : "#C67C5B",
           color: "#fff",
           border: "none",
           borderRadius: 8,
