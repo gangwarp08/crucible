@@ -36,6 +36,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
   const [status, setStatus] = useState<DeliverableStatus | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const setSessionStatus = useSessionStore((s) => s.setStatus);
   const sessionStatus = useSessionStore((s) => s.status);
@@ -82,12 +83,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
    *  confirmation makes that explicit. */
   async function submit() {
     if (busy || !writable) return;
-    if (!window.confirm(
-      "Submit your deliverable?\n\n" +
-      "This LOCKS your work — files, terminal, AI assistant, and queries become " +
-      "read-only and you can't re-edit. A reviewer will then ask you to defend a " +
-      "couple of your key decisions before the session ends.",
-    )) return;
+    setConfirming(false);
     setBusy(true);
     setFeedback(null);
     try {
@@ -195,15 +191,31 @@ export default function DeliverablePanel({ sessionId }: Props) {
             {feedback.text}
           </div>
         )}
-        <Button
-          variant="primary"
-          size="md"
-          disabled={busy || !writable}
-          onClick={() => void submit()}
-          title="Submit and lock your work for review. This is final."
-        >
-          {busy ? "Submitting…" : "Submit"}
-        </Button>
+        {confirming ? (
+          // Non-blocking inline confirmation (replaces window.confirm, which
+          // froze the main thread for seconds → the submit INP jank).
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: color.text.secondary, maxWidth: 320, lineHeight: 1.4 }}>
+              This LOCKS your work read-only and starts a short reviewer defense. No re-editing.
+            </span>
+            <Button variant="secondary" size="md" disabled={busy} onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="md" disabled={busy || !writable} onClick={() => void submit()}>
+              {busy ? "Submitting…" : "Confirm submit"}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="primary"
+            size="md"
+            disabled={busy || !writable}
+            onClick={() => setConfirming(true)}
+            title="Submit and lock your work for review. This is final."
+          >
+            Submit
+          </Button>
+        )}
       </div>
     </div>
   );
