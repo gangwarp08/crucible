@@ -18,7 +18,7 @@ function Stat({ label, value, mono = false }: { label: string; value: React.Reac
       <div
         style={{
           fontSize: 10,
-          color: "#9999a3",
+          color: "#5E6B64",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           marginBottom: 4,
@@ -29,7 +29,7 @@ function Stat({ label, value, mono = false }: { label: string; value: React.Reac
       <div
         style={{
           fontSize: 14,
-          color: "#e6e6ea",
+          color: "#28352F",
           fontFamily: mono ? "monospace" : "inherit",
           fontVariantNumeric: mono ? "tabular-nums" : "normal",
         }}
@@ -48,8 +48,8 @@ export default function SessionSummary({ detail }: Props) {
   return (
     <section
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
+        background: "#FBF6EA",
+        border: "1px solid #DED3BF",
         borderRadius: 6,
         padding: 20,
         marginBottom: 16,
@@ -69,19 +69,19 @@ export default function SessionSummary({ detail }: Props) {
           <Link
             href="/review"
             style={{
-              color: "#7c7fff",
+              color: "#C67C5B",
               textDecoration: "none",
               fontSize: 13,
             }}
           >
             ← Back
           </Link>
-          <span style={{ color: "#6a6a78" }}>·</span>
+          <span style={{ color: "#8A9389" }}>·</span>
           <span
             style={{
               fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
               fontSize: 13,
-              color: "#e6e6ea",
+              color: "#28352F",
             }}
           >
             {session.id}

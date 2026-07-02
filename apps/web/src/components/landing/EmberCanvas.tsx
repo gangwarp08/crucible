@@ -23,7 +23,7 @@ interface Particle {
 /** Full-viewport, fixed-position canvas of slowly-rising fire embers. Calm
  *  ambient layer for the landing page. Auto-pauses when the tab is hidden
  *  and respects prefers-reduced-motion (drops cap from 60 → 14 particles). */
-export default function EmberCanvas({ intensity = 50, hue = 28 }: Props) {
+export default function EmberCanvas({ intensity = 50, hue = 34 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const intRef = useRef(intensity);
   const hueRef = useRef(hue);
@@ -93,9 +93,9 @@ export default function EmberCanvas({ intensity = 50, hue = 28 }: Props) {
         const hueLocal = baseHue + p.hueOff;
         const r = p.size * 4;
         const g = ctx!.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-        g.addColorStop(0, `hsla(${hueLocal + 12},100%,72%,${a})`);
-        g.addColorStop(0.35, `hsla(${hueLocal},100%,55%,${a * 0.5})`);
-        g.addColorStop(1, `hsla(${hueLocal - 14},100%,46%,0)`);
+        g.addColorStop(0, `hsla(${hueLocal + 12},66%,72%,${a})`);
+        g.addColorStop(0.35, `hsla(${hueLocal},66%,55%,${a * 0.5})`);
+        g.addColorStop(1, `hsla(${hueLocal - 14},66%,46%,0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
         ctx!.arc(p.x, p.y, r, 0, Math.PI * 2);

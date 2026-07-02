@@ -59,8 +59,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
     <section
       id={selectedPath ? `file-${selectedPath}` : undefined}
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
+        background: "#FBF6EA",
+        border: "1px solid #DED3BF",
         borderRadius: 6,
         marginBottom: 16,
         overflow: "hidden",
@@ -70,8 +70,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#1c1c24",
-          borderBottom: "1px solid #2a2a36",
+          background: "#FFFDF9",
+          borderBottom: "1px solid #DED3BF",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -79,16 +79,16 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "#5E6B64", letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Files / code evolution
         </span>
-        <span style={{ fontSize: 11, color: "#6a6a78" }}>
+        <span style={{ fontSize: 11, color: "#8A9389" }}>
           {paths.length} path{paths.length === 1 ? "" : "s"} · {fileSnapshots.length} snapshot{fileSnapshots.length === 1 ? "" : "s"}
         </span>
       </header>
 
       {paths.length === 0 ? (
-        <div style={{ padding: 24, color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
+        <div style={{ padding: 24, color: "#8A9389", fontSize: 13, textAlign: "center" }}>
           No file edits recorded
         </div>
       ) : (
@@ -96,8 +96,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
           <div
             style={{
               padding: "10px 16px",
-              background: "#0c0c10",
-              borderBottom: "1px solid #22222b",
+              background: "#FBF7EF",
+              borderBottom: "1px solid #E5DBC9",
               display: "flex",
               alignItems: "center",
               gap: 12,
@@ -105,13 +105,13 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
               fontSize: 12,
             }}
           >
-            <label style={{ color: "#9999a3" }}>Path</label>
+            <label style={{ color: "#5E6B64" }}>Path</label>
             <select
               value={selectedPath ?? ""}
               onChange={(e) => setSelectedPath(e.target.value)}
               style={{
-                background: "#0f0f14",
-                color: "#e6e6ea",
+                background: "#FBF7EF",
+                color: "#28352F",
                 border: "1px solid #555",
                 borderRadius: 4,
                 padding: "4px 8px",
@@ -128,7 +128,7 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
 
             <span style={{ flex: 1 }} />
 
-            <label style={{ color: "#9999a3" }}>Step</label>
+            <label style={{ color: "#5E6B64" }}>Step</label>
             <button
               onClick={() => setStepIdx((i) => Math.max(0, i - 1))}
               disabled={safeIdx === 0}
@@ -138,7 +138,7 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
             </button>
             <span
               style={{
-                color: "#e6e6ea",
+                color: "#28352F",
                 fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
                 minWidth: 60,
                 textAlign: "center",
@@ -161,10 +161,10 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
               <div
                 style={{
                   padding: "6px 16px",
-                  background: "#15151b",
-                  borderBottom: "1px solid #22222b",
+                  background: "#FBF6EA",
+                  borderBottom: "1px solid #E5DBC9",
                   fontSize: 11,
-                  color: "#9999a3",
+                  color: "#5E6B64",
                   display: "flex",
                   gap: 16,
                   fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
@@ -175,7 +175,7 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
                 <span>hash: {current.content_hash?.slice(0, 12) ?? "—"}…</span>
                 <span style={{ marginLeft: "auto" }}>{formatDateTime(current.ts)}</span>
               </div>
-              <div style={{ height: 380, background: "#0c0c10" }}>
+              <div style={{ height: 380, background: "#FBF7EF" }}>
                 <DiffEditor
                   height="100%"
                   language={language}
@@ -202,8 +202,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
 
 function btnStyle(disabled: boolean): React.CSSProperties {
   return {
-    background: disabled ? "#1c1c24" : "#0f0f14",
-    color: disabled ? "#6a6a78" : "#e6e6ea",
+    background: disabled ? "#FFFDF9" : "#FBF7EF",
+    color: disabled ? "#8A9389" : "#28352F",
     border: "1px solid #555",
     borderRadius: 4,
     padding: "3px 10px",
@@ -213,8 +213,8 @@ function btnStyle(disabled: boolean): React.CSSProperties {
 }
 
 function actionColor(action: string): string {
-  if (action === "create") return "#56d6a8";
-  if (action === "write")  return "#7c7fff";
-  if (action === "delete") return "#ff7a7a";
-  return "#e6e6ea";
+  if (action === "create") return "#5E9179";
+  if (action === "write")  return "#C67C5B";
+  if (action === "delete") return "#BC4B3C";
+  return "#28352F";
 }

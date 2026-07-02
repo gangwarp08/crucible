@@ -27,7 +27,7 @@ export default function EndScreen() {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(8, 8, 12, 0.85)",
+        background: "rgba(40, 53, 47, 0.85)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
         display: "flex",

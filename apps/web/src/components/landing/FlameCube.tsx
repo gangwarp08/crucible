@@ -33,7 +33,7 @@ interface Spark {
 /** Slowly-rotating CSS-3D wireframe cube with a canvas fire (soft flame
  *  body + bright sparks) licking up around it. Used as the hero focal
  *  point on the landing page. */
-export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Props) {
+export default function FlameCube({ size = 200, intensity = 60, hue = 34 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const intRef = useRef(intensity);
@@ -127,9 +127,9 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
         const r = p.size * (1.4 - t * 0.7);
         const hueLocal = baseHue + p.hueOff + t * 8;
         const g = ctx!.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-        g.addColorStop(0, `hsla(${hueLocal + 18},100%,72%,${a})`);
-        g.addColorStop(0.4, `hsla(${hueLocal},100%,52%,${a * 0.55})`);
-        g.addColorStop(1, `hsla(${hueLocal - 18},100%,42%,0)`);
+        g.addColorStop(0, `hsla(${hueLocal + 18},66%,72%,${a})`);
+        g.addColorStop(0.4, `hsla(${hueLocal},66%,52%,${a * 0.55})`);
+        g.addColorStop(1, `hsla(${hueLocal - 18},66%,42%,0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
         ctx!.arc(p.x, p.y, r, 0, Math.PI * 2);
@@ -153,9 +153,9 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
         const r = p.size * 2.4;
         const hueLocal = baseHue + 18;
         const g = ctx!.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-        g.addColorStop(0, `hsla(${hueLocal + 16},100%,82%,${a})`);
-        g.addColorStop(0.5, `hsla(${hueLocal},100%,58%,${a * 0.5})`);
-        g.addColorStop(1, `hsla(${hueLocal},100%,50%,0)`);
+        g.addColorStop(0, `hsla(${hueLocal + 16},66%,82%,${a})`);
+        g.addColorStop(0.5, `hsla(${hueLocal},66%,58%,${a * 0.5})`);
+        g.addColorStop(1, `hsla(${hueLocal},66%,50%,0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
         ctx!.arc(p.x, p.y, r, 0, Math.PI * 2);

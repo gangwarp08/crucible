@@ -7,8 +7,8 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #000000;
-  color: #f4f2ee;
+  background: #F4ECDE;
+  color: #28352F;
   font-family: var(--font-sans, 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif);
   font-size: 13px;
   font-weight: 400;
@@ -19,11 +19,11 @@ html, body {
 }
 
 /* Fire-themed text selection. Matches the design's :: selection rule. */
-::selection { background: #ff6a00; color: #140a00; }
+::selection { background: #C67C5B; color: #FBF6EA; }
 
 /* Flaming-cube wordmark glyph animation. The flame above the cube gently
  * flickers using a scaleY/scaleX pulse — used in any logo lockup. */
-.cru-glyph { filter: drop-shadow(0 0 5px rgba(255, 120, 0, 0.45)); }
+.cru-glyph { filter: drop-shadow(0 0 5px rgba(198, 124, 91, 0.45)); }
 .cru-glyph .flm {
   transform-box: fill-box;
   transform-origin: 50% 100%;
@@ -43,7 +43,7 @@ button { font-family: inherit; }
 /* Focus ring — visible only on keyboard navigation. */
 :focus { outline: none; }
 :focus-visible {
-  outline: 2px solid #ff6a00;
+  outline: 2px solid #C67C5B;
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -53,8 +53,8 @@ button { font-family: inherit; }
 [data-hover] {
   transition: background-color 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
-[data-hover]:hover { background-color: #100e0b; }
-[data-hover][data-selected="true"] { background-color: #15110d; }
+[data-hover]:hover { background-color: #EFE6D5; }
+[data-hover][data-selected="true"] { background-color: #F1E0D4; }
 
 /* All buttons get a subtle background/border transition for cleanliness. */
 :where(button, [role="button"]) {
@@ -76,12 +76,12 @@ button { font-family: inherit; }
 .btn-fire-primary:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow:
-    0 8px 40px -8px rgba(255, 106, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 150, 0, 0.40);
+    0 8px 40px -8px rgba(198, 124, 91, 0.45),
+    inset 0 0 0 1px rgba(221, 167, 92, 0.40);
 }
 .btn-fire-ghost:hover:not(:disabled) {
-  border-color: #ff6a00 !important;
-  box-shadow: 0 0 30px -10px rgba(255, 106, 0, 0.45);
+  border-color: #C67C5B !important;
+  box-shadow: 0 0 30px -10px rgba(198, 124, 91, 0.45);
 }
 .btn-fire-primary:active:not(:disabled),
 .btn-fire-ghost:active:not(:disabled) {
@@ -95,14 +95,14 @@ button { font-family: inherit; }
   position: absolute;
   left: 0; right: 0; bottom: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, #ff6a00, transparent);
+  background: linear-gradient(90deg, transparent, #C67C5B, transparent);
   opacity: 0;
   transition: opacity 400ms ease;
 }
 .card-fire-interactive:hover {
-  border-color: rgba(245, 242, 238, 0.20) !important;
+  border-color: rgba(40, 53, 47, 0.20) !important;
   transform: translateY(-3px);
-  box-shadow: 0 24px 60px -30px rgba(255, 106, 0, 0.50);
+  box-shadow: 0 24px 60px -30px rgba(198, 124, 91, 0.50);
 }
 .card-fire-interactive:hover::after { opacity: 1; }
 
@@ -119,8 +119,8 @@ button { font-family: inherit; }
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(255, 106, 0, 0.45),
-    rgba(255, 61, 0, 0.12) 38%,
+    rgba(198, 124, 91, 0.45),
+    rgba(184, 92, 58, 0.12) 38%,
     transparent 70%
   );
   filter: blur(6px);
@@ -137,9 +137,9 @@ button { font-family: inherit; }
   animation: cube-spin 22s linear infinite;
 }
 .cube-face {
-  border: 1px solid rgba(245, 242, 238, 0.82);
-  background: linear-gradient(180deg, rgba(255, 150, 30, 0.015), rgba(255, 80, 0, 0.05));
-  box-shadow: inset 0 0 24px rgba(255, 120, 0, 0.08);
+  border: 1px solid rgba(40, 53, 47, 0.82);
+  background: linear-gradient(180deg, rgba(221, 167, 92, 0.015), rgba(184, 92, 58, 0.05));
+  box-shadow: inset 0 0 24px rgba(198, 124, 91, 0.08);
 }
 .cube-foot {
   position: absolute;
@@ -149,7 +149,7 @@ button { font-family: inherit; }
   width: 60%;
   height: 16px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 106, 0, 0.5), transparent 80%);
+  background: radial-gradient(closest-side, rgba(198, 124, 91, 0.5), transparent 80%);
   filter: blur(4px);
 }
 @keyframes cube-spin {
@@ -167,13 +167,13 @@ button { font-family: inherit; }
   z-index: 1;
   pointer-events: none;
   background:
-    radial-gradient(120% 80% at 50% 120%, rgba(255, 106, 0, 0.10), transparent 55%),
-    radial-gradient(100% 60% at 50% -10%, rgba(255, 180, 80, 0.05), transparent 60%);
+    radial-gradient(120% 80% at 50% 120%, rgba(198, 124, 91, 0.10), transparent 55%),
+    radial-gradient(100% 60% at 50% -10%, rgba(221, 167, 92, 0.05), transparent 60%);
 }
 
 /* Headline gradient text — applied to a single keyword in a display title. */
 .fire-text {
-  background: linear-gradient(100deg, #ffcc00, #ff9500 40%, #ff6a00);
+  background: linear-gradient(100deg, #DDA75C, #DDA75C 40%, #C67C5B);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -181,17 +181,17 @@ button { font-family: inherit; }
 
 /* Landing nav links + hover. Hidden on narrow screens to keep the bar clean. */
 .nav-links a { transition: color 120ms cubic-bezier(0.2, 0, 0.2, 1); }
-.nav-links a:hover { color: #f4f2ee; }
+.nav-links a:hover { color: #28352F; }
 @media (max-width: 720px) {
   .nav-links { display: none !important; }
 }
 
 /* Themed thin scrollbars (Chromium + Firefox). */
-* { scrollbar-width: thin; scrollbar-color: rgba(245, 242, 238, 0.10) transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(40, 53, 47, 0.10) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: rgba(245, 242, 238, 0.10); border-radius: 999px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(245, 242, 238, 0.20); }
+*::-webkit-scrollbar-thumb { background: rgba(40, 53, 47, 0.10); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(40, 53, 47, 0.20); }
 
 /* react-resizable-panels handle styling. The library renders a 1px-tall
  * dragger; we widen the hit area without inflating the visual line. */
@@ -207,7 +207,7 @@ button { font-family: inherit; }
 }
 [data-panel-resize-handle-enabled][data-resize-handle-active="true"],
 [data-panel-resize-handle-enabled]:hover {
-  background-color: #ff6a00;
+  background-color: #C67C5B;
 }
 [data-panel-resize-handle-enabled][data-panel-group-direction="horizontal"] {
   width: 1px;
