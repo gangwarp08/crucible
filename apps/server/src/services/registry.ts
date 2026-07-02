@@ -21,7 +21,7 @@ export interface PersonaTurn {
  *  recruiter review + future analysis can see when each reveal fired. */
 export interface PersonaState {
   client: { revealed_specifics: boolean; requirement_changed: boolean };
-  team:   { gave_refund_hint: boolean; gave_webhook_clue: boolean };
+  team:   { gave_refund_hint: boolean; gave_webhook_clue: boolean; gave_shortcut_pitch: boolean };
 }
 
 /** One scheduled proactive beat. Lives inside scenarioState.scheduled_beats
@@ -36,7 +36,7 @@ export interface ScheduledBeat {
   id: string;                                       // curveball id from scenario.json
   kind?: "persona" | "verification";               // default "persona" when absent
   channel: "client" | "team" | "verifier";
-  beat?: "refund_hint" | "requirement_change";      // persona kind only — the reveal flag set
+  beat?: "refund_hint" | "requirement_change" | "shortcut_pitch";  // persona kind only — the reveal flag set
   due_ts: string;                                   // ISO 8601 absolute
   fired: boolean;
 }

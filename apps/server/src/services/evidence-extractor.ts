@@ -20,7 +20,9 @@ import { fileURLToPath } from "node:url";
 import { supabase } from "./supabase.js";
 
 // Bump when detector logic changes so re-scoring/drift can tell versions apart.
-export const DETECTOR_VERSION = "1";
+// v2 (7.2): product-sense fork detectors (ps_fork_user_protected /
+// _shortcut_taken / _reasoning_present) feeding design_under_constraints.
+export const DETECTOR_VERSION = "2";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, "../../../..");
@@ -369,6 +371,73 @@ function fdeDbTriageDetectors(events: EventRow[], gt: Record<string, unknown>): 
   return units;
 }
 
+/** Product-Sense fork (7.2) — the design_under_constraints judgment when Sam
+ *  pitches the ship-the-raw-number shortcut. Fires ONLY when the fork was
+ *  actually presented (curveball.fired for shortcut_suggestion). Feeds
+ *  design_under_constraints ONLY — never teamwork (dissociability). The
+ *  deliverable outcome (protected vs shortcut) is the PRIMARY evidence; the
+ *  team-channel reasoning is corroborating, never sole. */
+function psForkDetectors(events: EventRow[], gt: Record<string, unknown>): EvidenceUnit[] {
+  const units: EvidenceUnit[] = [];
+  const forkFired = events.filter(
+    (e) =>
+      e.type === "curveball.fired" &&
+      (e.payload as Record<string, unknown> | undefined)?.["curveball_id"] === "shortcut_suggestion",
+  );
+  if (forkFired.length === 0) return units; // fork never presented → nothing to measure
+  const forkSeq = forkFired[0]!.seq;
+
+  const naive = gt.naive_monthly_cents as Record<string, number> | undefined;
+  const corrected = gt.corrected_monthly_cents as Record<string, number> | undefined;
+  const submits = events.filter((e) => e.type === "deliverable.submit");
+  const lastSubmit = submits.sort((a, b) => b.seq - a.seq)[0] ?? null;
+
+  if (naive && corrected && lastSubmit) {
+    const data = (lastSubmit.payload.data ?? {}) as Record<string, unknown>;
+    const text = typeof data.corrected_monthly_revenue === "string" ? data.corrected_monthly_revenue : "";
+    const amounts = parseDollarAmounts(text);
+    const matchesCents = (cents: number): boolean => {
+      const target = cents / 100;
+      for (const a of amounts) for (const cand of [a, a / 100]) {
+        if (Math.abs(cand - target) / target <= 0.02) return true;
+      }
+      return false;
+    };
+    // Bug months = any month where naive differs from corrected (derived, so the
+    // detector works for the isomorph's own figures too). Non-bug months are
+    // identical in both, so they can't distinguish the shortcut from the
+    // reconciled figure. Require ALL bug months to match a set before
+    // attributing the choice — the naive and reconciled per-month figures are
+    // close enough (~1.4% between one naive month and an adjacent reconciled
+    // month) that a single-month match would misattribute.
+    const bugMonths = Object.keys(corrected).filter((m) => naive[m] !== undefined && naive[m] !== corrected[m]);
+    const naiveHits = bugMonths.filter((m) => matchesCents(naive[m]!)).length;
+    const corrHits = bugMonths.filter((m) => matchesCents(corrected[m]!)).length;
+    const userProtected = bugMonths.length > 0 && corrHits === bugMonths.length; // reconciled figure shipped
+    const shortcutTaken =
+      bugMonths.length > 0 && naiveHits === bugMonths.length && corrHits < bugMonths.length; // overstated figure shipped
+    units.push(unit("design_under_constraints", "ps_fork_user_protected",
+      { protected: userProtected, corrected_month_hits: corrHits }, [forkSeq, lastSubmit.seq]));
+    units.push(unit("design_under_constraints", "ps_fork_shortcut_taken",
+      { taken: shortcutTaken, naive_month_hits: naiveHits }, [forkSeq, lastSubmit.seq]));
+  }
+
+  // Corroborating: candidate articulated user/business-impact reasoning on the
+  // team channel AFTER the fork was raised (supports, never sole evidence).
+  const reasoningRe =
+    /(accura|misleading|overstat|inflat|wrong|incorrect|correctness|reconcil|dedup|duplicat|board|trust|integrity|right number|real number|off by|actual|double.?count|can'?t (just )?ship)/i;
+  const reasoningMsgs = events.filter(
+    (e) =>
+      e.type === "message.team.candidate" &&
+      e.seq > forkSeq &&
+      reasoningRe.test(String((e.payload as Record<string, unknown> | undefined)?.["text"] ?? "")),
+  );
+  units.push(unit("design_under_constraints", "ps_fork_reasoning_present",
+    reasoningMsgs.length > 0, reasoningMsgs.map((e) => e.seq)));
+
+  return units;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /** Pure detector pass over an event stream — no IO. Exposed so tests can feed
@@ -382,6 +451,7 @@ export function runDetectors(
   units.push(...verificationDetectors(events));
   if (slug.startsWith("fde-db-triage")) {
     units.push(...fdeDbTriageDetectors(events, groundTruth));
+    units.push(...psForkDetectors(events, groundTruth));
   }
   return units;
 }

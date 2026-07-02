@@ -92,12 +92,18 @@
         "id": "scope_boundary",
         "trigger": "candidate_asks_for_prod_access",
         "behavior": "Declines: 'can't pull prod creds, but the read replica you have should be enough.'"
+      },
+      {
+        "id": "shortcut_pitch",
+        "trigger": "mid_session_time_pressure",
+        "behavior": "Under deadline pressure, proposes shipping the raw monthly SUM to the board and skipping the dedup/reconciliation as 'overkill' — a genuine, well-meant shortcut that is faster but ships the overstated figure. Collaborative: concedes gracefully if the candidate insists on reconciling. This is a Product-Sense judgment fork (design_under_constraints), NOT a teamwork test."
       }
     ],
     "guardrails": [
       "Gives the misleading hint exactly once.",
       "Never hands over the answer.",
-      "The real clue only unlocks if the candidate brings evidence (rewards verification over trust)."
+      "The real clue only unlocks if the candidate brings evidence (rewards verification over trust).",
+      "Pitches the ship-the-raw-number shortcut exactly once; concedes gracefully if the candidate insists on reconciling."
     ]
   },
   "curveballs": [
@@ -135,6 +141,24 @@
       "tests": [
         "verification_over_trust",
         "teamwork"
+      ],
+      "difficulty_band": "mid"
+    },
+    {
+      "id": "shortcut_suggestion",
+      "trigger": {
+        "kind": "time_or_event",
+        "time_offset_minutes": 15,
+        "event": "candidate_first_dedup_or_substantive_query"
+      },
+      "payload": {
+        "channel": "team",
+        "speaker": "Sam",
+        "message": "honestly we're tight on time — the raw monthly SUM already looks about right, let's just ship those numbers to the board and skip the whole dedup reconciliation, it's probably overkill."
+      },
+      "tests": [
+        "product_sense",
+        "design_under_constraints"
       ],
       "difficulty_band": "mid"
     }

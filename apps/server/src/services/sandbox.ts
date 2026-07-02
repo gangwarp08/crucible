@@ -23,6 +23,7 @@ const VERIFICATION_BEAT_ID = "verification";
 const BEAT_FOR_CURVEBALL: Record<string, ScheduledBeat["beat"]> = {
   misleading_teammate_hint: "refund_hint",
   requirement_change:       "requirement_change",
+  shortcut_suggestion:      "shortcut_pitch",  // 7.1 product-sense fork
 };
 
 interface CurveballJson {
@@ -146,7 +147,7 @@ export async function createSandbox(
         ...scenario.constraints,
         personas: {
           client: { revealed_specifics: false, requirement_changed: false },
-          team:   { gave_refund_hint: false, gave_webhook_clue: false },
+          team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
         },
         verification: freshVerificationState(),
         scheduled_beats: scheduledBeats,
@@ -249,7 +250,7 @@ export async function createSandbox(
     channelHistory: { client: [], team: [] },
     personaState: {
       client: { revealed_specifics: false, requirement_changed: false },
-      team:   { gave_refund_hint: false, gave_webhook_clue: false },
+      team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
     },
     verificationState: freshVerificationState(),
   });

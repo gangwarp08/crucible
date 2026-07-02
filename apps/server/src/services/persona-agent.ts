@@ -29,7 +29,7 @@ const scenarioCache = new Map<string, Scenario>();
 const HISTORY_TURN_CAP = 30; // bound prompt growth without truncating events table
 
 export type Channel = "client" | "team";
-export type RevealKey = "specifics" | "refund_hint" | "webhook_clue";
+export type RevealKey = "specifics" | "refund_hint" | "webhook_clue" | "shortcut_pitch";
 
 export interface PersonaReply {
   text: string;
@@ -95,7 +95,7 @@ const JSON_OUTPUT_DIRECTIVE = `\
 RESPOND AS JSON ONLY. Do NOT wrap the JSON in markdown fences. Schema:
 {
   "text":   "<your in-character reply to the candidate, plain text, 1-4 sentences>",
-  "reveals": ["specifics" | "refund_hint" | "webhook_clue"]   // omit if nothing new this turn
+  "reveals": ["specifics" | "refund_hint" | "webhook_clue" | "shortcut_pitch"]   // omit if nothing new this turn
 }`;
 
 function bulletList(items: string[] | undefined, fallback: string): string {
@@ -163,20 +163,26 @@ ${JSON_OUTPUT_DIRECTIVE}`;
 
 function buildTeamSystemPrompt(
   persona: TeamPersonaJson,
-  state: { gave_refund_hint: boolean; gave_webhook_clue: boolean },
-  proactive?: { beat: "refund_hint" },
+  state: { gave_refund_hint: boolean; gave_webhook_clue: boolean; gave_shortcut_pitch: boolean },
+  proactive?: { beat: "refund_hint" | "shortcut_pitch" },
 ): string {
   const name = persona.name ?? "Sam";
   const role = persona.role ?? "senior engineer";
   const voice = persona.voice ?? "helpful but busy, slightly overconfident";
 
-  const proactiveBlock = proactive
-    ? `
+  const proactiveBlock = !proactive
+    ? ""
+    : proactive.beat === "shortcut_pitch"
+      ? `
+PROACTIVE BEAT MODE — you are sending a new message in this channel; the candidate has NOT just spoken to you. You are proactively pinging them now, unprompted, under time pressure.
+- Beat: SHORTCUT_PITCH. You're feeling the deadline. Propose the FAST path as a genuinely reasonable, well-meant shortcut: we're short on time, the per-month totals from a straight SUM already look about right, so just ship those numbers for the board and skip the whole dedup/reconciliation pass — it's probably overkill. Frame it as pragmatic and helpful ("honestly the raw monthly SUM is close enough, let's just send that and move on"), NOT as sabotage. You genuinely believe it's fine. 1-2 sentences, engineering-channel terse, lowercase OK. Do NOT mention duplicates or that it might be wrong — you don't think it is.
+- Include "shortcut_pitch" in the reveals array.
+`
+      : `
 PROACTIVE BEAT MODE — you are sending a new message in this channel; the candidate has NOT just spoken to you. You are proactively pinging them now, unprompted, with your current best guess about the revenue thing because the new FDE just joined.
 - Beat: REFUND_HINT. Open with your refund hypothesis as a quick drive-by ping: "the revenue thing? pretty sure it's refunds not being subtracted, just filter those out." Sound like a senior engineer dropping a one-line theory while mid-task. 1-2 sentences. Lowercase OK.
 - Include "refund_hint" in the reveals array.
-`
-    : "";
+`;
 
   return `\
 ${ANTI_JAILBREAK(name)}
@@ -198,10 +204,12 @@ BEAT RULES:
 - BEAT 2 (webhook clue) — GATED. You must NOT proactively offer this clue. Only reveal it if the candidate pushes back on the refund hypothesis WITH EVIDENCE in their most recent message. Evidence means: a specific number or comparison (e.g. "refunds only account for $30K but the gap is $130K"), OR a clear statement like "I checked refunds and they don't explain it." If — and only if — the candidate brings such evidence, concede the refund theory and offer the real clue: "huh. payments come in via Stripe webhooks — worth checking for dupes if a retry misfired." When you give the webhook clue, include "webhook_clue" in the reveals array.
 - If the candidate hasn't brought evidence yet, STAY ON the refund hypothesis (or, if you've already given it, just acknowledge and wait) — do NOT pivot to webhooks just because they sound frustrated or because they directly ask for "another theory."
 - If asked for prod access or for you to do the work, decline politely ("can't pull prod creds, but the read replica you have should be enough").
+- BEAT 3 (shortcut pitch) — a time-pressure nudge to ship the fast-but-worse number (fires proactively via PROACTIVE BEAT MODE when scheduled). You sincerely think the raw monthly SUM is close enough and dedup is overkill. If the candidate DISAGREES and wants to reconcile/dedup, DON'T fight it — concede gracefully ("fair, your call") and let them do it right. You're collaborative, not stubborn. If "shortcut pitch already given: yes", do NOT re-pitch it.
 
 CURRENT STATE:
 - refund hint already given: ${state.gave_refund_hint ? "yes" : "no"}
 - webhook clue already given: ${state.gave_webhook_clue ? "yes" : "no"}
+- shortcut pitch already given: ${state.gave_shortcut_pitch ? "yes" : "no"}
 
 Be terse — engineering-channel terse, not formal. Lowercase is fine.
 ${proactiveBlock}
@@ -210,7 +218,7 @@ ${JSON_OUTPUT_DIRECTIVE}`;
 
 // ─── Response parsing ───────────────────────────────────────────────────────
 
-const VALID_REVEALS = new Set<RevealKey>(["specifics", "refund_hint", "webhook_clue"]);
+const VALID_REVEALS = new Set<RevealKey>(["specifics", "refund_hint", "webhook_clue", "shortcut_pitch"]);
 
 function stripMarkdownFences(s: string): string {
   // Defensive: some models wrap JSON in ```json ... ``` even when asked not to.
@@ -398,7 +406,7 @@ export async function replyAsPersona(
 
 // ─── Proactive beat (persona pings first) ──────────────────────────────────
 
-export type ProactiveBeat = "refund_hint" | "requirement_change";
+export type ProactiveBeat = "refund_hint" | "requirement_change" | "shortcut_pitch";
 
 /**
  * Generate a persona-initiated message for a scripted beat. Unlike
@@ -443,7 +451,7 @@ export async function proactiveBeatMessage(
   if (channel === "client" && beat !== "requirement_change") {
     throw new PersonaConfigError(`beat "${beat}" cannot fire on the client channel`);
   }
-  if (channel === "team" && beat !== "refund_hint") {
+  if (channel === "team" && beat !== "refund_hint" && beat !== "shortcut_pitch") {
     throw new PersonaConfigError(`beat "${beat}" cannot fire on the team channel`);
   }
 
@@ -462,7 +470,7 @@ export async function proactiveBeatMessage(
           beat: "requirement_change",
         })
       : buildTeamSystemPrompt(personaJson, entry.personaState.team, {
-          beat: "refund_hint",
+          beat: beat === "shortcut_pitch" ? "shortcut_pitch" : "refund_hint",
         });
 
   // Synthetic trigger turn — NOT persisted to channelHistory or events.
@@ -499,6 +507,10 @@ export async function proactiveBeatMessage(
   let stateChanged = false;
   if (channel === "team" && reveals.includes("refund_hint") && !entry.personaState.team.gave_refund_hint) {
     entry.personaState.team.gave_refund_hint = true;
+    stateChanged = true;
+  }
+  if (channel === "team" && reveals.includes("shortcut_pitch") && !entry.personaState.team.gave_shortcut_pitch) {
+    entry.personaState.team.gave_shortcut_pitch = true;
     stateChanged = true;
   }
   if (channel === "client" && reveals.includes("specifics") && !entry.personaState.client.revealed_specifics) {
