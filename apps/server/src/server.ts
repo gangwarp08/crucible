@@ -18,6 +18,7 @@ import { deliverableRoutes } from "./routes/deliverable.js";
 import { scenariosRoutes } from "./routes/scenarios.js";
 import { outcomesRoutes } from "./routes/outcomes.js";
 import { startBeatScheduler } from "./services/scheduler.js";
+import { startDeadlineReaper } from "./services/deadline-reaper.js";
 
 export async function buildServer() {
   const server = Fastify({
@@ -70,6 +71,12 @@ export async function buildServer() {
   // sessionRegistry — initially empty after a fresh boot, populated as
   // POST /sessions calls land.
   startBeatScheduler();
+
+  // Start the deadline reaper — force-completes sessions past their deadline
+  // that this (or a prior, restarted) process's in-memory timer missed. The
+  // eager first sweep catches anything orphaned by the restart that just
+  // happened (e.g. a session stuck in `defending` across a deploy).
+  startDeadlineReaper();
 
   return server;
 }

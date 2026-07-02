@@ -154,12 +154,15 @@ export default function ChatHUD() {
         display: "flex", gap: 8, flexShrink: 0,
         background: color.bg.panel,
       }}>
-        <input
+        {/* textarea (not input) so Shift+Enter inserts a newline for multi-line
+            code/SQL; Enter sends. */}
+        <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); } }}
           disabled={disabled}
           placeholder={placeholderText}
+          rows={1}
           style={{
             flex: 1,
             background: color.bg.input,
@@ -171,6 +174,10 @@ export default function ChatHUD() {
             padding: "7px 10px",
             outline: "none",
             cursor: disabled ? "not-allowed" : "text",
+            resize: "vertical",
+            lineHeight: 1.5,
+            minHeight: 34,
+            maxHeight: 120,
           }}
         />
         <Button variant="primary" size="md" disabled={!canSend} onClick={() => { void handleSend(); }}>

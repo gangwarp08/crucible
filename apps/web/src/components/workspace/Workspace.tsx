@@ -175,9 +175,21 @@ export default function Workspace({ sessionId }: Props) {
     [sessionId],
   );
 
+  // A terminal WebSocket close is NOT a reliable session-end signal — it also
+  // fires on a transient server restart/deploy or a network blip, which was
+  // spuriously showing the "session complete" screen mid-session. Confirm with
+  // the server before ending: only a genuinely completed session flips to
+  // EndScreen; submitted/defending → locked; still-active or an unreachable
+  // server (blip) is ignored so the candidate keeps working.
   const handleSessionEnd = useCallback(() => {
-    if (status === "active") setStatus("ended");
-  }, [status, setStatus]);
+    if (status !== "active") return;
+    getSession(sessionId)
+      .then((s) => {
+        if (s.status === "completed") setStatus("ended");
+        else if (s.status === "submitted" || s.status === "defending") setStatus("locked");
+      })
+      .catch(() => { /* transient — do not end the session on a blip */ });
+  }, [status, sessionId, setStatus]);
 
   const persistLayout = useCallback((sizes: number[]) => {
     setLayout(sizes);

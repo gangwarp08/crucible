@@ -273,12 +273,14 @@ export default function Messages({ sessionId }: Props) {
               display: "flex", gap: 8, flexShrink: 0,
               background: color.bg.panel,
             }}>
-              <input
+              {/* textarea (not input) so Shift+Enter inserts a newline; Enter sends. */}
+              <textarea
                 value={drafts[c]}
                 onChange={(e) => setDrafts((prev) => ({ ...prev, [c]: e.target.value }))}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(c); } }}
                 disabled={!connected || awaiting[c]}
                 placeholder={placeholder(c)}
+                rows={1}
                 style={{
                   flex: 1,
                   background: color.bg.input,
@@ -290,6 +292,10 @@ export default function Messages({ sessionId }: Props) {
                   padding: "7px 10px",
                   outline: "none",
                   cursor: !connected ? "not-allowed" : "text",
+                  resize: "vertical",
+                  lineHeight: 1.5,
+                  minHeight: 34,
+                  maxHeight: 120,
                 }}
               />
               <Button
