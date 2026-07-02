@@ -72,10 +72,15 @@ export async function listScenarios(): Promise<ScenarioCatalogRow[]> {
   // entries — a candidate should never pick "isomorph B" directly (the system
   // assigns one). Canonical scenarios (incl. cross-band variants like -pro,
   // which have isomorph_of = null) still list.
+  // Also hide dev-only fork clones (slug suffix "-fork" — throwaway scenarios
+  // used to build + calibrate a fork off the live scenario). They stay
+  // startable by direct /start/<slug> link for piloting, just not browsable in
+  // the candidate catalog.
   const { data, error } = await supabase
     .from("scenarios")
     .select("slug, title, role, difficulty, created_at")
     .is("isomorph_of", null)
+    .not("slug", "like", "%-fork")
     .order("created_at", { ascending: true });
   if (error) {
     console.error("[scenarios] list failed", error.message);
