@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Crucible — Architecture, modules & operating guide</title>
+  <title>asaya — Architecture, modules & operating guide</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -360,7 +360,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <span class="wordmark-c">C</span>
-      <span class="wordmark">Crucible</span>
+      <span class="wordmark">asaya</span>
       <span class="doc-title">Architecture, modules &amp; operating guide</span>
     </div>
   </header>
@@ -388,7 +388,7 @@
         <li><a href="#persistence">Data persistence — what lives where</a></li>
         <li><a href="#module-reference">Module reference</a></li>
         <li><a href="#monitoring">Monitoring — what to watch &amp; where</a></li>
-        <li><a href="#runbook">Operating Crucible going forward — a runbook</a></li>
+        <li><a href="#runbook">Operating asaya going forward — a runbook</a></li>
         <li><a href="#notable">What's notable about how it's built</a></li>
         <li><a href="#glossary">Glossary</a></li>
       </ol>
@@ -398,7 +398,7 @@
 
       <section class="hero">
         <div class="hero-eyebrow">Engineering Reference</div>
-        <h1>Crucible — architecture, modules, and operating guide</h1>
+        <h1>asaya — architecture, modules, and operating guide</h1>
         <div class="audience">
           <strong>Audience:</strong> anyone joining the project, or returning to it after a break.<br>
           <strong>Goal:</strong> in one read you should be able to (a) describe what every directory
@@ -409,7 +409,7 @@
 
       <h2 id="tldr">TL;DR (3 paragraphs)</h2>
 
-      <p><strong>Crucible is an AI-conducted coding assessment platform.</strong>
+      <p><strong>asaya is an AI-conducted coding assessment platform.</strong>
         A candidate clicks a link, lands on a brief, clicks Begin, and gets dropped into a
         sandboxed dev environment with a file tree, an editor, a terminal, a SQL data explorer,
         a chat with two AI personas (a client and a teammate), an AI assistant, and a
@@ -829,7 +829,7 @@
 
       <h2 id="flow-personas">Flow 3 — Persona simulation</h2>
 
-      <p>The FDE simulation is what makes Crucible distinctive. Two layers:</p>
+      <p>The FDE simulation is what makes asaya distinctive. Two layers:</p>
 
       <h3>Reactive (the candidate sent a message)</h3>
 
@@ -1303,7 +1303,7 @@
           <code>/sessions/*</code> for the core session CRUD.</li>
       </ul>
 
-      <h2 id="runbook">Operating Crucible going forward — a runbook</h2>
+      <h2 id="runbook">Operating asaya going forward — a runbook</h2>
 
       <h3>Daily (when you're actively building)</h3>
 
@@ -1372,7 +1372,7 @@
         <li>The four calibration verifiers — for "is the judge sane?" questions.</li>
       </ol>
 
-      <h2 id="notable">What's notable about how Crucible is built</h2>
+      <h2 id="notable">What's notable about how asaya is built</h2>
 
       <ul>
         <li><strong>Real services in tests.</strong> The verifier scripts hit the real endpoints,
@@ -1426,7 +1426,7 @@
       </ul>
 
       <footer>
-        Crucible — engineering reference · single-source companion to
+        asaya — engineering reference · single-source companion to
         <code>docs/ARCHITECTURE.md</code>
       </footer>
 

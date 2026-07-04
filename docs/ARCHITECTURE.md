@@ -1,4 +1,4 @@
-# Crucible — Architecture, modules, and operating guide
+# asaya — Architecture, modules, and operating guide
 
 > **Audience:** anyone joining the project, or returning to it after a break.
 > **Goal:** in one read you should be able to (a) describe what every directory
@@ -9,7 +9,7 @@
 
 ## TL;DR (3 paragraphs)
 
-**Crucible is an AI-conducted coding assessment platform.** A candidate
+**asaya is an AI-conducted coding assessment platform.** A candidate
 clicks a link, lands on a brief, clicks Begin, and gets dropped into a
 sandboxed dev environment with a file tree, an editor, a terminal, a SQL
 data explorer, a chat with two AI personas (a client and a teammate), an
@@ -410,7 +410,7 @@ EndScreen, with module names.
 
 ## Flow 3 — Persona simulation
 
-The FDE simulation is what makes Crucible distinctive. Two layers:
+The FDE simulation is what makes asaya distinctive. Two layers:
 
 ### Reactive (the candidate sent a message)
 
@@ -743,7 +743,7 @@ SELECT status, overall_score, summary FROM evaluations WHERE session_id = '<uuid
 
 ---
 
-## Operating Crucible going forward — a runbook
+## Operating asaya going forward — a runbook
 
 ### Daily (when you're actively building)
 
@@ -802,7 +802,7 @@ SELECT status, overall_score, summary FROM evaluations WHERE session_id = '<uuid
 
 ---
 
-## What's notable about how Crucible is built
+## What's notable about how asaya is built
 
 - **Real services in tests.** The verifier scripts hit the real
   endpoints, mint real LiteLLM keys, boot real E2B sandboxes, and

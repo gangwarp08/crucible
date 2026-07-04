@@ -1,10 +1,10 @@
-# CLAUDE.md — Crucible
+# CLAUDE.md — asaya
 
 Operating contract for every Claude Code session in this repository. Read this
 fully before planning or editing. If a request conflicts with a **Hard Rule**
 below, stop and ask before proceeding.
 
-## What Crucible is
+## What asaya is
 
 An AI-conducted coding assessment platform. Candidates solve tasks in a real,
 sandboxed dev environment while an AI interviewer observes; recruiters later
