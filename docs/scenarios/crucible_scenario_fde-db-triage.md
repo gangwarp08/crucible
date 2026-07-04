@@ -6,7 +6,7 @@ teammate blames). The candidate must investigate the data, find and quantify the
 corrected figure + fix, and write a board-ready summary — under resource constraints and a mid-sim
 requirement change.
 
-Difficulty: **mid**. Target length: **90 min**.
+Difficulty: **mid**. Target length: **60 min**.
 
 ---
 
@@ -77,7 +77,7 @@ the identical DB. Postgres or SQLite.
 
 ## 4. Constraints (scenario game-mechanic — separate from the platform LLM budget)
 Stored in `scenarios.constraints`; copied into `sessions.scenario_state` at start; surfaced in the HUD.
-- `time_minutes: 90` — **hard** (the existing session timer).
+- `time_minutes: 60` — **hard** (the existing session timer).
 - `tokens: 200000` — **hard-ish**: budget for the in-platform AI assistant; when exhausted the assistant
   is unavailable (the candidate must work unaided). Metered via LiteLLM.
 - `compute_minutes: 60`, `money_usd: 25`, `memory_mb: 2048` — **soft/displayed** for MVP: consumed by

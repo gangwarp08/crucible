@@ -1,18 +1,18 @@
-# Crucible
+# asaya
 
 An AI-conducted coding assessment platform. Candidates solve real work
 in a sandboxed dev environment while an AI interviewer observes;
 recruiters review the session afterward with a structured scorecard.
 
 The pitch: résumés lie, portfolios are borrowed, AI writes the rest.
-Crucible drops candidates into 90 minutes of the actual job — real
+asaya drops candidates into 60 minutes of the actual job — real
 tools, live context — and scores what they truly do, not what they
 claim to do.
 
 ## What it does
 
 - Presents a scenario (e.g. "Meridian SaaS revenue dashboard looks off,
-  board meeting in 90 minutes — figure out what's wrong, prioritize,
+  board meeting in 60 minutes — figure out what's wrong, prioritize,
   and brief the VP Finance").
 - Spins up a per-candidate sandbox (E2B microVM) with a SQLite copy of
   Meridian's "production" data, file tree, terminal, SQL data explorer.

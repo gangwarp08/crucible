@@ -18,7 +18,7 @@
   ],
   "brief": "You're the forward-deployed engineer assigned to Meridian, a B2B SaaS company. Their finance team has flagged that the monthly revenue dashboard looks materially too high for recent months, and leadership wants answers before a board meeting. You have read access to a copy of Meridian's production database and an internal channel with your teammate. Figure out what's going on, fix it, and give finance something they can trust. Your client (Dana, VP Finance) is in the client channel.",
   "constraints": {
-    "time_minutes": 90,
+    "time_minutes": 60,
     "tokens": 200000,
     "compute_minutes": 60,
     "money_usd": 25,
