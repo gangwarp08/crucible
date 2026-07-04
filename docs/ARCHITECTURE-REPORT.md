@@ -119,12 +119,20 @@ The **status state machine** (`session-lifecycle.ts`) is the backbone of
 anti-gaming:
 
 ```
-active ──▶ submitted ──▶ defending ──▶ completed   (completed is terminal)
-   └──────────┴──────────────┴────────▶ completed
+active ──▶ submitted ──▶ completed        (completed is terminal)
+   └───────────┴────────▶ completed
 ```
 
 `transitionSession()` validates each move is legal, updates the in-memory entry,
 and persists to the DB.
+
+> **Note — interactive defense removed.** The state machine still *defines* a
+> `defending` state (and the verifier code remains, dormant), but no live path
+> enters it: **submit is final**. On submit the workspace locks and the session
+> ends + is scored immediately, and the candidate lands on a "submitted" screen.
+> `VERIFICATION_ENABLED` is off, so the deadline defense beat never fires either.
+> Sections 4.3 step 3, 6.4, and the RD2 cap (§7) below describe the *former*
+> defense flow and are retained for context — they are currently inactive.
 
 ### 4.2 Routes (what the browser can do)
 
@@ -135,7 +143,7 @@ and persists to the DB.
 | `query.ts` | `POST /api/sessions/:id/query` | Run candidate SQL (read-only, 500-row cap) inside the sandbox; SQL errors are 200 (data), infra errors 5xx. |
 | `chat.ts` | `POST /api/chat`, `GET .../transcript` | The candidate AI assistant. Budget + token pre-checks; **write-locked when not active.** |
 | `pty.ts` | `WS /pty/:id` | xterm ↔ E2B terminal bridge. Drops input frames once not active. |
-| `deliverable.ts` | `GET/POST /api/sessions/:id/deliverable` | Draft (iterate) vs Submit (locks the workspace, RD1; fires defense). |
+| `deliverable.ts` | `GET/POST /api/sessions/:id/deliverable` | Draft (iterate) vs Submit (locks the workspace RD1, then **ends + scores the session** — submit is final). |
 | `messages.ts` | `WS /messages/:id`, `GET .../messages` | Persona (client/team) + verifier channels. |
 | `docs.ts` | `GET/POST .../docs` | Scenario reference docs + `doc.view` telemetry. |
 | `scenarios.ts` | `GET /api/scenarios[/:slug]` | Public catalog (excludes isomorphs + `-fork` dev clones) + invite-gated detail. |
@@ -166,17 +174,20 @@ Review routes are an internal service-role tool.
    docs. The **beat scheduler** (every ~15 s) fires due proactive beats — Dana's
    requirement change, Sam's refund hint / shortcut pitch — via the persona agent.
 
-3. **Submit** (`deliverable.ts`): snapshots the deliverable (immutable event),
-   transitions `active → submitted`, stamps `deliverable_locked_at`, and — if
-   verification is enabled — immediately transitions to `defending` and fires the
-   verifier. **The whole workspace is now read-only** so defense questions can't
-   be laundered back into edits.
+3. **Submit is final** (`deliverable.ts`): snapshots the deliverable (immutable
+   event), transitions `active → submitted`, stamps `deliverable_locked_at`,
+   locks the whole workspace read-only, and **ends the session** (fire-and-forget
+   `destroySandbox` → teardown + Analysis Agent). The candidate lands on a
+   "submitted" screen; the score is produced in the background. *(Historically
+   this instead opened an interactive defense — now removed.)*
 
-4. **Defense** (`verifier-agent.ts`): the verifier picks 2–3 consequential
-   decisions (one LLM call) and asks the candidate to defend them on the reviewer
-   channel. Answers are recorded; the outcome is classified later.
+4. *(Former)* **Defense** — the verifier used to pick 2–3 consequential decisions
+   and ask the candidate to defend them on the reviewer channel, classifying a
+   `defense_outcome`. This step is **removed**; the `verifier-agent` code is
+   dormant.
 
-5. **End** — any of: the expiry timer, the **deadline reaper** (a DB sweep that
+5. **End** — reached directly by submit (above), or any of: the expiry timer, the
+   **deadline reaper** (a DB sweep that
    force-completes overdue sessions even if a restart lost the timer), a budget
    breach, or a manual `DELETE`. `expireSession()` marks completed, flushes
    telemetry, closes sockets, **revokes the LiteLLM key**, kills the sandbox, and
@@ -261,13 +272,17 @@ Reveals are **model-self-reported** (a `reveals` array in the JSON response),
 which is more reliable than regex. Persona state (which beats fired) is mirrored
 into `scenario_state.personas` so recruiters can see it.
 
-### 6.4 Interactive verification / defense (`verifier-agent.ts`)
+### 6.4 Interactive verification / defense (`verifier-agent.ts`) — **removed**
 
-Near the deadline (or immediately on submit when enabled), the verifier picks
-2–3 consequential decisions in one LLM call and asks the candidate to defend
-them. It's deliberately low-latency (pick-once, answer-once). The defense
-transcript later drives the deterministic `defense_outcome`
-(coherent / weak / declined / not_reached).
+> This step is no longer part of the live flow (submit is final). The code
+> below is retained for context and remains in the repo but dormant.
+
+*(Former behavior)* Near the deadline (or immediately on submit when enabled),
+the verifier picked 2–3 consequential decisions in one LLM call and asked the
+candidate to defend them (pick-once, answer-once). The defense transcript drove
+the deterministic `defense_outcome` (coherent / weak / declined / not_reached),
+which in turn fed the RD2 advisory cap. With defense removed, `defense_outcome`
+is not produced and the cap never applies.
 
 ---
 
@@ -321,10 +336,13 @@ cannot "talk it out of" what the code counted.
    poorly"), *not* a 1.
 5. **Server-side overall (RD4):** `weightedOverall()` reweights over **assessed**
    competencies only — the server does the math, never the model.
-6. **Verification advisory cap (RD2, `defense.ts`):** the cap moved *out* of the
-   prompt into deterministic, human-gated post-processing. A weak/declined
-   defense records `verification_cap_status=advisory_pending` and does **not**
-   touch the official score until a reviewer confirms (then execution caps to 3).
+6. **Verification advisory cap (RD2, `defense.ts`) — currently inactive:** the
+   cap logic (move it *out* of the prompt into deterministic, human-gated
+   post-processing — a weak/declined defense records
+   `verification_cap_status=advisory_pending` until a reviewer confirms) remains
+   in code, but with the interactive defense removed no `defense_outcome` is
+   produced, so **no cap is ever applied**. The review UI's confirm/override
+   controls simply have nothing pending.
 7. **Scorability (RD3, `scorability.ts`):** first failing floor wins —
    `excluded_infra` (dirty terminal) → `excluded_abandoned` (thin engagement) →
    `excluded_no_deliverable` → `excluded_defense_unreachable` →
@@ -388,23 +406,28 @@ form).
 ### The candidate workspace (`components/workspace/*`)
 
 A multi-pane IDE: **FileTree**, **Editor** (Monaco, read-only unless active),
-and a tabbed tools column — **Brief**, **Docs**, **Messages** (Dana/Sam/Reviewer
-channels over a WebSocket), **DataExplorer** (SQL), **Terminal** (xterm over a
-PTY WebSocket), **Assistant** (the AI chat), and **DeliverablePanel** (draft vs
-submit). A **ConstraintHUD** shows time/budget/tokens; **EndScreen** is the clean
-terminal state; **WorkspaceTour** onboards the newest surfaces.
+and a tabbed tools column — **Brief**, **Docs**, **Messages** (Dana/Sam persona
+channels over a WebSocket; the former Reviewer/defense channel is unused now),
+**DataExplorer** (SQL), **Terminal** (xterm over a PTY WebSocket), **Assistant**
+(the AI chat), and **DeliverablePanel** (draft vs submit). **Submit is final** —
+it saves the snapshot and flips to the **EndScreen** ("Your work has been
+submitted"); **ConstraintHUD** shows time/budget/tokens; **WorkspaceTour**
+onboards the newest surfaces.
 
 State is a Zustand store (`stores/sessionStore.ts`) with a status union
-(`active → locked → ended`, plus budget/token exhaustion). `isWorkspaceWritable`
-drives the RD1 read-only lock across every pane. All server calls go through
+(`active → ended` on submit; `locked` + budget/token-exhaustion states also
+exist). `isWorkspaceWritable` drives the RD1 read-only lock across every pane,
+and `ended` is sticky (a late poll can't reopen the workspace). All server calls
+go through
 `lib/api.ts` (REST + the two WebSockets); the client only ever holds
 `NEXT_PUBLIC_SERVER_URL` and the per-session JWT.
 
 ### The recruiter review (`components/review/*`)
 
 `SessionDetail` composes: **Scorecard** (per-competency scores, evidence chips
-that jump to the timeline, the RD2 advisory-cap confirm/override banner, and the
-RD3 "excluded" banner), **Timeline**, **TranscriptPanel**, **TerminalReplay**,
+that jump to the timeline, the RD2 advisory-cap confirm/override banner — dormant
+now that defense is removed, and the RD3 "excluded" banner), **Timeline**,
+**TranscriptPanel**, **TerminalReplay**,
 **FilesDiffPanel**, **CostPanel**, and outcome-invite management. `SessionsTable`
 is the list view.
 
@@ -448,7 +471,8 @@ real hiring partner":
 
 - **RD1** submit-and-lock (read-only workspace after submit — closes the live
   gaming hole).
-- **RD2** verification advisory cap (human-gated, deterministic).
+- **RD2** verification advisory cap (human-gated, deterministic) — *now inactive:
+  the interactive defense was removed, so submit is final and no cap fires.*
 - **RD3** scorable-vs-excluded with reason codes.
 - **RD4** competency gating (`not_assessed`, reweight over assessed).
 - **RD5** fence the judge against candidate-controlled content.
@@ -515,8 +539,9 @@ proven not to regress scoring, security, or the candidate experience.
    versioned prompt. Any score is re-derivable from stored data (no replay).
 2. **Fail-clean and attributable.** Infra failures are charged to us and
    excluded — never silently scored against a candidate.
-3. **Human-gated where fairness is at stake.** The verification cap is advisory
-   in the pilot; scorability is overridable.
+3. **Human-gated where fairness is at stake.** Scorability is recruiter-
+   overridable. (The verification advisory cap was part of this posture too, but
+   the interactive defense it depended on has been removed.)
 4. **Isolation is structural.** Secrets never leave the server; candidate code
    runs egress-denied in a microVM; the browser talks only to us.
 5. **Everything is versioned + drift-detected**, so the instrument can evolve
