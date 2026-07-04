@@ -17,9 +17,7 @@ import { logEvent } from "../services/telemetry.js";
 import { persistScenarioStatePatch } from "../services/db.js";
 import { ensureWritable } from "../services/guards.js";
 import { transitionSession } from "../services/session-lifecycle.js";
-import { startVerification } from "../services/verifier-agent.js";
-import { broadcastToSession } from "../services/messaging.js";
-import { env } from "../env.js";
+import { destroySandbox } from "../services/sandbox.js";
 
 const DeliverableDataSchema = z.object({
   corrected_monthly_revenue: z.string().max(20_000),
@@ -93,29 +91,21 @@ export async function deliverableRoutes(server: FastifyInstance) {
         { data, updated_at },
       );
 
-      // RD1: a submit LOCKS the workspace. The deliverable.submit event above is
-      // the immutable snapshot (append-only); transition active→submitted stamps
-      // deliverable_locked_at and flips status so every mutating route now 409s.
-      // (The verifier defense then runs on the locked snapshot.)
+      // Submit is FINAL. The deliverable.submit event above is the immutable
+      // snapshot (append-only); transition active→submitted locks the workspace
+      // (every mutating route now 409s), then we END the session so it's scored
+      // and the candidate lands on the "submitted" screen. (The interactive
+      // defense was removed — no `defending` state, no verifier.) Ending runs
+      // fire-and-forget so the response returns immediately; teardown + the
+      // Analysis Agent run in the background.
       if (status === "submitted") {
         await transitionSession(sessionId, "submitted", { deliverableLockedAt: updated_at });
-
-        // RD2: on submit, open the defense immediately (don't wait for the
-        // deadline-lead beat) when verification is enabled. transitionSession →
-        // defending, then fire-and-forget startVerification (it makes an LLM
-        // call to pick questions + broadcasts the first one over the verifier
-        // channel). Idempotent with the scheduler beat: whichever fires first
-        // wins, the other no-ops. Failures here must NOT fail the submit — the
-        // work is already locked + snapshotted.
-        if ((env.VERIFICATION_ENABLED ?? "").toLowerCase() === "true") {
-          await transitionSession(sessionId, "defending").catch(() => {});
-          void startVerification(sessionId, broadcastToSession).catch((err) => {
-            console.error(
-              `[deliverable] startVerification on submit failed for ${sessionId}:`,
-              err instanceof Error ? err.message : String(err),
-            );
-          });
-        }
+        void destroySandbox(sessionId, "manual").catch((err) => {
+          console.error(
+            `[deliverable] end-on-submit failed for ${sessionId}:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        });
       }
 
       return reply.send({ deliverable: persisted, locked: status === "submitted" });

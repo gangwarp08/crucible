@@ -47,7 +47,7 @@ export default function EndScreen() {
           boxShadow: shadow.lg,
         }}
       >
-        <SectionLabel>Session complete</SectionLabel>
+        <SectionLabel>Submitted</SectionLabel>
         <h1
           style={{
             margin: 0,
@@ -59,7 +59,7 @@ export default function EndScreen() {
             letterSpacing: "-0.3px",
           }}
         >
-          Thanks — your work has been captured
+          Your work has been submitted
         </h1>
         <p
           style={{
