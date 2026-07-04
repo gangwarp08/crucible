@@ -64,31 +64,34 @@ const auth = (sid: string) => ({ Authorization: `Bearer ${tokens.get(sid) ?? ""}
   if (sub.ok && (subBody as { locked?: boolean }).locked === true) pass("submit returned locked:true");
   else fail(`submit not locked: ${sub.status} ${JSON.stringify(subBody)}`);
 
-  // [c] every mutating route now 409s
+  // [c] every mutating route is now rejected. Submit is FINAL — it locks the
+  // workspace (409) and ends the session in the background; a request that lands
+  // after teardown gets 404. Either means "not writable after submit".
   console.log("\n[c] workspace read-only after submit");
+  const locked = (s: number) => s === 409 || s === 404;
   const fileW = await fetch(`${SERVER_URL}/file`, { method: "PUT", headers: J(), body: JSON.stringify({ sessionId, path: "notes.txt", content: "edit after submit" }) });
-  if (fileW.status === 409) pass("file write → 409"); else fail(`file write status ${fileW.status} (expected 409)`);
+  if (locked(fileW.status)) pass(`file write → ${fileW.status} (rejected)`); else fail(`file write status ${fileW.status} (expected 409/404)`);
 
   const q = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/query`, { method: "POST", headers: J(), body: JSON.stringify({ sql: "SELECT 1" }) });
-  if (q.status === 409) pass("query → 409"); else fail(`query status ${q.status} (expected 409)`);
+  if (locked(q.status)) pass(`query → ${q.status} (rejected)`); else fail(`query status ${q.status} (expected 409/404)`);
 
   const c = await fetch(`${SERVER_URL}/api/chat`, { method: "POST", headers: J(), body: JSON.stringify({ sessionId, prompt: "hi" }) });
-  if (c.status === 409) pass("AI assistant → 409"); else fail(`chat status ${c.status} (expected 409)`);
+  if (locked(c.status)) pass(`AI assistant → ${c.status} (rejected)`); else fail(`chat status ${c.status} (expected 409/404)`);
 
   // [d] deliverable immutable (resubmit/draft rejected)
   console.log("\n[d] deliverable immutable");
   const re = await fetch(`${SERVER_URL}/api/sessions/${sessionId}/deliverable`, { method: "POST", headers: J(), body: JSON.stringify({ status: "draft", data: { corrected_monthly_revenue: "tampered", root_cause_finding: "", client_facing_summary: "", decisions_and_tradeoffs: "" } }) });
-  if (re.status === 409) pass("re-edit deliverable → 409"); else fail(`re-edit status ${re.status} (expected 409)`);
+  if (locked(re.status)) pass(`re-edit deliverable → ${re.status} (rejected)`); else fail(`re-edit status ${re.status} (expected 409/404)`);
 
   // [e] session is 'submitted' + locked_at stamped
   console.log("\n[e] lifecycle state");
   const { data: row } = await supabase.from("sessions").select("status, deliverable_locked_at").eq("id", sessionId).maybeSingle();
   const r = row as { status?: string; deliverable_locked_at?: string | null } | null;
-  // 'submitted' when verification is off; 'defending' when VERIFICATION_ENABLED
-  // fires the defense immediately on submit (RD2/6.3). Both are locked terminals
-  // of the submit transition — either is correct.
-  if (r?.status === "submitted" || r?.status === "defending") pass(`session.status = ${r.status} (locked)`);
-  else fail(`status=${r?.status} (expected submitted or defending)`);
+  // Submit is FINAL: transition→submitted then the session ends in the
+  // background, so the row lands on 'submitted' → 'completed' (verification/
+  // 'defending' removed). Any of these is a correct locked/terminal state.
+  if (r?.status === "submitted" || r?.status === "completed" || r?.status === "defending") pass(`session.status = ${r.status} (locked/final)`);
+  else fail(`status=${r?.status} (expected submitted or completed)`);
   if (r?.deliverable_locked_at) pass("deliverable_locked_at stamped"); else fail("no deliverable_locked_at");
 
   // cleanup: end + delete the session

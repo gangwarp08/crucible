@@ -76,11 +76,9 @@ export default function DeliverablePanel({ sessionId }: Props) {
     }
   }
 
-  /** Submit LOCKS the work (RD1) — persists status='submitted' (the immutable
-   *  snapshot) and freezes the whole workspace read-only. It does NOT end the
-   *  session: a reviewer then asks the candidate to defend a couple of decisions
-   *  (the Reviewer tab) before it completes. No resubmit after this — the
-   *  confirmation makes that explicit. */
+  /** Submit is FINAL — persists status='submitted' (the immutable snapshot),
+   *  the server ends + scores the session, and the candidate lands on the
+   *  "submitted" screen. No resubmit; the confirmation makes that explicit. */
   async function submit() {
     if (busy || !writable) return;
     setConfirming(false);
@@ -90,13 +88,11 @@ export default function DeliverablePanel({ sessionId }: Props) {
       const result = await saveDeliverable(sessionId, { status: "submitted", data });
       setStatus(result.status);
       setUpdatedAt(result.updated_at);
-      // Lock the workspace immediately (read-only). The session stays alive for
-      // the reviewer defense; it completes later (defense done / deadline).
-      setSessionStatus("locked");
-      setFeedback({ kind: "ok", text: "Submitted — work locked. Check the Reviewer tab." });
+      // Show the submitted / end screen immediately; the server tears down +
+      // scores the session in the background.
+      setSessionStatus("ended");
     } catch (err) {
       setFeedback({ kind: "err", text: err instanceof Error ? err.message : "Submit failed" });
-    } finally {
       setBusy(false);
     }
   }
@@ -196,7 +192,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
           // froze the main thread for seconds → the submit INP jank).
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: color.text.secondary, maxWidth: 320, lineHeight: 1.4 }}>
-              This LOCKS your work read-only and starts a short reviewer defense. No re-editing.
+              This submits your work and ends the session. This is final — no re-editing.
             </span>
             <Button variant="secondary" size="md" disabled={busy} onClick={() => setConfirming(false)}>
               Cancel

@@ -112,7 +112,11 @@ export const useSessionStore = create<SessionState>((set) => ({
   // first stamp.
   setStatus: (status) =>
     set((s) => {
-      if (status === "ended" && s.status !== "ended") {
+      // "ended" is terminal on the client — once ended (e.g. after submit),
+      // never downgrade back to active/locked from a late poll or event.
+      // init() resets a fresh session independently of this setter.
+      if (s.status === "ended") return {};
+      if (status === "ended") {
         return { status, endedAt: new Date().toISOString() };
       }
       return { status };
