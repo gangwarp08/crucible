@@ -1,5 +1,12 @@
 // "Talk to us" contact + call booking — GET /api/contact/slots, POST /api/contact.
 //
+// TWO MODES on POST:
+// - slotStart absent (interim, current site behavior): the note is relayed as
+//   an email to CONTACT_FORWARD_EMAIL via formsubmit.co — zero credentials.
+//   NOTE: the first relayed email is an activation email from FormSubmit;
+//   click its link once and subsequent submissions deliver normally.
+// - slotStart present: books a calendar slot (requires the GOOGLE_* env).
+//
 // The founder's Gmail calendar is exposed ANONYMOUSLY: the server consults
 // only the freeBusy endpoint and returns abstract { start, end } slots — no
 // event names, no attendee info, nothing else ever crosses to the browser.
@@ -206,7 +213,10 @@ const ContactBody = z
     name: z.string().min(1).max(100),
     email: z.string().email().max(200),
     query: z.string().min(1).max(2000),
-    slotStart: z.string().datetime({ offset: true }),
+    // Optional: when present, book that calendar slot; when absent, the
+    // submission is relayed as a plain email (interim mode while calendar
+    // booking is unconfigured).
+    slotStart: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 
@@ -295,21 +305,76 @@ export async function contactRoutes(server: FastifyInstance) {
     },
   );
 
-  // ─── Book a call ───────────────────────────────────────────────────────
+  // ─── Book a call / send a note ─────────────────────────────────────────
   server.post(
     "/contact",
     { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
     async (request, reply) => {
-      const creds = googleCreds();
-      if (!creds) {
-        return reply.status(503).send({ error: "scheduling_unavailable" });
-      }
       const parsed = ContactBody.safeParse(request.body);
       if (!parsed.success) {
         // No details echoed back — the body carries PII.
         return reply.status(400).send({ error: "invalid_request" });
       }
       const { name, email, query, slotStart } = parsed.data;
+
+      rollBookingWindow();
+      if (bookingsToday >= GLOBAL_DAILY_BOOKING_CAP || bookedEmailsToday.has(email.toLowerCase())) {
+        // Daily budget exhausted or repeat email — treated like rate limiting.
+        return reply.status(429).send({ error: "too_many_bookings" });
+      }
+
+      // ── Interim mode: no slot chosen → relay the note by email ─────────
+      if (!slotStart) {
+        const forwardTo = env.CONTACT_FORWARD_EMAIL;
+        if (!forwardTo) {
+          // Inbox not configured on this deployment — nothing to relay to.
+          return reply.status(503).send({ error: "relay_unavailable" });
+        }
+        // FormSubmit rejects requests without an Origin, and activation is
+        // per (inbox, origin) pair — so send a STABLE origin: the first
+        // configured WEB_ORIGIN. Changing it requires clicking a fresh
+        // activation email once.
+        const relayOrigin =
+          env.WEB_ORIGIN?.split(",")[0]?.trim() || "http://localhost:3000";
+        try {
+          const res = await fetch(
+            `https://formsubmit.co/ajax/${encodeURIComponent(forwardTo)}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                Origin: relayOrigin,
+                Referer: `${relayOrigin}/contact`,
+              },
+              body: JSON.stringify({
+                name,
+                email,
+                message: query,
+                _subject: `asaya contact: ${name}`,
+                _template: "table",
+                _captcha: "false",
+              }),
+            },
+          );
+          if (!res.ok) throw new Error(`form relay failed: ${res.status}`);
+          bookingsToday++;
+          bookedEmailsToday.add(email.toLowerCase());
+          request.log.info("[contact] note relayed by email");
+          return reply.send({ ok: true });
+        } catch (err) {
+          request.log.error(
+            `[contact] email relay failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return reply.status(502).send({ error: "relay_unavailable" });
+        }
+      }
+
+      // ── Booking mode: a slot was chosen → requires calendar creds ──────
+      const creds = googleCreds();
+      if (!creds) {
+        return reply.status(503).send({ error: "scheduling_unavailable" });
+      }
       const start = new Date(slotStart);
 
       // The requested slot must be one the GET endpoint would offer right now
@@ -324,12 +389,6 @@ export async function contactRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: "invalid_request" });
       }
       const end = new Date(start.getTime() + SLOT_MINUTES * 60_000);
-
-      rollBookingWindow();
-      if (bookingsToday >= GLOBAL_DAILY_BOOKING_CAP || bookedEmailsToday.has(email.toLowerCase())) {
-        // Daily budget exhausted or repeat email — treated like rate limiting.
-        return reply.status(429).send({ error: "too_many_bookings" });
-      }
       const slotKey = start.getTime();
       if (slotsInFlight.has(slotKey)) {
         return reply.status(409).send({ error: "slot_taken" });

@@ -82,6 +82,14 @@ const EnvSchema = z.object({
   GOOGLE_CALENDAR_ID: z.string().min(1).default("primary"),
   CONTACT_TIMEZONE: z.string().min(1).default("America/New_York"),
 
+  // Interim contact-form relay (routes/contact.ts): submissions WITHOUT a
+  // slot are forwarded as an email to this inbox via formsubmit.co — no API
+  // key needed; the first relayed email carries a one-time activation link
+  // that must be clicked before delivery starts. Kept OUT of the codebase
+  // (env-only) so no personal address is committed; when unset the relay
+  // responds 503 and the form shows a retry error.
+  CONTACT_FORWARD_EMAIL: z.string().email().optional(),
+
   // Deployed commit SHA for /health (Slice 6.8e). Railway sets
   // RAILWAY_GIT_COMMIT_SHA on git-triggered deploys; our `railway up` (CLI)
   // deploys don't, so the deploy step sets GIT_COMMIT_SHA explicitly. Either is

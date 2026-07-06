@@ -676,7 +676,9 @@ export interface BookContactInput {
   name: string;
   email: string;
   query: string;
-  slotStart: string; // ISO datetime of the chosen slot's start
+  /** ISO datetime of the chosen slot's start. Omit to send the note as an
+   *  email instead of booking a call (interim mode). */
+  slotStart?: string;
 }
 
 /** Thrown by bookContact when the chosen slot was booked out from under the
