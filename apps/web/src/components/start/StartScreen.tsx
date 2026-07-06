@@ -288,8 +288,8 @@ function ScenarioBody({
           margin: 0, marginTop: 12, paddingLeft: 20,
         }}>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Investigate before you trust</strong>{" "}
-            — including this brief and anyone you talk to. Verify with the data,
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Investigate before you trust</strong>,{" "}
+            including this brief and anyone you talk to. Verify with the data,
             not with the loudest opinion in the room.
           </li>
           <li style={{ marginBottom: 4 }}>
@@ -319,7 +319,7 @@ function ScenarioBody({
         <SectionLabel>What we score</SectionLabel>
         <div style={{ color: color.text.secondary, fontSize: 12, marginTop: 8, marginBottom: 14, lineHeight: 1.6 }}>
           Eight dimensions, weighted by what the role demands. Anchors are
-          principle-based — there&apos;s no checklist to game.
+          principle-based: there&apos;s no checklist to game.
         </div>
         <ul style={{
           color: color.text.primary,
@@ -327,36 +327,36 @@ function ScenarioBody({
           margin: 0, paddingLeft: 20,
         }}>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Problem framing</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— how well you set up the question before chasing answers.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Problem framing</strong>{": "}
+            <span style={{ color: color.text.secondary }}>how well you set up the question before chasing answers.</span>
           </li>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Data fluency</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— exploration, verification, and the queries you choose to write.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Data fluency</strong>{": "}
+            <span style={{ color: color.text.secondary }}>exploration, verification, and the queries you choose to write.</span>
           </li>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Design under constraints</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— prioritization, budget discipline, what you choose not to do.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Design under constraints</strong>{": "}
+            <span style={{ color: color.text.secondary }}>prioritization, budget discipline, what you choose not to do.</span>
           </li>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Execution</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— does it actually run, and does it match what you said it would.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Execution</strong>{": "}
+            <span style={{ color: color.text.secondary }}>does it actually run, and does it match what you said it would.</span>
           </li>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>AI orchestration</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— using the assistant as a tool, not a crutch. Verify its output.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>AI orchestration</strong>{": "}
+            <span style={{ color: color.text.secondary }}>using the assistant as a tool, not a crutch. Verify its output.</span>
           </li>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Teamwork</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— engaging your teammate, pushing back when warranted, with evidence.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Teamwork</strong>{": "}
+            <span style={{ color: color.text.secondary }}>engaging your teammate, pushing back when warranted, with evidence.</span>
           </li>
           <li style={{ marginBottom: 4 }}>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Customer engagement</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— keeping your stakeholder in the loop, absorbing change calmly.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Customer engagement</strong>{": "}
+            <span style={{ color: color.text.secondary }}>keeping your stakeholder in the loop, absorbing change calmly.</span>
           </li>
           <li>
-            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Outcome communication</strong>{" "}
-            <span style={{ color: color.text.secondary }}>— clarity, structure, and audience-fit for a non-technical reader.</span>
+            <strong style={{ color: color.text.primary, fontWeight: 600 }}>Outcome communication</strong>{": "}
+            <span style={{ color: color.text.secondary }}>clarity, structure, and audience-fit for a non-technical reader.</span>
           </li>
         </ul>
       </section>
@@ -381,7 +381,7 @@ function ScenarioBody({
         <section style={{ marginBottom: 32 }}>
           <SectionLabel>Your deliverable</SectionLabel>
           <div style={{ color: color.text.secondary, fontSize: 12, marginTop: 8, marginBottom: 14, lineHeight: 1.6 }}>
-            Submit when you&apos;re confident — drafts are allowed and the latest version wins.
+            Submit when you&apos;re confident. Drafts are allowed and the latest version wins.
           </div>
           <ul style={{
             color: color.text.primary,

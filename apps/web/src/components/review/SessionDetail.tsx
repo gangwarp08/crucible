@@ -1,6 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import type { ReviewSessionDetail } from "@/lib/api";
+import { color, font } from "@/styles/tokens";
 import SessionSummary from "./SessionSummary";
 import Scorecard from "./Scorecard";
 import OutcomeInvitePanel from "./OutcomeInvitePanel";
@@ -25,9 +26,9 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
     <main
       style={{
         minHeight: "100vh",
-        background: "#0c0c10",
-        color: "#e6e6ea",
-        fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
+        background: color.bg.page,
+        color: color.text.primary,
+        fontFamily: font.sans,
         padding: "24px 32px",
       }}
     >

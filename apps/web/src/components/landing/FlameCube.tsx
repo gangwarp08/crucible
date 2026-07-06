@@ -30,9 +30,10 @@ interface Spark {
   flick: number;
 }
 
-/** Slowly-rotating CSS-3D wireframe cube with a canvas fire (soft flame
- *  body + bright sparks) licking up around it. Used as the hero focal
- *  point on the landing page. */
+/** Slowly-rotating CSS-3D wireframe cube with a canvas fire burning INSIDE
+ *  it — the sandboxed testing environment. The flame body is emitted near
+ *  the cube floor and dies within the silhouette; only a few bright sparks
+ *  escape past the top edge. Used as the hero focal point. */
 export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -65,8 +66,11 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
 
     const flames: Flame[] = [];
     const sparks: Spark[] = [];
-    const baseY = H * 0.66;
-    const spread = size * 0.78;
+    // Emit near the cube's floor; the cube is centered in the stage, so its
+    // bottom face edge sits around H/2 + size/2. The narrow spread + short
+    // flame life keep the body inside the wireframe silhouette.
+    const baseY = H / 2 + size * 0.32;
+    const spread = size * 0.55;
     const cx = W / 2;
 
     function emit() {
@@ -74,12 +78,12 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
       for (let k = 0; k < n; k++) {
         flames.push({
           x: cx + (Math.random() - 0.5) * spread,
-          y: baseY + (Math.random() - 0.5) * size * 0.3,
+          y: baseY + (Math.random() - 0.5) * size * 0.2,
           vy: -(1.1 + Math.random() * 2.0),
           vx: (Math.random() - 0.5) * 0.6,
           size: size * (0.07 + Math.random() * 0.11),
           life: 0,
-          max: 34 + Math.random() * 40,
+          max: 26 + Math.random() * 30,
           hueOff: -6 + Math.random() * 24,
           flick: Math.random() * 6.28,
         });

@@ -6,7 +6,7 @@ interface Props {
   children: ReactNode;
   /** default: secondary muted micro-header.
    *  subtle:  even quieter (very muted).
-   *  eyebrow: brand "eyebrow" — mono, amber, with a leading rule.
+   *  eyebrow: brand "eyebrow" — mono, lime, with a leading rule.
    *           Use above hero headlines and section openers. */
   tone?: "default" | "subtle" | "eyebrow";
   style?: CSSProperties;
@@ -26,7 +26,7 @@ export default function SectionLabel({
           fontWeight: 500,
           letterSpacing: "0.28em",
           textTransform: "uppercase",
-          color: color.accent.amber,
+          color: color.accent.base,
           display: "inline-flex",
           alignItems: "center",
           gap: 12,

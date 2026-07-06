@@ -38,11 +38,11 @@ const CHANNEL_META: Record<Channel, { label: string; sublabel: string }> = {
   verifier: { label: "Reviewer", sublabel: "End-of-session check — defend your key decisions" },
 };
 
-const VERIFIER_COLOR = "#6e9bff"; // cool blue — distinct from the warm personas
 const PERSONA_COLOR: Record<Channel, string> = {
   client:   color.persona.client,
   team:     color.persona.team,
-  verifier: VERIFIER_COLOR,
+  // Muted sage — on-palette but distinct from the team teal and the limes.
+  verifier: color.persona.verifier,
 };
 
 const ALL_CHANNELS = ["client", "team", "verifier"] as const;

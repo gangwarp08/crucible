@@ -94,7 +94,7 @@ export default function TabStrip<Id extends string>({
                   padding: "0 5px",
                   borderRadius: 999,
                   background: color.accent.base,
-                  color: "#ffffff",
+                  color: color.text.inverse,
                   fontSize: 9,
                   fontWeight: 700,
                   letterSpacing: 0,

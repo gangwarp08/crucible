@@ -68,6 +68,20 @@ const EnvSchema = z.object({
   // session-link.ts) tunes link lifetime; default 120.
   SESSION_LINK_REQUIRED: z.string().optional(),
 
+  // "Talk to us" call booking (routes/contact.ts). All three GOOGLE_* creds
+  // are OPTIONAL — when any is unset the contact routes report
+  // configured:false and booking is disabled (no crash, no partial mode).
+  // The refresh token is minted ONCE via an OAuth consent flow for the
+  // founder's Gmail account (Google Cloud OAuth client, offline access,
+  // scopes: https://www.googleapis.com/auth/calendar.events +
+  // https://www.googleapis.com/auth/calendar.freebusy). Only free/busy is
+  // consulted server-side; only anonymous {start,end} slots reach the browser.
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_REFRESH_TOKEN: z.string().min(1).optional(),
+  GOOGLE_CALENDAR_ID: z.string().min(1).default("primary"),
+  CONTACT_TIMEZONE: z.string().min(1).default("America/New_York"),
+
   // Deployed commit SHA for /health (Slice 6.8e). Railway sets
   // RAILWAY_GIT_COMMIT_SHA on git-triggered deploys; our `railway up` (CLI)
   // deploys don't, so the deploy step sets GIT_COMMIT_SHA explicitly. Either is

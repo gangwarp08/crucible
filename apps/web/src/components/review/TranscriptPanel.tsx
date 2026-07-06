@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { ReviewTranscriptRow } from "@/lib/api";
+import { color, radius, font } from "@/styles/tokens";
 import { formatSpendPrecise } from "./format";
 
 interface Props {
@@ -27,9 +28,11 @@ function MessageBubble({ row }: { row: ReviewTranscriptRow }) {
         style={{
           maxWidth: "85%",
           padding: "8px 12px",
-          borderRadius: isUser ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-          background: isUser ? "rgba(124, 127, 255, 0.18)" : "#1c1c24",
-          color: "#e6e6ea",
+          borderRadius: isUser
+            ? `${radius.md} ${radius.md} ${radius.sm} ${radius.md}`
+            : `${radius.md} ${radius.md} ${radius.md} ${radius.sm}`,
+          background: isUser ? color.accent.soft : color.bg.elevated,
+          color: color.text.primary,
           fontSize: 13,
           lineHeight: 1.55,
           whiteSpace: "pre-wrap",
@@ -42,8 +45,8 @@ function MessageBubble({ row }: { row: ReviewTranscriptRow }) {
         <div
           style={{
             fontSize: 10,
-            color: "#6a6a78",
-            fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+            color: color.text.muted,
+            fontFamily: font.mono,
             fontVariantNumeric: "tabular-nums",
           }}
         >
@@ -67,9 +70,9 @@ export default function TranscriptPanel({ transcript }: Props) {
   return (
     <section
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
-        borderRadius: 6,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         marginBottom: 16,
         overflow: "hidden",
       }}
@@ -77,21 +80,21 @@ export default function TranscriptPanel({ transcript }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#1c1c24",
-          borderBottom: "1px solid #2a2a36",
+          background: color.bg.elevated,
+          borderBottom: `1px solid ${color.border.default}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Transcript
         </span>
-        <span style={{ fontSize: 11, color: "#6a6a78" }}>{turnRows.length} turns</span>
+        <span style={{ fontSize: 11, color: color.text.muted }}>{turnRows.length} turns</span>
       </header>
 
       {systemRows.length > 0 && (
-        <div style={{ borderBottom: "1px solid #22222b" }}>
+        <div style={{ borderBottom: `1px solid ${color.border.subtle}` }}>
           <button
             onClick={() => setSystemOpen((o) => !o)}
             style={{
@@ -100,7 +103,7 @@ export default function TranscriptPanel({ transcript }: Props) {
               padding: "8px 16px",
               background: "transparent",
               border: "none",
-              color: "#9999a3",
+              color: color.text.secondary,
               fontSize: 11,
               cursor: "pointer",
               letterSpacing: "0.04em",
@@ -117,12 +120,12 @@ export default function TranscriptPanel({ transcript }: Props) {
                   scrollMarginTop: 16,
                   padding: "8px 16px 12px 32px",
                   fontSize: 12,
-                  color: "#9999a3",
+                  color: color.text.secondary,
                   lineHeight: 1.55,
                   whiteSpace: "pre-wrap",
-                  fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
-                  background: "#0c0c10",
-                  borderTop: "1px solid #22222b",
+                  fontFamily: font.mono,
+                  background: color.bg.input,
+                  borderTop: `1px solid ${color.border.subtle}`,
                 }}
               >
                 {r.content}
@@ -133,7 +136,7 @@ export default function TranscriptPanel({ transcript }: Props) {
 
       <div style={{ padding: "12px 0", maxHeight: 480, overflowY: "auto" }}>
         {turnRows.length === 0 ? (
-          <div style={{ padding: "24px 16px", color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
+          <div style={{ padding: "24px 16px", color: color.text.muted, fontSize: 13, textAlign: "center" }}>
             No turns
           </div>
         ) : (
@@ -143,4 +146,3 @@ export default function TranscriptPanel({ transcript }: Props) {
     </section>
   );
 }
-

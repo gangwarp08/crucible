@@ -4,6 +4,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import type { ReviewEvent } from "@/lib/api";
+import { color, radius, font } from "@/styles/tokens";
 
 interface Props {
   events: ReviewEvent[];
@@ -31,14 +32,24 @@ export default function TerminalReplay({ events }: Props) {
     if (!containerRef.current) return;
 
     const term = new XTerm({
+      // Theme built from the asaya brand tokens. ANSI red/green/yellow map to
+      // the semantic error/success/warn tokens; blue/cyan/magenta stay as
+      // readable cool colors — terminal semantics, not brand accents.
       theme: {
-        background: "#0c0c10",
-        foreground: "#e6e6ea",
-        cursor: "#0c0c10", // hide cursor (read-only)
-        selectionBackground: "rgba(124, 127, 255, 0.30)",
+        background: color.bg.input,
+        foreground: color.text.primary,
+        cursor: color.accent.base,
+        cursorAccent: color.bg.input,
+        selectionBackground: color.accent.glow,
+        red: color.error.base,
+        green: color.success.base,
+        yellow: color.warn.base,
+        brightRed: color.error.base,
+        brightGreen: color.success.base,
+        brightYellow: color.warn.base,
       },
       fontSize: 12,
-      fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+      fontFamily: font.mono,
       disableStdin: true,
       cursorBlink: false,
       cursorStyle: "bar",
@@ -75,9 +86,9 @@ export default function TerminalReplay({ events }: Props) {
   return (
     <section
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
-        borderRadius: 6,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         marginBottom: 16,
         overflow: "hidden",
       }}
@@ -85,24 +96,24 @@ export default function TerminalReplay({ events }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#1c1c24",
-          borderBottom: "1px solid #2a2a36",
+          background: color.bg.elevated,
+          borderBottom: `1px solid ${color.border.default}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Terminal (final state)
         </span>
-        <span style={{ fontSize: 11, color: "#6a6a78", fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)" }}>
+        <span style={{ fontSize: 11, color: color.text.muted, fontFamily: font.mono }}>
           {outputEvents.length} output frames · {totalBytes.toLocaleString()} bytes
         </span>
       </header>
 
-      <div style={{ padding: "8px 8px 4px", background: "#0c0c10" }}>
+      <div style={{ padding: "8px 8px 4px", background: color.bg.input }}>
         {outputEvents.length === 0 ? (
-          <div style={{ padding: 24, color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
+          <div style={{ padding: 24, color: color.text.muted, fontSize: 13, textAlign: "center" }}>
             No terminal output recorded
           </div>
         ) : (

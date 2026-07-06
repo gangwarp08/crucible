@@ -7,8 +7,8 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #000000;
-  color: #f4f2ee;
+  background: #0f1310;
+  color: #eceee9;
   font-family: var(--font-sans, 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif);
   font-size: 13px;
   font-weight: 400;
@@ -18,24 +18,8 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-/* Fire-themed text selection. Matches the design's :: selection rule. */
-::selection { background: #ff6a00; color: #140a00; }
-
-/* Flaming-cube wordmark glyph animation. The flame above the cube gently
- * flickers using a scaleY/scaleX pulse — used in any logo lockup. */
-.cru-glyph { filter: drop-shadow(0 0 5px rgba(255, 120, 0, 0.45)); }
-.cru-glyph .flm {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: emberFlick 1.5s ease-in-out infinite;
-}
-@keyframes emberFlick {
-  0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.9; }
-  50%      { transform: scaleY(1.15) scaleX(0.9); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cru-glyph .flm { animation: none; }
-}
+/* Brand text selection — lime on dark. */
+::selection { background: #a3e635; color: #10140a; }
 
 a { color: inherit; text-decoration: none; }
 button { font-family: inherit; }
@@ -43,7 +27,7 @@ button { font-family: inherit; }
 /* Focus ring — visible only on keyboard navigation. */
 :focus { outline: none; }
 :focus-visible {
-  outline: 2px solid #ff6a00;
+  outline: 2px solid #a3e635;
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -53,8 +37,8 @@ button { font-family: inherit; }
 [data-hover] {
   transition: background-color 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
-[data-hover]:hover { background-color: #100e0b; }
-[data-hover][data-selected="true"] { background-color: #15110d; }
+[data-hover]:hover { background-color: #1b211c; }
+[data-hover][data-selected="true"] { background-color: #212823; }
 
 /* All buttons get a subtle background/border transition for cleanliness. */
 :where(button, [role="button"]) {
@@ -63,64 +47,115 @@ button { font-family: inherit; }
               color 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-/* Fire-themed primary + ghost buttons. Inline styles set the static look;
- * these classes own the :hover / :active behavior (transforms + glow). */
-.btn-fire-primary,
-.btn-fire-ghost {
-  transition: transform 250ms cubic-bezier(0.2, 0.7, 0.2, 1),
-              box-shadow 350ms ease,
-              background 300ms ease,
-              border-color 300ms ease,
-              color 300ms ease;
+/* Primary + ghost CTAs. Inline styles set the static look; these classes
+ * own the :hover / :active behavior. Restrained: a small lift, no glow. */
+.btn-cta-primary,
+.btn-cta-ghost {
+  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1),
+              box-shadow 250ms ease,
+              background 250ms ease,
+              border-color 250ms ease,
+              color 250ms ease;
 }
-.btn-fire-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow:
-    0 8px 40px -8px rgba(255, 106, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 150, 0, 0.40);
+.btn-cta-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #bef264 !important;
 }
-.btn-fire-ghost:hover:not(:disabled) {
-  border-color: #ff6a00 !important;
-  box-shadow: 0 0 30px -10px rgba(255, 106, 0, 0.45);
+.btn-cta-ghost:hover:not(:disabled) {
+  border-color: #a3e635 !important;
+  color: #eceee9 !important;
 }
-.btn-fire-primary:active:not(:disabled),
-.btn-fire-ghost:active:not(:disabled) {
+.btn-cta-primary:active:not(:disabled),
+.btn-cta-ghost:active:not(:disabled) {
   transform: translateY(1px);
 }
 
 /* Interactive cards (marketing / clickable). Inline base style sets the look;
- * this class owns the hover lift + glow + the bottom accent rule. */
-.card-fire-interactive::after {
+ * this class owns the hover lift + the bottom accent rule. */
+.card-interactive::after {
   content: "";
   position: absolute;
   left: 0; right: 0; bottom: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, #ff6a00, transparent);
+  background: linear-gradient(90deg, transparent, #a3e635, transparent);
   opacity: 0;
-  transition: opacity 400ms ease;
+  transition: opacity 300ms ease;
 }
-.card-fire-interactive:hover {
-  border-color: rgba(245, 242, 238, 0.20) !important;
-  transform: translateY(-3px);
-  box-shadow: 0 24px 60px -30px rgba(255, 106, 0, 0.50);
+.card-interactive:hover {
+  border-color: rgba(236, 238, 233, 0.22) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 24px 60px -30px rgba(255, 122, 20, 0.40);
 }
-.card-fire-interactive:hover::after { opacity: 1; }
+.card-interactive:hover::after { opacity: 1; }
+
+/* Headline accent — applied to a single phrase in a display title.
+ * Solid brand lime; no gradients. */
+.accent-text { color: #a3e635; }
+
+/* Blinking block cursor — the sandbox HUD title's live-terminal tell. */
+.hud-cursor { animation: hud-blink 1.1s steps(1) infinite; }
+@keyframes hud-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
+
+/* Film-grain overlay above everything — kills the flat-template feel.
+ * SVG turbulence noise tile, very low opacity, non-interactive. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Giant outlined section numbers ghosted behind section headers. */
+.ghost-number {
+  position: absolute;
+  top: clamp(24px, 4vw, 56px);
+  right: 24px;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  font-size: clamp(6rem, 14vw, 13rem);
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(236, 238, 233, 0.07);
+}
+
+/* Hero headline lines rise out of an overflow mask on load, staggered. */
+.line-mask { display: block; overflow: hidden; }
+.line-rise {
+  display: block;
+  transform: translateY(110%);
+  animation: line-rise 750ms cubic-bezier(0.2, 0.65, 0.2, 1) forwards;
+}
+@keyframes line-rise {
+  to { transform: translateY(0); }
+}
+
+/* Capability-matrix rows warm up under the pointer. */
+.matrix-row { transition: background-color 200ms ease; }
+.matrix-row:hover { background-color: rgba(255, 106, 0, 0.05); }
 
 /* ────────────────────────────────────────────────────────────────
- * Landing-page only — flaming cube stage + ambient page setup.
- * The FlameCube component composes a CSS-3D wireframe cube under a
- * canvas fire layer. These rules style the cube itself.
+ * Landing-page fire stage — the CSS-3D wireframe cube that the canvas
+ * fire burns inside (landing/FlameCube.tsx), plus the ambient layers.
  * ──────────────────────────────────────────────────────────────── */
 .cube-glow {
   position: absolute;
   left: 50%;
-  top: 56%;
+  top: 52%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(255, 106, 0, 0.45),
-    rgba(255, 61, 0, 0.12) 38%,
+    rgba(255, 106, 0, 0.34),
+    rgba(255, 61, 0, 0.10) 40%,
     transparent 70%
   );
   filter: blur(6px);
@@ -137,16 +172,16 @@ button { font-family: inherit; }
   animation: cube-spin 22s linear infinite;
 }
 .cube-face {
-  border: 1px solid rgba(245, 242, 238, 0.82);
+  border: 1px solid rgba(236, 238, 233, 0.75);
   background: linear-gradient(180deg, rgba(255, 150, 30, 0.015), rgba(255, 80, 0, 0.05));
   box-shadow: inset 0 0 24px rgba(255, 120, 0, 0.08);
 }
 .cube-foot {
   position: absolute;
   left: 50%;
-  bottom: -2%;
+  bottom: -4%;
   transform: translateX(-50%);
-  width: 60%;
+  width: 62%;
   height: 16px;
   border-radius: 50%;
   background: radial-gradient(closest-side, rgba(255, 106, 0, 0.5), transparent 80%);
@@ -156,42 +191,73 @@ button { font-family: inherit; }
   from { transform: rotateX(-22deg) rotateY(0deg); }
   to   { transform: rotateX(-22deg) rotateY(360deg); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .cube-3d { animation: none; }
+@media (max-width: 960px) {
+  .hero-cube { display: none !important; }
 }
 
-/* Landing-page vignette layered above the ember canvas. */
+/* Landing-page vignette layered above the ember canvas — a warm hearth
+ * glow rising from the bottom of the viewport. */
 .landing-vignette {
   position: fixed;
   inset: 0;
   z-index: 1;
   pointer-events: none;
   background:
-    radial-gradient(120% 80% at 50% 120%, rgba(255, 106, 0, 0.10), transparent 55%),
-    radial-gradient(100% 60% at 50% -10%, rgba(255, 180, 80, 0.05), transparent 60%);
+    radial-gradient(120% 80% at 50% 120%, rgba(255, 106, 0, 0.09), transparent 55%),
+    radial-gradient(100% 60% at 50% -10%, rgba(255, 180, 80, 0.04), transparent 60%);
 }
 
-/* Headline gradient text — applied to a single keyword in a display title. */
-.fire-text {
-  background: linear-gradient(100deg, #ffcc00, #ff9500 40%, #ff6a00);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Keyword ticker — full-width marquee strip under the hero. The track
+ * holds two copies of the content; sliding -50% loops seamlessly. */
+.ticker {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ticker-track {
+  display: inline-flex;
+  align-items: center;
+  animation: ticker-slide 36s linear infinite;
+  will-change: transform;
+}
+@keyframes ticker-slide {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Scroll-reveal (landing/Reveal.tsx): fade + slide-up once per element. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 650ms cubic-bezier(0.2, 0.6, 0.2, 1),
+              transform 650ms cubic-bezier(0.2, 0.6, 0.2, 1);
+  will-change: opacity, transform;
+}
+.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .cube-3d { animation: none; }
+  .ticker-track { animation: none; }
+  .hud-cursor { animation: none; }
+  .line-rise { transform: none; animation: none; }
 }
 
 /* Landing nav links + hover. Hidden on narrow screens to keep the bar clean. */
 .nav-links a { transition: color 120ms cubic-bezier(0.2, 0, 0.2, 1); }
-.nav-links a:hover { color: #f4f2ee; }
+.nav-links a:hover { color: #eceee9; }
 @media (max-width: 720px) {
   .nav-links { display: none !important; }
 }
 
 /* Themed thin scrollbars (Chromium + Firefox). */
-* { scrollbar-width: thin; scrollbar-color: rgba(245, 242, 238, 0.10) transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(236, 238, 233, 0.10) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: rgba(245, 242, 238, 0.10); border-radius: 999px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(245, 242, 238, 0.20); }
+*::-webkit-scrollbar-thumb { background: rgba(236, 238, 233, 0.10); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(236, 238, 233, 0.20); }
 
 /* react-resizable-panels handle styling. The library renders a 1px-tall
  * dragger; we widen the hit area without inflating the visual line. */
@@ -207,7 +273,7 @@ button { font-family: inherit; }
 }
 [data-panel-resize-handle-enabled][data-resize-handle-active="true"],
 [data-panel-resize-handle-enabled]:hover {
-  background-color: #ff6a00;
+  background-color: #a3e635;
 }
 [data-panel-resize-handle-enabled][data-panel-group-direction="horizontal"] {
   width: 1px;

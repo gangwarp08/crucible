@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { listReviewSessions, type ReviewSession } from "@/lib/api";
 import StatusBadge from "./StatusBadge";
-import { scoreColor } from "./format";
+import { color, radius, font, scoreColor } from "@/styles/tokens";
 
 type SortKey = "created_at" | "spend_usd" | "duration_ms" | "overall_score";
 type SortDir = "asc" | "desc";
@@ -66,13 +66,13 @@ function SortHeader({
         textAlign: align,
         padding: "10px 14px",
         cursor: "pointer",
-        color: active ? "#e6e6ea" : "#9999a3",
+        color: active ? color.text.primary : color.text.secondary,
         fontSize: 11,
         fontWeight: 600,
         textTransform: "uppercase",
         letterSpacing: "0.06em",
         userSelect: "none",
-        borderBottom: "1px solid #2a2a36",
+        borderBottom: `1px solid ${color.border.default}`,
         whiteSpace: "nowrap",
       }}
     >
@@ -155,22 +155,22 @@ export default function SessionsTable() {
         style={{
           padding: 32,
           textAlign: "center",
-          color: "#ff7a7a",
-          background: "#15151b",
-          border: "1px solid #2a2a36",
-          borderRadius: 6,
+          color: color.error.base,
+          background: color.bg.panel,
+          border: `1px solid ${color.border.default}`,
+          borderRadius: radius.md,
         }}
       >
         <div style={{ fontSize: 14, marginBottom: 12 }}>Failed to load sessions</div>
-        <div style={{ fontSize: 12, color: "#9999a3", marginBottom: 16 }}>{error}</div>
+        <div style={{ fontSize: 12, color: color.text.secondary, marginBottom: 16 }}>{error}</div>
         <button
           onClick={() => void load()}
           style={{
-            background: "#7c7fff",
-            color: "#e6e6ea",
+            background: color.accent.base,
+            color: color.text.inverse,
             border: "none",
             padding: "6px 18px",
-            borderRadius: 4,
+            borderRadius: radius.lg,
             cursor: "pointer",
             fontSize: 13,
           }}
@@ -183,20 +183,20 @@ export default function SessionsTable() {
 
   if (sessions === null) {
     return (
-      <div style={{ background: "#15151b", border: "1px solid #2a2a36", borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ background: color.bg.panel, border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
             style={{
               padding: "12px 16px",
-              borderBottom: "1px solid #22222b",
+              borderBottom: `1px solid ${color.border.subtle}`,
               display: "flex",
               gap: 16,
               opacity: 0.4 - i * 0.08,
             }}
           >
             {[80, 120, 80, 60, 60, 50, 50, 50].map((w, j) => (
-              <div key={j} style={{ width: w, height: 10, background: "#2a2a36", borderRadius: 4 }} />
+              <div key={j} style={{ width: w, height: 10, background: color.bg.selected, borderRadius: radius.lg }} />
             ))}
           </div>
         ))}
@@ -214,7 +214,7 @@ export default function SessionsTable() {
           gap: 12,
           marginBottom: 12,
           fontSize: 13,
-          color: "#9999a3",
+          color: color.text.secondary,
         }}
       >
         <span>{filteredSorted.length} of {sessions.length} sessions</span>
@@ -225,10 +225,10 @@ export default function SessionsTable() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{
-              background: "#0f0f14",
-              color: "#e6e6ea",
-              border: "1px solid #555",
-              borderRadius: 4,
+              background: color.bg.input,
+              color: color.text.primary,
+              border: `1px solid ${color.border.strong}`,
+              borderRadius: radius.lg,
               padding: "4px 8px",
               fontSize: 12,
               outline: "none",
@@ -249,10 +249,10 @@ export default function SessionsTable() {
           style={{
             padding: 48,
             textAlign: "center",
-            color: "#9999a3",
-            background: "#15151b",
-            border: "1px solid #2a2a36",
-            borderRadius: 6,
+            color: color.text.secondary,
+            background: color.bg.panel,
+            border: `1px solid ${color.border.default}`,
+            borderRadius: radius.md,
             fontSize: 14,
           }}
         >
@@ -263,35 +263,35 @@ export default function SessionsTable() {
       ) : (
         <div
           style={{
-            background: "#15151b",
-            border: "1px solid #2a2a36",
-            borderRadius: 6,
+            background: color.bg.panel,
+            border: `1px solid ${color.border.default}`,
+            borderRadius: radius.md,
             overflow: "hidden",
           }}
         >
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead style={{ background: "#1c1c24" }}>
+            <thead style={{ background: color.bg.elevated }}>
               <tr>
-                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Session
                 </th>
-                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Status
                 </th>
                 <SortHeader label="Overall"  sortKey="overall_score" currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
                 <SortHeader label="Created"  sortKey="created_at"  currentKey={sortKey} currentDir={sortDir} align="left"  onSort={handleSort} />
-                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Ended
                 </th>
                 <SortHeader label="Duration" sortKey="duration_ms" currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
                 <SortHeader label="Spend"    sortKey="spend_usd"   currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
-                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
+                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Msgs
                 </th>
-                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
+                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Files
                 </th>
-                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "#9999a3", textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #2a2a36" }}>
+                <th style={{ textAlign: "right", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Events
                 </th>
               </tr>
@@ -314,18 +314,18 @@ function Row({ session: s }: { session: ReviewSession }) {
     textAlign: "right",
     padding: "10px 14px",
     fontVariantNumeric: "tabular-nums",
-    fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
-    color: "#e6e6ea",
+    fontFamily: font.mono,
+    color: color.text.primary,
   };
-  const cell: React.CSSProperties = { padding: "10px 14px", color: "#e6e6ea" };
+  const cell: React.CSSProperties = { padding: "10px 14px", color: color.text.primary };
 
   return (
     <tr
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        background: hover ? "#1f1f28" : "transparent",
-        borderBottom: "1px solid #22222b",
+        background: hover ? color.bg.hover : "transparent",
+        borderBottom: `1px solid ${color.border.subtle}`,
         transition: "background 0.1s",
       }}
     >
@@ -333,9 +333,9 @@ function Row({ session: s }: { session: ReviewSession }) {
         <Link
           href={`/review/${s.id}`}
           style={{
-            color: hover ? "#9396ff" : "#7c7fff",
+            color: hover ? color.accent.hover : color.accent.base,
             textDecoration: "none",
-            fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+            fontFamily: font.mono,
             fontSize: 12,
           }}
         >
@@ -345,29 +345,29 @@ function Row({ session: s }: { session: ReviewSession }) {
       <td style={cell}>
         <StatusBadge status={s.status} />
       </td>
-      <td style={{ ...numCell, color: "#e6e6ea" }}>
+      <td style={{ ...numCell, color: color.text.primary }}>
         {typeof s.overall_score === "number" ? (
           <>
             <span style={{ color: scoreColor(Math.round(s.overall_score)), fontWeight: 600 }}>
               {s.overall_score.toFixed(2)}
             </span>
-            <span style={{ color: "#6a6a78", fontSize: 11, marginLeft: 2 }}>/5</span>
+            <span style={{ color: color.text.muted, fontSize: 11, marginLeft: 2 }}>/5</span>
           </>
         ) : s.evaluation_status === "error" ? (
           <span
-            style={{ color: "#ff7a7a", fontWeight: 500, fontSize: 11 }}
+            style={{ color: color.error.base, fontWeight: 500, fontSize: 11 }}
             title="Evaluation errored; open the session to re-run"
           >
             ERR
           </span>
         ) : (
-          <span style={{ color: "#6a6a78" }}>—</span>
+          <span style={{ color: color.text.muted }}>—</span>
         )}
       </td>
-      <td style={{ ...cell, color: "#9999a3", fontSize: 12, whiteSpace: "nowrap" }}>
+      <td style={{ ...cell, color: color.text.secondary, fontSize: 12, whiteSpace: "nowrap" }}>
         {formatDate(s.created_at)}
       </td>
-      <td style={{ ...cell, color: "#9999a3", fontSize: 12, whiteSpace: "nowrap" }}>
+      <td style={{ ...cell, color: color.text.secondary, fontSize: 12, whiteSpace: "nowrap" }}>
         {formatDate(s.ended_at)}
       </td>
       <td style={numCell}>{formatDuration(s.duration_ms)}</td>

@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import type { ReviewFileSnapshot } from "@/lib/api";
 import { formatDateTime } from "./format";
+import { color, font, radius } from "@/styles/tokens";
 
 interface Props {
   fileSnapshots: ReviewFileSnapshot[];
@@ -59,9 +60,9 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
     <section
       id={selectedPath ? `file-${selectedPath}` : undefined}
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
-        borderRadius: 6,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         marginBottom: 16,
         overflow: "hidden",
         scrollMarginTop: 16,
@@ -70,8 +71,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#1c1c24",
-          borderBottom: "1px solid #2a2a36",
+          background: color.bg.elevated,
+          borderBottom: `1px solid ${color.border.default}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -79,16 +80,16 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Files / code evolution
         </span>
-        <span style={{ fontSize: 11, color: "#6a6a78" }}>
+        <span style={{ fontSize: 11, color: color.text.muted }}>
           {paths.length} path{paths.length === 1 ? "" : "s"} · {fileSnapshots.length} snapshot{fileSnapshots.length === 1 ? "" : "s"}
         </span>
       </header>
 
       {paths.length === 0 ? (
-        <div style={{ padding: 24, color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
+        <div style={{ padding: 24, color: color.text.muted, fontSize: 13, textAlign: "center" }}>
           No file edits recorded
         </div>
       ) : (
@@ -96,8 +97,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
           <div
             style={{
               padding: "10px 16px",
-              background: "#0c0c10",
-              borderBottom: "1px solid #22222b",
+              background: color.bg.page,
+              borderBottom: `1px solid ${color.border.subtle}`,
               display: "flex",
               alignItems: "center",
               gap: 12,
@@ -105,19 +106,19 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
               fontSize: 12,
             }}
           >
-            <label style={{ color: "#9999a3" }}>Path</label>
+            <label style={{ color: color.text.secondary }}>Path</label>
             <select
               value={selectedPath ?? ""}
               onChange={(e) => setSelectedPath(e.target.value)}
               style={{
-                background: "#0f0f14",
-                color: "#e6e6ea",
-                border: "1px solid #555",
-                borderRadius: 4,
+                background: color.bg.input,
+                color: color.text.primary,
+                border: `1px solid ${color.border.strong}`,
+                borderRadius: radius.lg,
                 padding: "4px 8px",
                 fontSize: 12,
                 outline: "none",
-                fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                fontFamily: font.mono,
                 minWidth: 220,
               }}
             >
@@ -128,7 +129,7 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
 
             <span style={{ flex: 1 }} />
 
-            <label style={{ color: "#9999a3" }}>Step</label>
+            <label style={{ color: color.text.secondary }}>Step</label>
             <button
               onClick={() => setStepIdx((i) => Math.max(0, i - 1))}
               disabled={safeIdx === 0}
@@ -138,8 +139,8 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
             </button>
             <span
               style={{
-                color: "#e6e6ea",
-                fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                color: color.text.primary,
+                fontFamily: font.mono,
                 minWidth: 60,
                 textAlign: "center",
                 fontSize: 12,
@@ -161,13 +162,13 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
               <div
                 style={{
                   padding: "6px 16px",
-                  background: "#15151b",
-                  borderBottom: "1px solid #22222b",
+                  background: color.bg.panel,
+                  borderBottom: `1px solid ${color.border.subtle}`,
                   fontSize: 11,
-                  color: "#9999a3",
+                  color: color.text.secondary,
                   display: "flex",
                   gap: 16,
-                  fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                  fontFamily: font.mono,
                 }}
               >
                 <span>action: <span style={{ color: actionColor(current.action) }}>{current.action}</span></span>
@@ -175,7 +176,7 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
                 <span>hash: {current.content_hash?.slice(0, 12) ?? "—"}…</span>
                 <span style={{ marginLeft: "auto" }}>{formatDateTime(current.ts)}</span>
               </div>
-              <div style={{ height: 380, background: "#0c0c10" }}>
+              <div style={{ height: 380, background: color.bg.page }}>
                 <DiffEditor
                   height="100%"
                   language={language}
@@ -202,10 +203,10 @@ export default function FilesDiffPanel({ fileSnapshots }: Props) {
 
 function btnStyle(disabled: boolean): React.CSSProperties {
   return {
-    background: disabled ? "#1c1c24" : "#0f0f14",
-    color: disabled ? "#6a6a78" : "#e6e6ea",
-    border: "1px solid #555",
-    borderRadius: 4,
+    background: disabled ? color.bg.elevated : color.bg.input,
+    color: disabled ? color.text.muted : color.text.primary,
+    border: `1px solid ${color.border.strong}`,
+    borderRadius: radius.lg,
     padding: "3px 10px",
     cursor: disabled ? "not-allowed" : "pointer",
     fontSize: 13,
@@ -213,8 +214,8 @@ function btnStyle(disabled: boolean): React.CSSProperties {
 }
 
 function actionColor(action: string): string {
-  if (action === "create") return "#56d6a8";
-  if (action === "write")  return "#7c7fff";
-  if (action === "delete") return "#ff7a7a";
-  return "#e6e6ea";
+  if (action === "create") return color.success.base;
+  if (action === "write")  return color.accent.base;
+  if (action === "delete") return color.error.base;
+  return color.text.primary;
 }

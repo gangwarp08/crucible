@@ -49,9 +49,7 @@ export default function ScenariosCatalog() {
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
         }}>
           <Wordmark />
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <Button variant="ghost" size="sm">Back to overview</Button>
-          </Link>
+          <Button href="/" variant="ghost" size="sm">Back to overview</Button>
         </header>
 
         <div style={{ marginBottom: 36 }}>
@@ -155,7 +153,7 @@ function ScenarioCard({ scenario }: { scenario: ScenarioCatalogItem }) {
           </div>
           <div style={{
             fontFamily: font.mono, fontSize: 11, letterSpacing: "0.20em",
-            textTransform: "uppercase", color: color.accent.amber,
+            textTransform: "uppercase", color: color.accent.base,
             flexShrink: 0, paddingTop: 4,
           }}>
             Start →

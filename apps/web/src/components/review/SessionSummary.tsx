@@ -7,6 +7,7 @@ import {
   formatSpend,
   formatDateTime,
 } from "./format";
+import { color, radius, font } from "@/styles/tokens";
 
 interface Props {
   detail: ReviewSessionDetail;
@@ -18,7 +19,7 @@ function Stat({ label, value, mono = false }: { label: string; value: React.Reac
       <div
         style={{
           fontSize: 10,
-          color: "#9999a3",
+          color: color.text.secondary,
           textTransform: "uppercase",
           letterSpacing: "0.08em",
           marginBottom: 4,
@@ -29,8 +30,8 @@ function Stat({ label, value, mono = false }: { label: string; value: React.Reac
       <div
         style={{
           fontSize: 14,
-          color: "#e6e6ea",
-          fontFamily: mono ? "monospace" : "inherit",
+          color: color.text.primary,
+          fontFamily: mono ? font.mono : "inherit",
           fontVariantNumeric: mono ? "tabular-nums" : "normal",
         }}
       >
@@ -48,9 +49,9 @@ export default function SessionSummary({ detail }: Props) {
   return (
     <section
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
-        borderRadius: 6,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         padding: 20,
         marginBottom: 16,
       }}
@@ -69,19 +70,19 @@ export default function SessionSummary({ detail }: Props) {
           <Link
             href="/review"
             style={{
-              color: "#7c7fff",
+              color: color.accent.base,
               textDecoration: "none",
               fontSize: 13,
             }}
           >
             ← Back
           </Link>
-          <span style={{ color: "#6a6a78" }}>·</span>
+          <span style={{ color: color.text.muted }}>·</span>
           <span
             style={{
-              fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+              fontFamily: font.mono,
               fontSize: 13,
-              color: "#e6e6ea",
+              color: color.text.primary,
             }}
           >
             {session.id}

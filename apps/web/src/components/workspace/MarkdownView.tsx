@@ -1,5 +1,6 @@
 "use client";
 import { Fragment } from "react";
+import { color, radius, font } from "@/styles/tokens";
 
 // Minimal markdown renderer scoped to what the scenario docs use:
 // `##` h2 headings, plain paragraphs, fenced ``` code blocks, inline `code`,
@@ -106,12 +107,12 @@ function renderInline(text: string): React.ReactNode[] {
       <code
         key={key++}
         style={{
-          background: "#0f0f14",
-          color: "#e0b66e",
+          background: color.bg.input,
+          color: color.warn.base,
           padding: "1px 5px",
-          borderRadius: 3,
+          borderRadius: radius.md,
           fontSize: "0.92em",
-          fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+          fontFamily: font.mono,
         }}
       >
         {match[1]}
@@ -130,10 +131,10 @@ export default function MarkdownView({ source }: Props) {
   return (
     <div
       style={{
-        color: "#e6e6ea",
+        color: color.text.primary,
         fontSize: 13,
         lineHeight: 1.55,
-        fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
+        fontFamily: font.sans,
       }}
     >
       {blocks.map((b, i) => {
@@ -145,10 +146,10 @@ export default function MarkdownView({ source }: Props) {
                 style={{
                   fontSize: 15,
                   fontWeight: 600,
-                  color: "#e6e6ea",
+                  color: color.text.primary,
                   margin: i === 0 ? "0 0 8px" : "20px 0 8px",
                   paddingBottom: 4,
-                  borderBottom: "1px solid #1c1c24",
+                  borderBottom: `1px solid ${color.border.default}`,
                 }}
               >
                 {renderInline(b.lines[0]!)}
@@ -165,15 +166,15 @@ export default function MarkdownView({ source }: Props) {
               <pre
                 key={i}
                 style={{
-                  background: "#15151b",
-                  border: "1px solid #2a2a36",
-                  borderRadius: 4,
+                  background: color.bg.panel,
+                  border: `1px solid ${color.border.default}`,
+                  borderRadius: radius.lg,
                   padding: "8px 12px",
                   margin: "0 0 12px",
                   overflow: "auto",
-                  color: "#e6e6ea",
+                  color: color.text.primary,
                   fontSize: 12,
-                  fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                  fontFamily: font.mono,
                   lineHeight: 1.45,
                 }}
               >
@@ -187,9 +188,9 @@ export default function MarkdownView({ source }: Props) {
                 style={{
                   margin: "0 0 12px",
                   padding: "6px 12px",
-                  borderLeft: "3px solid #7c7fff",
-                  background: "#15151b",
-                  color: "#e6e6ea",
+                  borderLeft: `3px solid ${color.accent.base}`,
+                  background: color.bg.panel,
+                  color: color.text.primary,
                   fontStyle: "normal",
                 }}
               >

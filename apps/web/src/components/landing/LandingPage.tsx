@@ -1,23 +1,25 @@
 "use client";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { color, font, radius, gradient } from "@/styles/tokens";
+import { color, font, radius } from "@/styles/tokens";
 import Wordmark from "@/components/ui/Wordmark";
 import SectionLabel from "@/components/ui/SectionLabel";
 import Button from "@/components/ui/Button";
+import Reveal from "./Reveal";
+import RollingNumber from "./RollingNumber";
+import Scramble from "./Scramble";
+import ScrollProgress from "./ScrollProgress";
 
-// Canvas-heavy components are client-only and tree-split out of the initial
+// Canvas-heavy fire layers are client-only and tree-split out of the initial
 // payload so the marketing page still renders fast on first paint.
 const EmberCanvas = dynamic(() => import("./EmberCanvas"), { ssr: false });
 const FlameCube = dynamic(() => import("./FlameCube"), { ssr: false });
 
 const MAXW = 1180;
 
-// Where every "Start the assessment" CTA on the landing page points. The
-// catalog lists every scenario; the per-scenario start screen is one click
-// further in.
-const ASSESSMENT_HREF = "/scenarios";
-const CONTACT_HREF = "mailto:hello@asaya.com";
+// The landing page's only conversion action: the contact/booking flow.
+// (The scenario catalog at /scenarios is reachable via invite links only.)
+const CONTACT_HREF = "/contact";
 
 const WRAP_STYLE = {
   width: "100%",
@@ -26,21 +28,25 @@ const WRAP_STYLE = {
   padding: "0 32px",
 } as const;
 
-const SECTION_PAD = "clamp(72px, 11vw, 150px) 0";
+const SECTION_PAD = "clamp(72px, 11vw, 140px) 0";
 
 export default function LandingPage(): React.ReactElement {
   return (
     <>
-      <EmberCanvas intensity={45} hue={28} />
+      <EmberCanvas intensity={40} hue={26} />
       <div className="landing-vignette" />
+      <div className="grain" />
+      <ScrollProgress />
       <div style={{ position: "relative", zIndex: 2 }}>
         <Nav />
         <Hero />
+        <Ticker />
         <Problem />
+        <Void />
         <Engine />
         <Simulation />
         <Signal />
-        <Proof />
+        <Impact />
         <CTABand />
         <Footer />
       </div>
@@ -54,7 +60,6 @@ function Nav() {
   const links = [
     { href: "#engine", label: "How it works" },
     { href: "#simulation", label: "The simulation" },
-    { href: "#signal", label: "The signal" },
   ];
   return (
     <nav
@@ -62,14 +67,14 @@ function Nav() {
         position: "fixed",
         top: 0, left: 0, right: 0,
         zIndex: 40,
-        background: "rgba(4, 3, 2, 0.72)",
+        background: "rgba(15, 19, 16, 0.82)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         borderBottom: `1px solid ${color.border.default}`,
       }}
     >
-      <div style={{ ...WRAP_STYLE, display: "flex", alignItems: "center", justifyContent: "space-between", height: 68 }}>
-        <Wordmark size={22} />
+      <div style={{ ...WRAP_STYLE, display: "flex", alignItems: "center", justifyContent: "space-between", height: 66 }}>
+        <Wordmark size={24} />
         <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
           <div className="nav-links" style={{ display: "flex", alignItems: "center", gap: 26 }}>
             {links.map((l) => (
@@ -78,7 +83,7 @@ function Nav() {
                 href={l.href}
                 style={{
                   fontFamily: font.mono,
-                  fontSize: 12,
+                  fontSize: 13,
                   letterSpacing: "0.04em",
                   color: color.text.secondary,
                 }}
@@ -87,11 +92,9 @@ function Nav() {
               </a>
             ))}
           </div>
-          <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-            <Button variant="primary" size="md">
-              Start the assessment
-            </Button>
-          </Link>
+          <Button href={CONTACT_HREF} variant="primary" size="md">
+            Talk to us
+          </Button>
         </div>
       </div>
     </nav>
@@ -101,84 +104,162 @@ function Nav() {
 /* ─────────────────────────────────────────────────────────────── Hero */
 
 function Hero() {
+  // Pointer parallax: the burning cube drifts gently toward the cursor.
+  // Direct style mutation (no state) keeps mousemove cheap.
+  const cubeRef = useRef<HTMLDivElement | null>(null);
+  const reducedRef = useRef(false);
+  useEffect(() => {
+    reducedRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }, []);
+  const onMove = (e: React.MouseEvent<HTMLElement>) => {
+    const el = cubeRef.current;
+    if (!el || reducedRef.current) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width - 0.5;
+    const my = (e.clientY - r.top) / r.height - 0.5;
+    el.style.transform = `translate3d(${(mx * 26).toFixed(1)}px, ${(my * 18).toFixed(1)}px, 0)`;
+  };
   return (
     <header
+      onMouseMove={onMove}
       style={{
-        minHeight: "100svh",
+        minHeight: "92svh",
         display: "flex",
         alignItems: "center",
-        paddingTop: 68,
-        position: "relative",
+        paddingTop: 66,
       }}
     >
-      <div style={{ ...WRAP_STYLE, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-        <div style={{ marginTop: -36, marginBottom: -78 }}>
-          <FlameCube size={150} intensity={60} hue={28} />
+      <div style={{
+        ...WRAP_STYLE,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 24, flexWrap: "wrap",
+      }}>
+        <div style={{ maxWidth: 720, flex: "1 1 520px" }}>
+          <Reveal>
+            <span style={{
+              fontFamily: font.mono,
+              fontSize: 11.5,
+              fontWeight: 500,
+              letterSpacing: "0.28em",
+              textTransform: "uppercase",
+              color: color.accent.base,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 12,
+            }}>
+              <span style={{ width: 8, height: 8, background: color.accent.base, flex: "none" }} />
+              dynamic work simulations · built for AI-era roles
+            </span>
+            <h1 style={{
+              fontFamily: font.sans,
+              fontSize: "clamp(2.6rem, 6.4vw, 5.2rem)",
+              fontWeight: 600,
+              letterSpacing: "-0.035em",
+              lineHeight: 1.08,
+              margin: "30px 0 0",
+              color: color.text.primary,
+            }}>
+              <span className="line-mask">
+                <span className="line-rise" style={{ animationDelay: "80ms" }}>
+                  The nature of work has changed.
+                </span>
+              </span>
+              <span className="line-mask">
+                <span className="line-rise accent-text" style={{ animationDelay: "260ms" }}>
+                  The way we assess must too.
+                </span>
+              </span>
+            </h1>
+            <p style={{
+              color: color.text.secondary,
+              fontSize: "clamp(1.12rem, 1.55vw, 1.38rem)",
+              lineHeight: 1.65,
+              maxWidth: "58ch",
+              margin: "28px 0 0",
+            }}>
+              asaya is simulation-based assessment for AI-augmented engineers: a
+              personalized sandbox that scores how people{" "}
+              <em style={{ color: color.text.primary, fontStyle: "normal", fontWeight: 500 }}>actually</em>{" "}
+              work with AI, under real constraints.
+            </p>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 38 }}>
+              <Button href="#engine" variant="primary" size="lg">See how it works →</Button>
+              <Button href={CONTACT_HREF} variant="ghost" size="lg">Talk to us</Button>
+            </div>
+          </Reveal>
+          <Reveal delay={250}>
+            <HeroChips />
+          </Reveal>
         </div>
-        <div style={{ maxWidth: 900 }}>
-          <span style={{
-            fontFamily: font.mono,
-            fontSize: 11.5,
-            fontWeight: 500,
-            letterSpacing: "0.28em",
-            textTransform: "uppercase",
-            color: color.accent.amber,
-            display: "inline-block",
-          }}>
-            dynamic work simulations · built for AI-era roles
-          </span>
-          <h1 style={{
-            fontFamily: font.mono,
-            fontSize: "clamp(2.5rem, 7.2vw, 6.2rem)",
-            fontWeight: 600,
-            letterSpacing: "-0.045em",
-            lineHeight: 0.98,
-            margin: "26px 0 0",
-            textWrap: "balance",
-          }}>
-            Measure What <span className="fire-text">Matters</span>.
-          </h1>
-          <p style={{
-            color: color.text.secondary,
-            fontSize: "clamp(1rem, 1.35vw, 1.2rem)",
-            lineHeight: 1.6,
-            maxWidth: "60ch",
-            margin: "26px auto 0",
-          }}>
-            The nature of work has changed — the way we assess must too. asaya. is
-            simulation-based assessment for AI-era roles: a personalized sandbox that
-            scores how people <em style={{ color: color.text.primary, fontStyle: "normal" }}>actually</em> work
-            with AI, under real constraints.
-          </p>
-          <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 36 }}>
-            <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-              <Button variant="primary" size="lg">Try the simulation →</Button>
-            </Link>
-            <a href="#engine" style={{ textDecoration: "none" }}>
-              <Button variant="ghost" size="lg">See how it works</Button>
-            </a>
-          </div>
-          <HeroMeta />
+        {/* The sandbox itself: a wireframe cube with fire burning inside. */}
+        <div className="hero-cube" style={{ flex: "0 0 auto", marginRight: -34 }}>
+          <Reveal delay={150}>
+            <div ref={cubeRef} style={{ transition: "transform 300ms cubic-bezier(0.2, 0.6, 0.2, 1)" }}>
+              <FlameCube size={215} intensity={62} hue={26} />
+            </div>
+          </Reveal>
         </div>
       </div>
     </header>
   );
 }
 
-function HeroMeta() {
-  const items = ["Behavioural Telemetry™", "live-proctored", "dynamic", "evidence you can audit"];
+/* ─────────────────────────────────────────────────────────────── Ticker */
+
+function Ticker() {
+  const items = [
+    "behavioural telemetry", "live-proctored", "dynamic scenario engine",
+    "evidence you can audit", "AI-Fluency Index™", "real constraints",
+  ];
+  const strip = (hidden: boolean) => (
+    <span aria-hidden={hidden || undefined} style={{ display: "inline-flex", alignItems: "center" }}>
+      {items.map((t) => (
+        <span key={t} style={{ display: "inline-flex", alignItems: "center" }}>
+          <span style={{
+            width: 6, height: 6, background: color.fire.base,
+            margin: "0 28px", flex: "none",
+          }} />
+          <span style={{
+            fontFamily: font.mono, fontSize: 12, fontWeight: 500,
+            letterSpacing: "0.22em", textTransform: "uppercase",
+            color: color.text.secondary, whiteSpace: "nowrap",
+          }}>
+            {t}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
   return (
-    <div style={{
-      display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center",
-      fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase",
-      color: color.text.muted, marginTop: 40,
-    }}>
-      {items.map((t, i) => (
-        <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-          <span style={{ whiteSpace: "nowrap" }}>{t}</span>
-          {i < items.length - 1 && (
-            <span style={{ width: 3, height: 3, borderRadius: "50%", background: color.accent.base, opacity: 0.8 }} />
-          )}
+    <div
+      className="ticker"
+      style={{
+        borderTop: `1px solid ${color.border.default}`,
+        borderBottom: `1px solid ${color.border.default}`,
+        padding: "16px 0",
+        background: "rgba(15, 19, 16, 0.6)",
+      }}
+    >
+      <div className="ticker-track">
+        {strip(false)}
+        {strip(true)}
+      </div>
+    </div>
+  );
+}
+
+function HeroChips() {
+  const items = ["AI-Fluency Index™", "Behavioural Telemetry", "Advanced Proctoring", "Dynamic"];
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 56 }}>
+      {items.map((t) => (
+        <span key={t} style={{
+          fontFamily: font.mono, fontSize: 11.5, fontWeight: 500, letterSpacing: "0.14em",
+          textTransform: "uppercase", color: color.text.secondary,
+          border: `1px solid ${color.border.strong}`, borderRadius: radius.sm,
+          padding: "9px 14px", whiteSpace: "nowrap",
+        }}>
+          {t}
         </span>
       ))}
     </div>
@@ -189,151 +270,296 @@ function HeroMeta() {
 
 function Problem() {
   const signals = [
-    { badge: "broken",       t: "Résumés",   p: "Written by a model, tuned for the keyword filter — optimized to pass, not to predict." },
+    { badge: "broken",       t: "Résumés",    p: "Written by a model, tuned for the keyword filter. Optimized to pass, not to predict." },
     { badge: "unverifiable", t: "Portfolios", p: "AI-generated and borrowed. You can no longer tell whose work you are looking at." },
-    { badge: "gamed",        t: "Interviews", p: "Half of technical candidates show AI assistance — and most of them still pass." },
+    { badge: "gamed",        t: "Interviews", p: "Candidates use AI to apply. Companies use AI to filter. Real talent gets lost in the middle." },
+  ];
+  const stats = [
+    { n: 75, suffix: "%", p: <>of companies report a <b style={{ color: color.text.primary }}>bad hire this year</b> due to flawed assessment.</> },
+    { n: 85, suffix: "%", p: <>of interview performance <b style={{ color: color.text.primary }}>doesn&apos;t correlate</b> with actual job performance.</> },
+    { raw: "1 in 4", p: <>profiles <b style={{ color: color.text.primary }}>will be fake</b> by 2028.</> },
+    { raw: "3 in 4", p: <>managers have already faced <b style={{ color: color.text.primary }}>AI-generated applications</b>.</> },
   ];
   return (
-    <section id="problem" style={{ padding: SECTION_PAD }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 820 }}>
-          <SectionLabel tone="eyebrow">02 — the problem</SectionLabel>
-          <h2 style={sectionTitleStyle()}>
-            AI-augmented engineering is exploding.<br />
-            The tools to hire for it are <span className="fire-text">broken</span>.
-          </h2>
-          <p style={leadStyle({ marginTop: 22 })}>
-            Candidates use AI to apply. Companies use AI to filter. Real talent gets lost in
-            the middle — and every proxy we trusted is now synthetic.
-          </p>
-        </div>
+    <section id="problem" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">02</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 48, maxWidth: 820 }}>
+            <SectionLabel tone="eyebrow"><Scramble text="02 · the problem" /></SectionLabel>
+            <h2 style={sectionTitleStyle()}>
+              Every signal is <span className="accent-text">broken</span>.
+            </h2>
+            <p style={leadStyle({ marginTop: 22 })}>
+              Layering AI over a broken process multiplies the chaos and the noise.
+              Every proxy we trusted is now synthetic.
+            </p>
+          </div>
+        </Reveal>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20 }}>
-          {signals.map((it) => (
-            <div key={it.t} className="card-fire-interactive" style={{
-              border: `1px solid ${color.border.default}`,
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0)), " +
-                color.bg.panel,
-              padding: "26px 26px 28px",
-              borderRadius: radius.md,
-              position: "relative",
-              overflow: "hidden",
-            }}>
-              <span style={{
-                fontFamily: font.mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.18em",
-                textTransform: "uppercase", color: color.accent.base,
-                border: `1px solid rgba(255,106,0,0.45)`, borderRadius: 4, padding: "4px 9px",
+          {signals.map((it, i) => (
+            <Reveal key={it.t} delay={i * 110}>
+              <div className="card-interactive" style={{
+                border: `1px solid ${color.border.default}`,
+                background: color.bg.panel,
+                padding: "26px 26px 28px",
+                borderRadius: radius.md,
+                position: "relative",
+                overflow: "hidden",
+                height: "100%",
+                transition: "border-color 300ms ease, transform 300ms ease",
               }}>
-                {it.badge}
-              </span>
-              <h3 style={{
-                fontFamily: font.mono, fontWeight: 600, fontSize: "1.4rem",
-                letterSpacing: "-0.02em", margin: "18px 0 10px", color: color.text.primary,
-              }}>{it.t}</h3>
-              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.97rem", lineHeight: 1.6 }}>{it.p}</p>
-            </div>
+                <span style={{
+                  fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.18em",
+                  textTransform: "uppercase", color: color.accent.base,
+                  border: `1px solid ${color.border.strong}`, borderRadius: radius.sm, padding: "4px 9px",
+                }}>
+                  {it.badge}
+                </span>
+                <h3 style={{
+                  fontFamily: font.sans, fontWeight: 600, fontSize: "1.4rem",
+                  letterSpacing: "-0.02em", margin: "18px 0 10px", color: color.text.primary,
+                }}>{it.t}</h3>
+                <p style={{ color: color.text.secondary, margin: 0, fontSize: "1.05rem", lineHeight: 1.6 }}>{it.p}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20, marginTop: 20 }}>
-          <StatBar n="75%" p={<>of companies report making a <b style={{ color: color.text.primary }}>bad hire this year</b> due to flawed assessment.</>} />
-          <StatBar n="85%" p={<>of interview performance <b style={{ color: color.text.primary }}>doesn&apos;t correlate</b> with actual job performance.</>} />
+        <Reveal delay={120}>
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 1,
+            background: color.border.default, border: `1px solid ${color.border.default}`,
+            borderRadius: radius.md, overflow: "hidden", marginTop: 20,
+          }}>
+            {stats.map((s, i) => (
+              <div key={i} style={{ background: color.bg.page, padding: "26px 26px 28px" }}>
+                <div style={{
+                  fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(1.9rem, 3.4vw, 2.6rem)",
+                  letterSpacing: "-0.03em", lineHeight: 1, color: color.text.primary,
+                }}>
+                  {s.raw ?? <RollingNumber end={s.n} suffix={s.suffix} />}
+                </div>
+                <p style={{ color: color.text.secondary, fontSize: "1rem", lineHeight: 1.55, margin: "14px 0 0" }}>{s.p}</p>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+        <Reveal>
+          <p style={{
+            fontFamily: font.sans, fontSize: "clamp(1.15rem, 1.9vw, 1.5rem)", fontWeight: 600,
+            letterSpacing: "-0.015em", lineHeight: 1.45, color: color.text.primary,
+            textAlign: "center", textWrap: "balance", margin: "52px auto 0",
+            paddingTop: 36, borderTop: `2px solid ${color.accent.base}`,
+          }}>
+            Every fake signal adds another interview a human must absorb.
+          </p>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────── Void */
+
+function Void() {
+  const capabilities = ["Code correctness", "AI orchestration", "Judgement / ambiguity", "Product mindset", "Stakeholder communication"];
+  const tools = [
+    { t: "Coding screens",   s: "RackerHank · Docility",      marks: ["✓", "✗", "✗", "✗", "✗"] },
+    { t: "Take-homes",       s: "AI-written · unverifiable",  marks: ["AI-done", "✗", "✗", "✗", "✗"] },
+    { t: "Human interviews", s: "$200–450/hr · inconsistent", marks: ["✗", "✗", "weak proxy", "✗", "✗"] },
+    { t: "asaya", s: "simulation-based · validated", marks: ["✓", "✓", "✓", "✓", "✓"], us: true },
+  ];
+  const demand = [
+    { n: 181, unit: "YoY", l: "AI-augmented engineering" },
+    { n: 729, unit: "YoY", l: "Forward-deployed engineering" },
+    { n: 63,  unit: "/yr", l: "AI engineer, the #1 fastest-growing role" },
+  ];
+  return (
+    <section id="void" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">03</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 48, maxWidth: 860 }}>
+            <SectionLabel tone="eyebrow"><Scramble text="03 · the assessment void" /></SectionLabel>
+            <h2 style={sectionTitleStyle()}>
+              The job changed.<br />
+              <span className="accent-text">What we measure has not.</span>
+            </h2>
+            <p style={leadStyle({ marginTop: 22 })}>
+              Every legacy assessment skips four of the five skills that make an
+              AI-augmented engineer. The void compounds daily.
+            </p>
+          </div>
+        </Reveal>
+
+        {/* capability matrix */}
+        <Reveal>
+          <div style={{ overflowX: "auto", border: `1px solid ${color.border.default}`, borderRadius: radius.md }}>
+            <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", background: color.bg.panel }}>
+              <thead>
+                <tr>
+                  <th style={matrixHeadStyle({ textAlign: "left" })}>tools</th>
+                  {capabilities.map((c) => (
+                    <th key={c} style={matrixHeadStyle()}>{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tools.map((row) => (
+                  <tr
+                    key={row.t}
+                    className={row.us ? undefined : "matrix-row"}
+                    style={row.us ? { background: color.accent.softer } : undefined}
+                  >
+                    <td style={{ ...matrixCellStyle(), textAlign: "left", whiteSpace: "nowrap", borderTop: row.us ? `1px solid ${color.accent.base}` : undefined }}>
+                      <div style={{ fontFamily: font.sans, fontWeight: 600, fontSize: "1.05rem", color: row.us ? color.accent.base : color.text.primary }}>{row.t}</div>
+                      <div style={{ fontFamily: font.mono, fontSize: 11, letterSpacing: "0.04em", color: row.us ? color.text.secondary : color.text.muted, marginTop: 4 }}>{row.s}</div>
+                    </td>
+                    {row.marks.map((m, i) => (
+                      <td key={i} style={{
+                        ...matrixCellStyle(),
+                        fontFamily: font.mono,
+                        fontSize: m.length > 1 ? 12 : 15,
+                        letterSpacing: m.length > 1 ? "0.08em" : undefined,
+                        textTransform: m.length > 1 ? "uppercase" : undefined,
+                        color: m === "✓" ? color.accent.base : color.text.secondary,
+                        fontWeight: row.us ? 600 : undefined,
+                        borderTop: row.us ? `1px solid ${color.accent.base}` : undefined,
+                      }}>
+                        {m}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Reveal>
+
+        {/* demand stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginTop: 20 }}>
+          {demand.map((d, i) => (
+            <Reveal key={d.l} delay={i * 110}>
+              <div style={{
+                border: `1px solid ${color.border.default}`, background: color.bg.panel,
+                borderRadius: radius.md, padding: "26px 26px 28px", height: "100%",
+                display: "flex", flexDirection: "column", gap: 12,
+              }}>
+                <span style={{
+                  fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(1.9rem, 3.4vw, 2.6rem)",
+                  letterSpacing: "-0.03em", lineHeight: 1, color: color.accent.base,
+                }}>
+                  <RollingNumber end={d.n} prefix="+" suffix="%" />{" "}
+                  <span style={{ fontSize: "0.5em", color: color.text.muted, letterSpacing: "0.08em" }}>{d.unit}</span>
+                </span>
+                <span style={{ color: color.text.secondary, fontSize: "1rem", lineHeight: 1.45 }}>{d.l}</span>
+              </div>
+            </Reveal>
+          ))}
         </div>
-        <p style={{
-          fontFamily: font.mono, fontSize: "clamp(1.05rem, 1.7vw, 1.4rem)", fontWeight: 600,
-          letterSpacing: "-0.02em", lineHeight: 1.4, color: color.text.primary,
-          borderLeft: `2px solid ${color.accent.base}`, paddingLeft: 22, margin: "40px 0 0", maxWidth: "62ch",
-        }}>
-          <span className="fire-text">Correctness is now a commodity.</span> A coding screen that
-          bans AI tests a skill no engineer uses anymore.
+        <p style={{ color: color.text.muted, fontFamily: font.mono, fontSize: 11, letterSpacing: "0.10em", textTransform: "uppercase", margin: "20px 0 0" }}>
+          source: Dice · Lightcast · BLS · SHRM · 2026
         </p>
       </div>
     </section>
   );
 }
 
-function StatBar({ n, p }: { n: string; p: React.ReactNode }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 18,
-      border: `1px solid rgba(255,106,0,0.30)`, background: "rgba(255,106,0,0.04)",
-      borderRadius: radius.md, padding: "20px 24px",
-    }}>
-      <span style={{
-        fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.8rem)",
-        letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base, flexShrink: 0,
-      }}>{n}</span>
-      <span style={{ color: color.text.secondary, fontSize: "0.95rem", lineHeight: 1.5 }}>{p}</span>
-    </div>
-  );
+function matrixHeadStyle(extra: React.CSSProperties = {}): React.CSSProperties {
+  return {
+    fontFamily: font.mono, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.14em",
+    textTransform: "uppercase", color: color.text.secondary,
+    padding: "16px 18px", textAlign: "center",
+    borderBottom: `1px solid ${color.border.default}`,
+    background: color.bg.elevated,
+    ...extra,
+  };
+}
+
+function matrixCellStyle(): React.CSSProperties {
+  return {
+    padding: "18px 18px",
+    textAlign: "center",
+    borderBottom: `1px solid ${color.border.subtle}`,
+  };
 }
 
 /* ─────────────────────────────────────────────────────────────── Engine */
 
 function Engine() {
   const steps = [
-    { n: "01", t: "Tell us your stack", p: "A five-minute intake on your tools, domain, the role, and the capabilities that matter. Everything we need to build your simulation — nothing more.", tag: "~5 minutes" },
-    { n: "02", t: "We generate the sandbox", p: "An intelligence engine mirrors your real environment from calibrated templates — your IDE, AI assistant, live personas, and real constraints. Personalized on the surface, fixed in difficulty." },
-    { n: "03", t: "They work, we watch", p: "Behavioural Telemetry™ captures every decision, prompt, and recovery as it happens — aligned with Stanford & ETS standards. Every action scored; every score evidence-linked." },
-    { n: "04", t: "Capability, measured", p: "An AI-Fluency Index™ and a full competency profile come out the other side — ranked, comparable, and fully auditable.", hot: true },
+    { n: "01", t: "Quick intake", p: "A five-minute form on your stack, the role, and the capabilities that matter. Everything we need to build your simulation, nothing more.", tag: "~5 minutes" },
+    { n: "02", t: "Intelligence engine", p: "The asaya engine personalizes and calibrates a simulation from your real environment: your tools, your problems, fixed in difficulty.", layer: true },
+    { n: "03", t: "Personalized sandbox", p: "A browser-accessible workspace with live personas, an AI assistant, and real-world constraints. Generated in seconds, not months.", layer: true },
+    { n: "04", t: "Scientific evaluation", p: "Behavioural telemetry captures every decision, prompt, and recovery as it happens. Every action scored; every score evidence-linked.", layer: true },
+    { n: "05", t: "Capability, measured", p: "A full competency profile and an AI-Fluency Index™ come out the other side: ranked, comparable, and fully auditable.", hot: true },
   ];
   return (
-    <section id="engine" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 28, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: 640 }}>
-            <SectionLabel tone="eyebrow">03 — how it works</SectionLabel>
-            <h2 style={sectionTitleStyle()}>
-              Your environment in.<br />
-              A <span className="fire-text">calibrated simulation</span> out.
-            </h2>
+    <section id="engine" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">04</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 48, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 28, flexWrap: "wrap" }}>
+            <div style={{ maxWidth: 640 }}>
+              <SectionLabel tone="eyebrow"><Scramble text="04 · how it works" /></SectionLabel>
+              <h2 style={sectionTitleStyle()}>
+                Your environment in.<br />
+                A <span className="accent-text">calibrated simulation</span> out.
+              </h2>
+            </div>
+            <p style={leadStyle({ maxWidth: 380 })}>
+              A five-minute setup generates a personalized, browser-accessible sandbox
+              simulation, rooted in evidence-based assessment science.
+            </p>
           </div>
-          <p style={leadStyle({ maxWidth: 380 })}>
-            A short form on your stack and role generates a personalized work simulation —
-            built and scored by assessment science to measure AI-era capability.
-          </p>
-        </div>
+        </Reveal>
         <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 1,
+          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 1,
           background: color.border.default,
           border: `1px solid ${color.border.default}`,
           borderRadius: radius.md, overflow: "hidden",
         }}>
-          {steps.map((s) => (
-            <div key={s.n} style={{
-              background: s.hot ? "linear-gradient(180deg, rgba(255,106,0,0.06), transparent)" : "#050403",
-              padding: "32px 28px 36px",
-              boxShadow: s.hot ? "inset 0 0 0 1px rgba(255,106,0,0.25)" : undefined,
-            }}>
+          {steps.map((s, i) => (
+            <Reveal key={s.n} delay={i * 90} style={{ height: "100%" }}>
               <div style={{
-                fontFamily: font.mono, fontSize: 12, letterSpacing: "0.20em",
-                color: color.accent.amber, display: "flex", alignItems: "center", gap: 10,
+                background: s.hot ? color.bg.selected : s.layer ? color.accent.softer : color.bg.page,
+                borderTop: s.layer ? `2px solid ${color.accent.base}` : "2px solid transparent",
+                padding: "30px 26px 34px",
+                height: "100%",
               }}>
-                <b style={{ color: s.hot ? color.accent.base : color.text.primary, fontWeight: 600 }}>{s.n}</b> / step
+                <div style={{
+                  fontFamily: font.mono, fontSize: 11, letterSpacing: "0.20em", textTransform: "uppercase",
+                  color: s.hot || s.layer ? color.accent.base : color.text.muted,
+                }}>
+                  stage {s.n}{s.layer && <span> · asaya layer</span>}
+                </div>
+                <h3 style={{
+                  fontFamily: font.sans, fontWeight: 600, fontSize: "1.16rem",
+                  letterSpacing: "-0.015em", margin: "16px 0 12px",
+                  color: s.hot ? color.accent.base : color.text.primary,
+                }}>{s.t}</h3>
+                {s.tag && (
+                  <span style={{
+                    display: "inline-block", marginBottom: 12,
+                    fontFamily: font.mono, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.14em",
+                    textTransform: "uppercase", color: color.accent.base,
+                    border: `1px solid ${color.border.strong}`, borderRadius: radius.sm, padding: "4px 9px",
+                  }}>{s.tag}</span>
+                )}
+                <p style={{ color: color.text.secondary, margin: 0, fontSize: "1rem", lineHeight: 1.55 }}>{s.p}</p>
               </div>
-              <h3 style={{
-                fontFamily: font.mono, fontWeight: 600, fontSize: "1.22rem",
-                letterSpacing: "-0.02em", margin: "18px 0 12px",
-                color: s.hot ? color.accent.base : color.text.primary,
-              }}>{s.t}</h3>
-              {s.tag && (
-                <span style={{
-                  display: "inline-block", marginBottom: 12,
-                  fontFamily: font.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.14em",
-                  textTransform: "uppercase", color: color.accent.base,
-                  border: `1px solid rgba(255,106,0,0.45)`, borderRadius: 5, padding: "5px 10px",
-                }}>{s.tag}</span>
-              )}
-              <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.95rem", lineHeight: 1.55 }}>{s.p}</p>
-            </div>
+            </Reveal>
           ))}
         </div>
-        <p style={{
-          fontFamily: font.mono, fontSize: "clamp(1.1rem, 2vw, 1.5rem)", fontWeight: 600,
-          letterSpacing: "-0.02em", lineHeight: 1.35, color: color.text.primary,
-          textAlign: "center", margin: "40px auto 0", maxWidth: "44ch", textWrap: "balance",
-        }}>
-          Personalized for fidelity. <span className="fire-text">Standardized for fairness.</span> Generated in minutes, not months.
-        </p>
+        <Reveal>
+          <p style={{
+            fontFamily: font.sans, fontSize: "clamp(1.1rem, 2vw, 1.45rem)", fontWeight: 600,
+            letterSpacing: "-0.015em", lineHeight: 1.4, color: color.text.primary,
+            textAlign: "center", margin: "44px auto 0", textWrap: "balance",
+          }}>
+            Personalized for fidelity. <span className="accent-text">Standardized for fairness.</span>
+          </p>
+        </Reveal>
       </div>
     </section>
   );
@@ -341,75 +567,159 @@ function Engine() {
 
 /* ─────────────────────────────────────────────────────────────── Simulation */
 
+// Ticking session clock for the sandbox mock: counts down from 59:07 and
+// quietly wraps, so the HUD reads as live without ever hitting zero.
+function useTickingClock(): string {
+  const [seconds, setSeconds] = useState(59 * 60 + 7);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => {
+      setSeconds((s) => (s <= 55 * 60 ? 59 * 60 + 7 : s - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Token budget draining in irregular bursts, like a real model call log;
+// wraps alongside the clock so the HUD never runs dry.
+function useBurningTokens(): string {
+  const [tokens, setTokens] = useState(200_000);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => {
+      setTokens((t) => {
+        const next = t - (120 + Math.floor(Math.random() * 900));
+        return next < 187_000 ? 200_000 : next;
+      });
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, []);
+  return tokens.toLocaleString("en-US");
+}
+
 function Simulation() {
-  const tiles = [
-    "IDE Workspace", "AI Assistant", "Database", "Documentation",
-    "Terminal", "Client Persona", "Teammate Persona", "Deliverable",
+  const clock = useTickingClock();
+  const tokens = useBurningTokens();
+  const constraints = [
+    { l: "time",    v: clock,     cap: "/ 90m" },
+    { l: "tokens",  v: tokens,    cap: "/ 200,000" },
+    { l: "compute", v: "60.00m",  cap: "/ 60m" },
+    { l: "money",   v: "$25",     cap: "" },
+    { l: "memory",  v: "2,048MB", cap: "" },
+  ];
+  const tabs = [
+    { l: "docs",        note: "" },
+    { l: "messages",    note: "teammate & client personas" },
+    { l: "data",        note: "database" },
+    { l: "terminal",    note: "" },
+    { l: "assistant",   note: "AI" },
+    { l: "deliverable", note: "desired outcome" },
   ];
   return (
-    <section id="simulation" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 820 }}>
-          <SectionLabel tone="eyebrow">04 — the simulation</SectionLabel>
-          <h2 style={sectionTitleStyle()}>
-            One workspace.<br />Every <span className="fire-text">real-world tool</span>.
-          </h2>
-          <p style={leadStyle({ marginTop: 22 })}>
-            Candidates work in a real, sandboxed dev environment — not a whiteboard.
-            Everything the role touches on day one is one tab away.
-          </p>
-        </div>
-        <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 1,
-          background: color.border.default,
-          border: `1px solid ${color.border.default}`,
-          borderRadius: radius.md, overflow: "hidden",
-        }}>
-          {tiles.map((t) => (
-            <div key={t} style={{ background: "#050403", padding: "26px 24px", minHeight: 96, display: "flex", alignItems: "flex-end" }}>
+    <section id="simulation" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">05</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 48, maxWidth: 860 }}>
+            <SectionLabel tone="eyebrow"><Scramble text="05 · inside the simulation" /></SectionLabel>
+            <h2 style={sectionTitleStyle()}>
+              One workspace. Every real-world tool.<br />
+              <span className="accent-text">Every action, scored and ranked.</span>
+            </h2>
+            <p style={leadStyle({ marginTop: 22 })}>
+              Candidates work in a real, sandboxed dev environment, not a whiteboard.
+              Everything the role touches on day one is one tab away.
+            </p>
+          </div>
+        </Reveal>
+
+        {/* sandbox mock: constraint HUD + tab strip */}
+        <Reveal>
+          <div style={{ border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 28, flexWrap: "wrap",
+              padding: "18px 24px", background: color.bg.elevated,
+              borderBottom: `1px solid ${color.border.default}`,
+            }}>
               <span style={{
-                fontFamily: font.mono, fontSize: 13, fontWeight: 600, letterSpacing: "0.06em",
-                textTransform: "uppercase", color: color.text.secondary,
-                display: "inline-flex", alignItems: "center", gap: 10,
+                display: "inline-flex", alignItems: "center", gap: 12,
+                fontFamily: font.sans, fontWeight: 600, fontSize: "1.05rem",
+                letterSpacing: "-0.01em", color: color.text.primary, marginRight: "auto",
               }}>
-                <span style={{ width: 6, height: 6, background: color.accent.base, flexShrink: 0 }} />
-                {t}
+                Simulation sandbox
+                <span className="hud-cursor" aria-hidden="true" style={{
+                  width: 8, height: 16, background: color.fire.bright, display: "inline-block",
+                }} />
               </span>
+              {constraints.map((c) => (
+                <span key={c.l} style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
+                  <span style={{ fontFamily: font.mono, fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: color.text.muted }}>{c.l}</span>
+                  <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 600, color: c.l === "time" ? color.fire.bright : color.text.primary, fontVariantNumeric: "tabular-nums" }}>
+                    {c.v} <span style={{ color: color.text.muted, fontWeight: 400 }}>{c.cap}</span>
+                  </span>
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 1, background: color.border.subtle }}>
+              {tabs.map((t) => (
+                <div key={t.l} style={{ background: color.bg.panel, padding: "22px 20px", minHeight: 92 }}>
+                  <span style={{
+                    fontFamily: font.mono, fontSize: 12.5, fontWeight: 600, letterSpacing: "0.10em",
+                    textTransform: "uppercase", color: color.text.primary,
+                    display: "inline-flex", alignItems: "center", gap: 10,
+                  }}>
+                    <span style={{ width: 6, height: 6, background: color.accent.base, flexShrink: 0 }} />
+                    {t.l}
+                  </span>
+                  {t.note && (
+                    <div style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.04em", color: color.text.muted, marginTop: 8 }}>
+                      {t.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20, marginTop: 20 }}>
-          <Badge tag="Live proctoring" p="Video + identity verified, end to end — so you know who actually did the work." />
-          <Badge tag="Dynamic scenario engine" p="Personalized to the role's environment with progressive difficulty — never identical, impossible to leak." />
+          <Reveal delay={0}>
+            <FeatureNote tag="Advanced proctoring" p="Live-proctored and identity-verified, end to end, so you know who actually did the work." />
+          </Reveal>
+          <Reveal delay={120}>
+            <FeatureNote tag="Dynamic scenario engine" p="Personalized to the role's environment with progressive difficulty. Never identical, impossible to leak." />
+          </Reveal>
         </div>
-        <div style={{
-          marginTop: 20, border: `1px solid ${color.border.default}`, borderRadius: radius.md,
-          padding: "18px 24px", display: "flex", gap: 16, flexWrap: "wrap",
-          alignItems: "center", justifyContent: "center",
-          fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase",
-          color: color.text.muted,
-        }}>
-          <span style={{ color: color.accent.amber, fontWeight: 600 }}>Real-world constraints</span>
-          {["time", "tokens", "compute", "money", "memory"].map((c, i) => (
-            <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 16 }}>
-              {i > 0 && <span style={{ color: color.border.strong }}>·</span>}
-              <span style={{ color: color.text.secondary }}>{c}</span>
-            </span>
-          ))}
-        </div>
+
+        <Reveal>
+          <p style={{
+            fontFamily: font.mono, fontSize: "clamp(12px, 1.1vw, 14.5px)", fontWeight: 600,
+            letterSpacing: "0.18em", textTransform: "uppercase",
+            color: color.text.primary, textAlign: "center",
+            border: `1px solid ${color.accent.base}`, borderRadius: radius.md,
+            background: color.accent.softer,
+            padding: "18px 24px", margin: "36px 0 0",
+          }}>
+            grounded in assessment science:{" "}
+            <span style={{ color: color.accent.base }}>fairness · comparability · validity · reliability</span>
+          </p>
+        </Reveal>
       </div>
     </section>
   );
 }
 
-function Badge({ tag, p }: { tag: string; p: string }) {
+function FeatureNote({ tag, p }: { tag: string; p: string }) {
   return (
-    <div style={{ border: `1px solid ${color.border.default}`, background: color.bg.panel, borderRadius: radius.md, padding: "24px 26px" }}>
+    <div style={{ border: `1px solid ${color.border.default}`, background: color.bg.panel, borderRadius: radius.md, padding: "24px 26px", height: "100%" }}>
       <span style={{
-        fontFamily: font.mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.20em",
+        fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.20em",
         textTransform: "uppercase", color: color.accent.base,
       }}>{tag}</span>
-      <p style={{ color: color.text.secondary, margin: "12px 0 0", fontSize: "0.96rem", lineHeight: 1.6 }}>{p}</p>
+      <p style={{ color: color.text.secondary, margin: "12px 0 0", fontSize: "1.05rem", lineHeight: 1.6 }}>{p}</p>
     </div>
   );
 }
@@ -418,51 +728,57 @@ function Badge({ tag, p }: { tag: string; p: string }) {
 
 function Signal() {
   const pillars = [
-    { n: "01", t: "The Basics", s: "Core competency", items: ["Software engineering fundamentals", "Problem decomposition & structuring", "Code quality, accuracy & debugging"] },
-    { n: "02", t: "The Process", s: "How they work · most important", hot: true, items: ["AI orchestration & prompt design", "Verification & judgment — knows when AI is wrong", "Adaptability when the model fails", "Stakeholder communication & product mindset"] },
-    { n: "03", t: "The Outcome", s: "What gets delivered", items: ["Deliverable meets brief & constraints", "Resource efficiency — time, tokens, cost", "Stakeholder-ready output"] },
+    { n: "01", t: "Core competency", s: "the basics", items: ["Software engineering fundamentals", "Problem decomposition & structuring", "Code quality, accuracy & debugging"] },
+    { n: "02", t: "How they work", s: "the process · most important", hot: true, items: ["AI orchestration & prompt design", "Verification & judgment: knows when AI is wrong", "Adaptability when the model fails", "Stakeholder communication & product mindset"] },
+    { n: "03", t: "What gets delivered", s: "the outcome", items: ["Deliverable meets brief & constraints", "Resource efficiency: time, tokens, cost", "Stakeholder-ready output"] },
   ];
   return (
-    <section id="signal" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 820 }}>
-          <SectionLabel tone="eyebrow">05 — the signal</SectionLabel>
-          <h2 style={sectionTitleStyle()}>
-            Every action,<br /><span className="fire-text">scored and ranked</span>.
-          </h2>
-          <p style={leadStyle({ marginTop: 22 })}>
-            Not a pass/fail. A decision you can defend — scored on the basics, the process,
-            and the outcome, with every score linked to the exact moments that earned it.
-          </p>
-        </div>
+    <section id="signal" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">06</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 48, maxWidth: 860 }}>
+            <SectionLabel tone="eyebrow"><Scramble text="06 · the signal" /></SectionLabel>
+            <h2 style={sectionTitleStyle()}>
+              We measure <span className="accent-text">how the answer was built</span>.
+            </h2>
+            <p style={leadStyle({ marginTop: 22 })}>
+              ~5,000 signals per session. Every pixel, every keystroke. Every score
+              linked to the exact evidence moments that earned it.
+            </p>
+          </div>
+        </Reveal>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-          {pillars.map((p) => (
-            <div key={p.n} style={{
-              border: `1px solid ${p.hot ? "rgba(255,106,0,0.5)" : color.border.default}`,
-              background: p.hot ? "linear-gradient(180deg, rgba(255,106,0,0.05), transparent)" : color.bg.panel,
-              borderRadius: radius.md, padding: "26px 26px 28px",
-              boxShadow: p.hot ? "0 30px 80px -50px rgba(255,106,0,0.45)" : undefined,
-            }}>
-              <div style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: p.hot ? color.accent.base : color.text.muted }}>
-                {p.n} · {p.s}
+          {pillars.map((p, i) => (
+            <Reveal key={p.n} delay={i * 110} style={{ height: "100%" }}>
+              <div style={{
+                border: `1px solid ${p.hot ? color.accent.base : color.border.default}`,
+                background: p.hot ? color.accent.softer : color.bg.panel,
+                borderRadius: radius.md, padding: "26px 26px 28px", height: "100%",
+              }}>
+                <div style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.18em", textTransform: "uppercase", color: p.hot ? color.accent.base : color.text.muted }}>
+                  {p.n} · {p.s}
+                </div>
+                <h3 style={{ fontFamily: font.sans, fontWeight: 600, fontSize: "1.4rem", letterSpacing: "-0.02em", margin: "12px 0 16px", color: p.hot ? color.accent.base : color.text.primary }}>
+                  {p.t}
+                </h3>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {p.items.map((it) => (
+                    <li key={it} style={{ display: "flex", gap: 11, color: color.text.secondary, fontSize: "1rem", lineHeight: 1.5 }}>
+                      <span style={{ width: 5, height: 5, background: p.hot ? color.accent.base : color.text.muted, marginTop: 8, flexShrink: 0 }} />
+                      {it}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <h3 style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1.5rem", letterSpacing: "-0.02em", margin: "12px 0 16px", color: p.hot ? color.accent.base : color.text.primary }}>
-                {p.t}
-              </h3>
-              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-                {p.items.map((it) => (
-                  <li key={it} style={{ display: "flex", gap: 11, color: color.text.secondary, fontSize: "0.93rem", lineHeight: 1.5 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: p.hot ? color.accent.base : color.text.muted, marginTop: 8, flexShrink: 0 }} />
-                    {it}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            </Reveal>
           ))}
         </div>
 
-        <FluencyIndex />
+        <Reveal>
+          <FluencyIndex />
+        </Reveal>
       </div>
     </section>
   );
@@ -470,48 +786,42 @@ function Signal() {
 
 function FluencyIndex() {
   const levels = [
-    { t: "AI-Dependent", v: "~20", p: "Leans on AI for answers; can't tell when it's wrong.", tone: "muted" as const },
-    { t: "AI-Augmented", v: "~55", p: "Directs AI well and verifies it; a reliable, productive contributor.", tone: "mid" as const },
-    { t: "AI-Orchestrator", v: "~90", p: "Multiplies output, catches model failures, and knows when not to use it.", tone: "hot" as const },
+    { t: "AI-Dependent",    p: "Leans on AI for answers; can't tell when it's wrong.", tone: "muted" as const },
+    { t: "AI-Augmented",    p: "Directs AI well and verifies it; a reliable, productive contributor.", tone: "mid" as const },
+    { t: "AI-Orchestrator", p: "Multiplies output, catches model failures, and knows when not to use it.", tone: "hot" as const },
   ];
   const c = (tone: "muted" | "mid" | "hot") =>
     tone === "hot" ? color.accent.base : tone === "mid" ? color.text.primary : color.text.muted;
   return (
     <div style={{
-      marginTop: 20, border: `1px solid rgba(255,106,0,0.30)`, borderRadius: radius.md,
-      padding: "28px 30px 30px", background: "rgba(255,106,0,0.02)",
+      marginTop: 20, border: `1px solid ${color.border.default}`, borderRadius: radius.md,
+      padding: "28px 30px 30px", background: color.bg.panel,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
-        <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1.4rem", letterSpacing: "-0.02em", color: color.text.primary }}>
+        <span style={{ fontFamily: font.sans, fontWeight: 600, fontSize: "1.35rem", letterSpacing: "-0.02em", color: color.text.primary }}>
           AI-Fluency Index<span style={{ color: color.accent.base, fontSize: "0.6em", verticalAlign: "super" }}>™</span>
         </span>
-        <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: color.accent.base }}>
-          not pass / fail · a calibrated spectrum
+        <span style={{ fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: color.text.secondary }}>
+          a calibrated spectrum to measure AI orchestration
         </span>
       </div>
-      {/* spectrum bar */}
+      {/* spectrum bar: dependent → augmented → orchestrator */}
       <div style={{ position: "relative", margin: "30px 0 24px" }}>
-        <div style={{ height: 10, borderRadius: 6, background: "linear-gradient(90deg, #45403b 0%, #5f5346 28%, #9a6526 58%, #ff6a00 86%, #ff9500 100%)" }} />
-        {[20, 55, 90].map((left, i) => (
+        <div style={{ height: 8, borderRadius: radius.sm, background: `linear-gradient(90deg, ${color.bg.selected}, ${color.accent.deep} 55%, ${color.accent.base} 90%, ${color.accent.bright})` }} />
+        {[16, 50, 84].map((left, i) => (
           <span key={left} style={{
             position: "absolute", left: `${left}%`, top: "50%", transform: "translate(-50%, -50%)",
-            width: i === 2 ? 14 : 10, height: i === 2 ? 14 : 10, borderRadius: "50%",
-            background: i === 2 ? color.accent.base : "#1c1916",
-            border: `2px solid ${i === 2 ? color.accent.hover : i === 1 ? color.accent.hover : color.text.muted}`,
+            width: i === 2 ? 14 : 10, height: i === 2 ? 14 : 10,
+            background: i === 2 ? color.accent.base : color.bg.page,
+            border: `2px solid ${i === 2 ? color.accent.bright : i === 1 ? color.text.secondary : color.text.muted}`,
           }} />
         ))}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontFamily: font.mono, fontSize: 10, letterSpacing: "0.12em", color: color.text.muted }}>
-          <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
-        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24 }}>
         {levels.map((l) => (
           <div key={l.t} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1rem", letterSpacing: "-0.01em", color: c(l.tone) }}>{l.t}</span>
-              <span style={{ fontFamily: font.mono, fontSize: 12, color: c(l.tone) }}>{l.v}</span>
-            </div>
-            <p style={{ color: l.tone === "hot" ? color.text.secondary : color.text.muted, fontSize: "0.9rem", lineHeight: 1.5, margin: 0 }}>{l.p}</p>
+            <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1rem", letterSpacing: "-0.01em", color: c(l.tone) }}>{l.t}</span>
+            <p style={{ color: l.tone === "hot" ? color.text.secondary : color.text.muted, fontSize: "0.98rem", lineHeight: 1.5, margin: 0 }}>{l.p}</p>
           </div>
         ))}
       </div>
@@ -519,40 +829,60 @@ function FluencyIndex() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────── Proof */
+/* ─────────────────────────────────────────────────────────────── Impact */
 
-function Proof() {
+function Impact() {
   const metrics = [
-    { n: "10×", l: "faster screening" },
-    { n: "95%", l: "cost saving" },
-    { n: "90%", l: "SME time saved" },
-    { n: "40 → 4", l: "interviews per hire" },
+    { end: 10, suffix: "×", l: "faster screening" },
+    { end: 95, suffix: "%", l: "cost saving" },
+    { end: 90, suffix: "%", l: "SME time saved" },
+    { raw: "40 → 4", l: "interviews per 20 candidates" },
   ];
   return (
-    <section style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
-        <div style={{ marginBottom: 44, maxWidth: 820 }}>
-          <SectionLabel tone="eyebrow">06 — the impact</SectionLabel>
-          <h2 style={sectionTitleStyle()}>
-            20 candidates. ~40 interviews.<br /><span className="fire-text">Replaced</span>.
-          </h2>
-          <p style={leadStyle({ marginTop: 22 })}>
-            Keep the manager and SME judgment that can&apos;t be replaced. asaya. absorbs the
-            broken middle — the simulations of real work that every fake signal turns into
-            another interview.
+    <section id="impact" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">07</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 48, maxWidth: 860 }}>
+            <SectionLabel tone="eyebrow"><Scramble text="07 · the impact" /></SectionLabel>
+            <h2 style={sectionTitleStyle()}>
+              Evaluate 20 candidates for a role in{" "}
+              <span className="accent-text">4 interviews instead of 40</span>.
+            </h2>
+            <p style={leadStyle({ marginTop: 22 })}>
+              Keep the SME judgment that can&apos;t be replaced. asaya absorbs the broken
+              middle, replacing manual screening with automated, work-evidence-based
+              assessment.
+            </p>
+          </div>
+        </Reveal>
+        <Reveal>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 1, background: color.border.default, border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
+            {metrics.map((m) => (
+              <div key={m.l} style={{ background: color.bg.page, padding: "34px 28px 36px" }}>
+                <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base }}>
+                  {m.raw ?? <RollingNumber end={m.end} suffix={m.suffix} />}
+                </div>
+                <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: color.text.secondary, marginTop: 14 }}>{m.l}</div>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+        <Reveal>
+          <p style={{
+            fontFamily: font.sans, fontWeight: 600,
+            fontSize: "clamp(1.15rem, 2vw, 1.5rem)",
+            letterSpacing: "-0.015em", lineHeight: 1.4,
+            color: color.text.primary, textAlign: "center",
+            textWrap: "balance",
+            margin: "52px auto 0",
+            paddingTop: 36,
+            borderTop: `2px solid ${color.accent.base}`,
+          }}>
+            Reducing the immeasurable cost of missed talent.{" "}
+            <span className="accent-text">Giving genuinely capable people a fair shot.</span>
           </p>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 1, background: color.border.default, border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
-          {metrics.map((m) => (
-            <div key={m.l} style={{ background: "#050403", padding: "34px 28px 36px" }}>
-              <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base }}>{m.n}</div>
-              <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: color.text.secondary, marginTop: 14 }}>{m.l}</div>
-            </div>
-          ))}
-        </div>
-        <p style={{ color: color.text.muted, fontSize: "0.95rem", lineHeight: 1.6, margin: "24px 0 0", maxWidth: "70ch" }}>
-          Plus the immeasurable cost — never giving genuinely capable people a fair shot.
-        </p>
+        </Reveal>
       </div>
     </section>
   );
@@ -563,42 +893,44 @@ function Proof() {
 function CTABand() {
   return (
     <section id="company" style={{
-      position: "relative",
       textAlign: "center",
-      padding: "clamp(90px, 14vw, 170px) 0",
+      padding: "clamp(90px, 13vw, 160px) 0",
       borderTop: `1px solid ${color.border.default}`,
-      overflow: "hidden",
     }}>
-      <div style={{ ...WRAP_STYLE, position: "relative", zIndex: 2 }}>
-        <div style={{ display: "flex", justifyContent: "center", marginTop: -28, marginBottom: -34 }}>
-          <FlameCube size={120} intensity={70} hue={26} />
-        </div>
-        <span style={{
-          fontFamily: font.mono, fontSize: 11.5, fontWeight: 500,
-          letterSpacing: "0.28em", textTransform: "uppercase",
-          color: color.accent.amber, display: "inline-block",
-        }}>ready when you are</span>
-        <h2 style={{
-          fontFamily: font.mono, fontWeight: 600,
-          fontSize: "clamp(2.2rem, 6vw, 4.6rem)",
-          letterSpacing: "-0.045em", lineHeight: 0.98,
-          margin: "20px 0 0", color: color.text.primary,
-          textWrap: "balance",
-        }}>
-          Put it through <span className="fire-text">asaya</span>.
-        </h2>
-        <p style={leadStyle({ margin: "24px auto 0", textAlign: "center" })}>
-          Run a pilot with one role. See real signal in a week — and never read another
-          ghost-written résumé.
-        </p>
-        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
-          <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-            <Button variant="primary" size="lg">Try the simulation →</Button>
-          </Link>
-          <a href={CONTACT_HREF} style={{ textDecoration: "none" }}>
-            <Button variant="ghost" size="lg">Talk to us</Button>
-          </a>
-        </div>
+      <div style={WRAP_STYLE}>
+        <Reveal>
+          <div style={{ display: "flex", justifyContent: "center", marginTop: -46, marginBottom: -52 }}>
+            <FlameCube size={124} intensity={70} hue={26} />
+          </div>
+          <span style={{
+            fontFamily: font.mono, fontSize: 11.5, fontWeight: 500,
+            letterSpacing: "0.28em", textTransform: "uppercase",
+            color: color.accent.base, display: "inline-block",
+          }}>ready when you are</span>
+          <h2 style={{
+            fontFamily: font.sans, fontWeight: 600,
+            fontSize: "clamp(2.2rem, 5.6vw, 4.2rem)",
+            letterSpacing: "-0.035em", lineHeight: 1.04,
+            margin: "22px 0 0", color: color.text.primary,
+            textWrap: "balance",
+          }}>
+            Measure what <span className="accent-text">matters</span>.
+          </h2>
+          <p style={{
+            fontFamily: font.sans, fontWeight: 600,
+            fontSize: "clamp(1.15rem, 2vw, 1.5rem)",
+            letterSpacing: "-0.015em", lineHeight: 1.45,
+            color: color.text.primary, textAlign: "center",
+            textWrap: "balance", maxWidth: "52ch",
+            margin: "28px auto 0",
+          }}>
+            Run a pilot with one role <span className="accent-text">for FREE</span>.
+            See real signal in a week, and never assess the old insufficient way.
+          </p>
+          <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
+            <Button href={CONTACT_HREF} variant="primary" size="lg">Talk to us →</Button>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -611,19 +943,21 @@ function Footer() {
     <footer style={{ borderTop: `1px solid ${color.border.default}`, padding: "56px 0 40px" }}>
       <div style={WRAP_STYLE}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 30, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: "34ch" }}>
-            <Wordmark size={22} />
+          <div style={{ maxWidth: "52ch" }}>
+            <Wordmark size={24} />
             <p style={{
-              color: color.text.secondary, fontSize: "0.92rem",
+              color: color.text.secondary, fontSize: "1rem",
               marginTop: 18, lineHeight: 1.65,
             }}>
-              Simulation-based assessment for AI-era roles.<br />Measure what matters.
+              Simulation-based assessment for AI-augmented engineers.<br />
+              Measure what matters.
             </p>
           </div>
           <div style={{ display: "flex", gap: 60, flexWrap: "wrap" }}>
             <FooterCol
               heading="Product"
               links={[
+                { href: "#problem", label: "The problem" },
                 { href: "#engine", label: "How it works" },
                 { href: "#simulation", label: "The simulation" },
                 { href: "#signal", label: "The signal" },
@@ -632,7 +966,6 @@ function Footer() {
             <FooterCol
               heading="Get started"
               links={[
-                { href: ASSESSMENT_HREF, label: "Try the simulation" },
                 { href: CONTACT_HREF, label: "Talk to us" },
               ]}
             />
@@ -644,10 +977,10 @@ function Footer() {
           gap: 16, flexWrap: "wrap",
         }}>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
-            © 2026 asaya. — measure what matters.
+            © 2026 asaya · measure what matters
           </span>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
-            forged under pressure ▲
+            dynamic work simulations · built for AI-era roles
           </span>
         </div>
       </div>
@@ -658,15 +991,15 @@ function Footer() {
 function FooterCol({ heading, links }: { heading: string; links: { href: string; label: string }[] }) {
   return (
     <div>
-      <h5 style={{
+      <h4 style={{
         fontFamily: font.mono, fontSize: 11, fontWeight: 500,
         letterSpacing: "0.22em", textTransform: "uppercase",
         color: color.text.muted, margin: "0 0 16px",
-      }}>{heading}</h5>
+      }}>{heading}</h4>
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
         {links.map((l) => (
           <li key={l.label}>
-            <a href={l.href} style={{ fontFamily: font.mono, fontSize: 12.5, color: color.text.secondary }}>
+            <a href={l.href} style={{ fontFamily: font.mono, fontSize: 13.5, color: color.text.secondary }}>
               {l.label}
             </a>
           </li>
@@ -680,11 +1013,11 @@ function FooterCol({ heading, links }: { heading: string; links: { href: string;
 
 function sectionTitleStyle(): React.CSSProperties {
   return {
-    fontFamily: font.mono,
+    fontFamily: font.sans,
     fontWeight: 600,
-    letterSpacing: "-0.04em",
-    lineHeight: 1.05,
-    fontSize: "clamp(2rem, 4.4vw, 3.4rem)",
+    letterSpacing: "-0.03em",
+    lineHeight: 1.08,
+    fontSize: "clamp(1.9rem, 4vw, 3.1rem)",
     margin: "22px 0 0",
     color: color.text.primary,
     textWrap: "balance",
@@ -694,15 +1027,10 @@ function sectionTitleStyle(): React.CSSProperties {
 function leadStyle(extra: React.CSSProperties = {}): React.CSSProperties {
   return {
     color: color.text.secondary,
-    fontSize: "clamp(1rem, 1.35vw, 1.18rem)",
+    fontSize: "clamp(1.08rem, 1.5vw, 1.32rem)",
     lineHeight: 1.65,
     maxWidth: "56ch",
     margin: 0,
     ...extra,
   };
 }
-
-// Reference the gradient token so the bundler doesn't complain about
-// the unused import (it's available for any future use of the
-// gradient.bar / gradient.fire tokens inline in this file).
-void gradient;

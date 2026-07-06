@@ -1,6 +1,7 @@
 "use client";
+import Link from "next/link";
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
-import { color, radius, size as fontSize, font, gradient } from "@/styles/tokens";
+import { color, radius, size as fontSize, font } from "@/styles/tokens";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
@@ -11,6 +12,9 @@ interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "size"> {
   leadingIcon?: ReactNode;
   trailingIcon?: ReactNode;
   fullWidth?: boolean;
+  /** When set, renders an anchor (via next/link) styled as a button —
+   *  avoids the invalid button-nested-in-anchor pattern for CTAs. */
+  href?: string;
 }
 
 const SIZE_STYLE: Record<Size, CSSProperties> = {
@@ -33,7 +37,7 @@ function variantStyle(variant: Variant, disabled: boolean): CSSProperties {
       };
     }
     return {
-      background: gradient.fire,
+      background: color.accent.base,
       color: color.text.inverse,
       border: "1px solid transparent",
       fontFamily: font.mono,
@@ -52,7 +56,7 @@ function variantStyle(variant: Variant, disabled: boolean): CSSProperties {
       ? { background: color.bg.elevated, color: color.text.muted, border: `1px solid ${color.border.default}` }
       : { background: color.error.soft, color: color.error.base, border: `1px solid ${color.error.base}` };
   }
-  // ghost — uses the fire-button typographic system to pair with primary
+  // ghost — uses the CTA typographic system to pair with primary
   if (disabled) {
     return {
       background: "transparent",
@@ -85,6 +89,7 @@ export default function Button({
   style,
   children,
   className,
+  href,
   ...rest
 }: Props): React.ReactElement {
   const merged: CSSProperties = {
@@ -105,17 +110,29 @@ export default function Button({
   // Variant-specific classes drive hover behavior (glow + lift) from
   // globals.css — inline styles can't express :hover.
   const variantClass =
-    variant === "primary" ? "btn-fire-primary"
-    : variant === "ghost" ? "btn-fire-ghost"
+    variant === "primary" ? "btn-cta-primary"
+    : variant === "ghost" ? "btn-cta-ghost"
     : "";
   const cls = [variantClass, className].filter(Boolean).join(" ");
-  return (
-    <button {...rest} disabled={disabled} style={merged} className={cls || undefined}>
+  const content = (
+    <>
       {leadingIcon && <span style={{ display: "inline-flex" }}>{leadingIcon}</span>}
       {children !== undefined && children !== null && children !== false && (
         <span style={{ display: "inline-flex" }}>{children}</span>
       )}
       {trailingIcon && <span style={{ display: "inline-flex" }}>{trailingIcon}</span>}
+    </>
+  );
+  if (href && !disabled) {
+    return (
+      <Link href={href} role="button" style={{ ...merged, textDecoration: "none" }} className={cls || undefined}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <button {...rest} disabled={disabled} style={merged} className={cls || undefined}>
+      {content}
     </button>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import type { ReviewEvent } from "@/lib/api";
+import { color, radius, font } from "@/styles/tokens";
 import { formatRelativeMs } from "./format";
 
 interface Props {
@@ -18,18 +19,18 @@ function describe(ev: ReviewEvent): EventDescriptor {
   const p = ev.payload;
   switch (ev.type) {
     case "session.created":
-      return { label: "Session started", color: "#56d6a8" };
+      return { label: "Session started", color: color.success.base };
     case "session.ended": {
       const reason = typeof p["endReason"] === "string" ? p["endReason"] : "ended";
-      return { label: `Session ended`, detail: reason, color: "#ff7a7a" };
+      return { label: `Session ended`, detail: reason, color: color.error.base };
     }
     case "pty.output": {
       const bytes = typeof p["bytes"] === "number" ? p["bytes"] : "?";
-      return { label: "Terminal output", detail: `${bytes} bytes`, color: "#7c7fff" };
+      return { label: "Terminal output", detail: `${bytes} bytes`, color: color.accent.base };
     }
     case "pty.input": {
       const bytes = typeof p["bytes"] === "number" ? p["bytes"] : "?";
-      return { label: "Candidate input", detail: `${bytes} bytes`, color: "#7c7fff" };
+      return { label: "Candidate input", detail: `${bytes} bytes`, color: color.accent.base };
     }
     case "file.write": {
       const path = typeof p["path"] === "string" ? p["path"] : "?";
@@ -37,7 +38,7 @@ function describe(ev: ReviewEvent): EventDescriptor {
       return {
         label: `File ${action}`,
         detail: path,
-        color: "#e0b66e",
+        color: color.warn.base,
         scrollTo: `file-${path}`,
       };
     }
@@ -45,7 +46,7 @@ function describe(ev: ReviewEvent): EventDescriptor {
       const tid = typeof p["transcript_id"] === "string" ? p["transcript_id"] : null;
       return {
         label: "Candidate message",
-        color: "#9b87ff",
+        color: color.persona.team,
         ...(tid ? { scrollTo: `turn-${tid}` } : {}),
       };
     }
@@ -53,16 +54,16 @@ function describe(ev: ReviewEvent): EventDescriptor {
       const tid = typeof p["transcript_id"] === "string" ? p["transcript_id"] : null;
       return {
         label: "AI reply",
-        color: "#9b87ff",
+        color: color.persona.team,
         ...(tid ? { scrollTo: `turn-${tid}` } : {}),
       };
     }
     default:
-      return { label: ev.type, color: "#9999a3" };
+      return { label: ev.type, color: color.text.secondary };
   }
 }
 
-/** Smooth-scroll to a DOM id and flash a 1.2s blue outline highlight. Used by
+/** Smooth-scroll to a DOM id and flash a 1.2s accent outline highlight. Used by
  *  Timeline internally for its existing scrollTo behaviour (file.write,
  *  chat.user, chat.assistant rows), and by Scorecard.tsx to jump from an
  *  evidence chip to the underlying event row (`event-${seq}`). Returns true
@@ -73,7 +74,7 @@ export function scrollToHighlight(id: string): boolean {
   if (!el) return false;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   const original = el.style.outline;
-  el.style.outline = "2px solid #7c7fff";
+  el.style.outline = `2px solid ${color.accent.base}`;
   el.style.outlineOffset = "2px";
   setTimeout(() => { el.style.outline = original; el.style.outlineOffset = ""; }, 1200);
   return true;
@@ -88,9 +89,9 @@ export default function Timeline({ events, sessionStart }: Props) {
   return (
     <section
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
-        borderRadius: 6,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         marginBottom: 16,
         overflow: "hidden",
       }}
@@ -98,22 +99,22 @@ export default function Timeline({ events, sessionStart }: Props) {
       <header
         style={{
           padding: "10px 16px",
-          background: "#1c1c24",
-          borderBottom: "1px solid #2a2a36",
+          background: color.bg.elevated,
+          borderBottom: `1px solid ${color.border.default}`,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#9999a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Timeline
         </span>
-        <span style={{ fontSize: 11, color: "#6a6a78" }}>{events.length} events</span>
+        <span style={{ fontSize: 11, color: color.text.muted }}>{events.length} events</span>
       </header>
 
       <div style={{ maxHeight: 560, overflowY: "auto" }}>
         {events.length === 0 ? (
-          <div style={{ padding: 24, color: "#6a6a78", fontSize: 13, textAlign: "center" }}>
+          <div style={{ padding: 24, color: color.text.muted, fontSize: 13, textAlign: "center" }}>
             No events
           </div>
         ) : (
@@ -128,7 +129,7 @@ export default function Timeline({ events, sessionStart }: Props) {
                 onClick={clickable ? () => scrollToId(d.scrollTo!) : undefined}
                 style={{
                   padding: "8px 16px",
-                  borderBottom: "1px solid #22222b",
+                  borderBottom: `1px solid ${color.border.subtle}`,
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
@@ -136,7 +137,7 @@ export default function Timeline({ events, sessionStart }: Props) {
                   transition: "background 0.1s",
                 }}
                 onMouseEnter={(e) => {
-                  if (clickable) (e.currentTarget as HTMLDivElement).style.background = "#1f1f28";
+                  if (clickable) (e.currentTarget as HTMLDivElement).style.background = color.bg.hover;
                 }}
                 onMouseLeave={(e) => {
                   (e.currentTarget as HTMLDivElement).style.background = "transparent";
@@ -153,24 +154,24 @@ export default function Timeline({ events, sessionStart }: Props) {
                 />
                 <span
                   style={{
-                    fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                    fontFamily: font.mono,
                     fontSize: 10,
-                    color: "#6a6a78",
+                    color: color.text.muted,
                     width: 36,
                     flexShrink: 0,
                   }}
                 >
                   {formatRelativeMs(tMs)}
                 </span>
-                <span style={{ fontSize: 12, color: "#e6e6ea", flexShrink: 0 }}>
+                <span style={{ fontSize: 12, color: color.text.primary, flexShrink: 0 }}>
                   {d.label}
                 </span>
                 {d.detail && (
                   <span
                     style={{
                       fontSize: 11,
-                      color: "#6a6a78",
-                      fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+                      color: color.text.muted,
+                      fontFamily: font.mono,
                       marginLeft: "auto",
                       overflow: "hidden",
                       textOverflow: "ellipsis",

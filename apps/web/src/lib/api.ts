@@ -653,6 +653,55 @@ export async function submitOutcomeInvite(
   return res.json() as Promise<{ written: string[]; status: OutcomeInviteStatus }>;
 }
 
+// ─── "Talk to us" contact + call booking (marketing site) ───────────────────
+// Slots are anonymous { start, end } windows derived server-side from the
+// founder's calendar free/busy — no event details ever reach the browser.
+
+export interface ContactSlot {
+  start: string; // ISO datetime
+  end: string;   // ISO datetime
+}
+
+export interface ContactSlotsResult {
+  configured: boolean;
+  timezone: string; // IANA tz the slots should be rendered in (e.g. America/New_York)
+  slots: ContactSlot[];
+}
+
+export async function getContactSlots(): Promise<ContactSlotsResult> {
+  return apiFetch<ContactSlotsResult>("/api/contact/slots");
+}
+
+export interface BookContactInput {
+  name: string;
+  email: string;
+  query: string;
+  slotStart: string; // ISO datetime of the chosen slot's start
+}
+
+/** Thrown by bookContact when the chosen slot was booked out from under the
+ *  visitor (server returned 409 slot_taken) — refetch slots and re-pick. */
+export class SlotTakenError extends Error {
+  constructor() {
+    super("That slot was just taken");
+    this.name = "SlotTakenError";
+  }
+}
+
+export async function bookContact(input: BookContactInput): Promise<{ ok: boolean }> {
+  try {
+    return await apiFetch<{ ok: boolean }>("/api/contact", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("API error 409")) {
+      throw new SlotTakenError();
+    }
+    throw err;
+  }
+}
+
 // ─── Captured outcomes for a session (review page) ──────────────────────────
 export interface SessionOutcome {
   outcome_type: string;
