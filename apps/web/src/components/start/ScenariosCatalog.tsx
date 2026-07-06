@@ -1,7 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { listScenarios, type ScenarioCatalogItem } from "@/lib/api";
+import {
+  listScenarios,
+  storeInviteCode,
+  getStoredInviteCode,
+  ScenarioInviteRequiredError,
+  type ScenarioCatalogItem,
+} from "@/lib/api";
 import { color, font, radius } from "@/styles/tokens";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -11,25 +17,56 @@ import Wordmark from "@/components/ui/Wordmark";
 
 type Phase =
   | { kind: "loading" }
+  // Server returned 401 — INVITE_CODE is set and no valid code was sent.
+  // The catalog stays hidden until the visitor enters the code.
+  | { kind: "invite-required"; inviteError: string | null; submitting: boolean }
   | { kind: "error"; message: string }
   | { kind: "ready"; scenarios: ScenarioCatalogItem[] };
 
 export default function ScenariosCatalog() {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const [inviteCode, setInviteCode] = useState("");
 
+  // Probe with any code already validated this tab (catalog → start screen
+  // shouldn't ask twice); a bare probe when there isn't one. 401 → prompt.
   useEffect(() => {
     let cancelled = false;
-    listScenarios()
+    listScenarios(getStoredInviteCode() ?? undefined)
       .then((scenarios) => {
         if (!cancelled) setPhase({ kind: "ready", scenarios });
       })
       .catch((err) => {
         if (cancelled) return;
+        if (err instanceof ScenarioInviteRequiredError) {
+          setPhase({ kind: "invite-required", inviteError: null, submitting: false });
+          return;
+        }
         const message = err instanceof Error ? err.message : "Failed to load catalog";
         setPhase({ kind: "error", message });
       });
     return () => { cancelled = true; };
   }, []);
+
+  async function submitInvite(code: string): Promise<void> {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setPhase({ kind: "invite-required", inviteError: "Enter the invite code.", submitting: false });
+      return;
+    }
+    setPhase({ kind: "invite-required", inviteError: null, submitting: true });
+    try {
+      const scenarios = await listScenarios(trimmed);
+      storeInviteCode(trimmed);
+      setPhase({ kind: "ready", scenarios });
+    } catch (err) {
+      if (err instanceof ScenarioInviteRequiredError) {
+        setPhase({ kind: "invite-required", inviteError: "That code didn't work. Check it and try again.", submitting: false });
+      } else {
+        const message = err instanceof Error ? err.message : "Failed to load catalog";
+        setPhase({ kind: "error", message });
+      }
+    }
+  }
 
   return (
     <main
@@ -53,7 +90,9 @@ export default function ScenariosCatalog() {
         </header>
 
         <div style={{ marginBottom: 36 }}>
-          <SectionLabel tone="eyebrow">Choose your assessment</SectionLabel>
+          <SectionLabel tone="eyebrow">
+            {phase.kind === "invite-required" ? "Invite required" : "Choose your assessment"}
+          </SectionLabel>
           <h1
             style={{
               fontFamily: font.mono,
@@ -65,16 +104,60 @@ export default function ScenariosCatalog() {
               textWrap: "balance",
             }}
           >
-            Available simulations
+            {phase.kind === "invite-required" ? "Enter your invite code" : "Available simulations"}
           </h1>
           <p style={{ color: color.text.secondary, fontSize: 14, lineHeight: 1.65, maxWidth: 60 * 8, margin: 0 }}>
-            Each simulation drops you into 90 minutes of a real job. Pick the one your invite points
-            to. The brief loads once you enter your code on the next screen.
+            {phase.kind === "invite-required"
+              ? "The simulation catalog is gated. Paste the code from your invite to see the available assessments."
+              : "Each simulation drops you into 90 minutes of a real job. Pick the one your invite points to."}
           </p>
         </div>
 
         {phase.kind === "loading" && (
           <div style={{ color: color.text.muted, fontSize: 14 }}>Loading…</div>
+        )}
+
+        {phase.kind === "invite-required" && (
+          <Card padding={6}>
+            <form
+              onSubmit={(e) => { e.preventDefault(); void submitInvite(inviteCode); }}
+              style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}
+            >
+              <input
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                placeholder="Invite code"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                style={{
+                  flex: "1 1 220px",
+                  background: color.bg.input,
+                  border: `1px solid ${color.border.default}`,
+                  borderRadius: radius.sm,
+                  color: color.text.primary,
+                  fontFamily: font.mono,
+                  fontSize: 14,
+                  letterSpacing: "0.08em",
+                  padding: "12px 14px",
+                  outline: "none",
+                }}
+              />
+              <Button type="submit" variant="primary" size="lg" disabled={phase.submitting}>
+                {phase.submitting ? "Checking…" : "Unlock"}
+              </Button>
+            </form>
+            {phase.inviteError && (
+              <div role="alert" style={{ color: color.error.base, fontSize: 13, marginTop: 12, lineHeight: 1.5 }}>
+                {phase.inviteError}
+              </div>
+            )}
+            <p style={{ color: color.text.muted, fontSize: 12.5, lineHeight: 1.6, margin: "16px 0 0" }}>
+              No code? <Link href="/contact" style={{ color: color.text.secondary, textDecoration: "underline" }}>Talk to us</Link> and
+              we will set you up with a pilot.
+            </p>
+          </Card>
         )}
 
         {phase.kind === "error" && (

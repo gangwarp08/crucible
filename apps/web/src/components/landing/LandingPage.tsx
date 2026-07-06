@@ -59,7 +59,6 @@ export default function LandingPage(): React.ReactElement {
 function Nav() {
   const links = [
     { href: "#engine", label: "How it works" },
-    { href: "#simulation", label: "The simulation" },
   ];
   return (
     <nav
@@ -92,6 +91,10 @@ function Nav() {
               </a>
             ))}
           </div>
+          {/* Invite-gated: /scenarios asks for the code before showing the list. */}
+          <Button href="/scenarios" variant="ghost" size="md">
+            Run simulation
+          </Button>
           <Button href={CONTACT_HREF} variant="primary" size="md">
             Talk to us
           </Button>
