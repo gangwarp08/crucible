@@ -1,13 +1,14 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { color, font, radius } from "@/styles/tokens";
 import Wordmark from "@/components/ui/Wordmark";
-import CubeFlame from "@/components/ui/CubeFlame";
 import SectionLabel from "@/components/ui/SectionLabel";
 import Button from "@/components/ui/Button";
 import Reveal from "./Reveal";
 import CountUp from "./CountUp";
+import Scramble from "./Scramble";
+import ScrollProgress from "./ScrollProgress";
 
 // Canvas-heavy fire layers are client-only and tree-split out of the initial
 // payload so the marketing page still renders fast on first paint.
@@ -36,6 +37,8 @@ export default function LandingPage(): React.ReactElement {
     <>
       <EmberCanvas intensity={40} hue={26} />
       <div className="landing-vignette" />
+      <div className="grain" />
+      <ScrollProgress />
       <div style={{ position: "relative", zIndex: 2 }}>
         <Nav />
         <Hero />
@@ -105,8 +108,24 @@ function Nav() {
 /* ─────────────────────────────────────────────────────────────── Hero */
 
 function Hero() {
+  // Pointer parallax: the burning cube drifts gently toward the cursor.
+  // Direct style mutation (no state) keeps mousemove cheap.
+  const cubeRef = useRef<HTMLDivElement | null>(null);
+  const reducedRef = useRef(false);
+  useEffect(() => {
+    reducedRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }, []);
+  const onMove = (e: React.MouseEvent<HTMLElement>) => {
+    const el = cubeRef.current;
+    if (!el || reducedRef.current) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width - 0.5;
+    const my = (e.clientY - r.top) / r.height - 0.5;
+    el.style.transform = `translate3d(${(mx * 26).toFixed(1)}px, ${(my * 18).toFixed(1)}px, 0)`;
+  };
   return (
     <header
+      onMouseMove={onMove}
       style={{
         minHeight: "92svh",
         display: "flex",
@@ -140,13 +159,20 @@ function Hero() {
               fontSize: "clamp(2.6rem, 6.4vw, 5.2rem)",
               fontWeight: 600,
               letterSpacing: "-0.035em",
-              lineHeight: 1.04,
+              lineHeight: 1.08,
               margin: "30px 0 0",
-              textWrap: "balance",
               color: color.text.primary,
             }}>
-              The nature of work has changed.<br />
-              <span className="accent-text">The way we assess must too.</span>
+              <span className="line-mask">
+                <span className="line-rise" style={{ animationDelay: "80ms" }}>
+                  The nature of work has changed.
+                </span>
+              </span>
+              <span className="line-mask">
+                <span className="line-rise accent-text" style={{ animationDelay: "260ms" }}>
+                  The way we assess must too.
+                </span>
+              </span>
             </h1>
             <p style={{
               color: color.text.secondary,
@@ -172,7 +198,9 @@ function Hero() {
         {/* The sandbox itself: a wireframe cube with fire burning inside. */}
         <div className="hero-cube" style={{ flex: "0 0 auto", marginRight: -34 }}>
           <Reveal delay={150}>
-            <FlameCube size={215} intensity={62} hue={26} />
+            <div ref={cubeRef} style={{ transition: "transform 300ms cubic-bezier(0.2, 0.6, 0.2, 1)" }}>
+              <FlameCube size={215} intensity={62} hue={26} />
+            </div>
           </Reveal>
         </div>
       </div>
@@ -257,11 +285,12 @@ function Problem() {
     { raw: "3 in 4", p: <>managers have already faced <b style={{ color: color.text.primary }}>AI-generated applications</b>.</> },
   ];
   return (
-    <section id="problem" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
+    <section id="problem" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">02</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
         <Reveal>
           <div style={{ marginBottom: 48, maxWidth: 820 }}>
-            <SectionLabel tone="eyebrow">02 · the problem</SectionLabel>
+            <SectionLabel tone="eyebrow"><Scramble text="02 · the problem" /></SectionLabel>
             <h2 style={sectionTitleStyle()}>
               Every signal is <span className="accent-text">broken</span>.
             </h2>
@@ -348,11 +377,12 @@ function Void() {
     { n: 63,  unit: "/yr", l: "AI engineer, the #1 fastest-growing role" },
   ];
   return (
-    <section id="void" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
+    <section id="void" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">03</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
         <Reveal>
           <div style={{ marginBottom: 48, maxWidth: 860 }}>
-            <SectionLabel tone="eyebrow">03 · the assessment void</SectionLabel>
+            <SectionLabel tone="eyebrow"><Scramble text="03 · the assessment void" /></SectionLabel>
             <h2 style={sectionTitleStyle()}>
               The job changed.<br />
               <span className="accent-text">What we measure has not.</span>
@@ -461,12 +491,13 @@ function Engine() {
     { n: "05", t: "Capability, measured", p: "A full competency profile and an AI-Fluency Index™ come out the other side: ranked, comparable, and fully auditable.", hot: true },
   ];
   return (
-    <section id="engine" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
+    <section id="engine" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">04</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
         <Reveal>
           <div style={{ marginBottom: 48, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 28, flexWrap: "wrap" }}>
             <div style={{ maxWidth: 640 }}>
-              <SectionLabel tone="eyebrow">04 · how it works</SectionLabel>
+              <SectionLabel tone="eyebrow"><Scramble text="04 · how it works" /></SectionLabel>
               <h2 style={sectionTitleStyle()}>
                 Your environment in.<br />
                 A <span className="accent-text">calibrated simulation</span> out.
@@ -547,11 +578,29 @@ function useTickingClock(): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Token budget draining in irregular bursts, like a real model call log;
+// wraps alongside the clock so the HUD never runs dry.
+function useBurningTokens(): string {
+  const [tokens, setTokens] = useState(200_000);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => {
+      setTokens((t) => {
+        const next = t - (120 + Math.floor(Math.random() * 900));
+        return next < 187_000 ? 200_000 : next;
+      });
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, []);
+  return tokens.toLocaleString("en-US");
+}
+
 function Simulation() {
   const clock = useTickingClock();
+  const tokens = useBurningTokens();
   const constraints = [
     { l: "time",    v: clock,     cap: "/ 90m" },
-    { l: "tokens",  v: "200,000", cap: "/ 200,000" },
+    { l: "tokens",  v: tokens,    cap: "/ 200,000" },
     { l: "compute", v: "60.00m",  cap: "/ 60m" },
     { l: "money",   v: "$25",     cap: "" },
     { l: "memory",  v: "2,048MB", cap: "" },
@@ -565,11 +614,12 @@ function Simulation() {
     { l: "deliverable", note: "desired outcome" },
   ];
   return (
-    <section id="simulation" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
+    <section id="simulation" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">05</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
         <Reveal>
           <div style={{ marginBottom: 48, maxWidth: 860 }}>
-            <SectionLabel tone="eyebrow">05 · inside the simulation</SectionLabel>
+            <SectionLabel tone="eyebrow"><Scramble text="05 · inside the simulation" /></SectionLabel>
             <h2 style={sectionTitleStyle()}>
               One workspace. Every real-world tool.<br />
               <span className="accent-text">Every action, scored and ranked.</span>
@@ -594,8 +644,10 @@ function Simulation() {
                 fontFamily: font.sans, fontWeight: 600, fontSize: "1.05rem",
                 letterSpacing: "-0.01em", color: color.text.primary, marginRight: "auto",
               }}>
-                <CubeFlame size={20} />
                 Simulation sandbox
+                <span className="hud-cursor" aria-hidden="true" style={{
+                  width: 8, height: 16, background: color.fire.bright, display: "inline-block",
+                }} />
               </span>
               {constraints.map((c) => (
                 <span key={c.l} style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
@@ -672,11 +724,12 @@ function Signal() {
     { n: "03", t: "What gets delivered", s: "the outcome", items: ["Deliverable meets brief & constraints", "Resource efficiency: time, tokens, cost", "Stakeholder-ready output"] },
   ];
   return (
-    <section id="signal" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
+    <section id="signal" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">06</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
         <Reveal>
           <div style={{ marginBottom: 48, maxWidth: 860 }}>
-            <SectionLabel tone="eyebrow">06 · the signal</SectionLabel>
+            <SectionLabel tone="eyebrow"><Scramble text="06 · the signal" /></SectionLabel>
             <h2 style={sectionTitleStyle()}>
               We measure <span className="accent-text">how the answer was built</span>.
             </h2>
@@ -777,11 +830,12 @@ function Impact() {
     { raw: "40 → 4", l: "interviews per 20 candidates" },
   ];
   return (
-    <section id="impact" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
-      <div style={WRAP_STYLE}>
+    <section id="impact" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <span className="ghost-number" aria-hidden="true">07</span>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
         <Reveal>
           <div style={{ marginBottom: 48, maxWidth: 860 }}>
-            <SectionLabel tone="eyebrow">07 · the impact</SectionLabel>
+            <SectionLabel tone="eyebrow"><Scramble text="07 · the impact" /></SectionLabel>
             <h2 style={sectionTitleStyle()}>
               Evaluate 20 candidates in{" "}
               <span className="accent-text">4 interviews instead of 40</span>.

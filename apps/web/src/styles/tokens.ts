@@ -147,6 +147,8 @@ export const gradient = {
   accentSoft: "linear-gradient(100deg, #d9f99d, #bef264 40%, #a3e635)",
   // Used by telemetry bar fills — deep→bright lime.
   bar:        "linear-gradient(90deg, #4d7c0f, #65a30d 45%, #a3e635 78%, #bef264)",
+  // Fire ramp — scroll-progress bar and other burning fills.
+  fireBar:    "linear-gradient(90deg, #ff4d00, #ff6a00 45%, #ff9500 78%, #ffd400)",
 } as const;
 
 // Score-color helper used by the recruiter scorecard. Single source for the
