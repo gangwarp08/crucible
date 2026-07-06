@@ -29,8 +29,19 @@ export async function buildServer() {
   });
 
   await server.register(fastifyHelmet);
+  // WEB_ORIGIN entries may contain a `*` wildcard — e.g.
+  // "https://crucible-web*.vercel.app" admits the Vercel preview/alias
+  // domains (crucible-web-git-<branch>-….vercel.app etc.), which otherwise
+  // CORS-fail with "Failed to fetch" for anyone browsing a preview deploy.
+  // Wildcards become anchored RegExps over [a-z0-9.-]; exact entries stay
+  // exact strings (@fastify/cors accepts a mixed array).
+  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parseOrigin = (entry: string): string | RegExp =>
+    entry.includes("*")
+      ? new RegExp(`^${entry.split("*").map(escapeRe).join("[a-z0-9.-]*")}$`)
+      : entry;
   const webOrigins = env.WEB_ORIGIN
-    ? env.WEB_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean)
+    ? env.WEB_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean).map(parseOrigin)
     : env.NODE_ENV === "production"
       ? false
       : ["http://localhost:3000"];
