@@ -194,11 +194,32 @@ export interface ScenarioCatalogItem {
 /** Public catalog list. Returns minimal metadata only (no brief / no
  *  rubric); per-scenario detail still requires the invite code via
  *  getScenarioBySlug. */
-export async function listScenarios(): Promise<ScenarioCatalogItem[]> {
-  const res = await fetch(`${SERVER_URL}/api/scenarios`);
+/** Fetch the scenario catalog. Like getScenarioBySlug, the list is behind the
+ *  server's INVITE_CODE gate when one is set — callers probe once without a
+ *  code and prompt on ScenarioInviteRequiredError. */
+export async function listScenarios(inviteCode?: string): Promise<ScenarioCatalogItem[]> {
+  const headers: Record<string, string> = {};
+  if (inviteCode) headers["X-Invite-Code"] = inviteCode;
+  const res = await fetch(`${SERVER_URL}/api/scenarios`, { headers });
+  if (res.status === 401) throw new ScenarioInviteRequiredError("catalog");
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const body = (await res.json()) as { scenarios: ScenarioCatalogItem[] };
   return body.scenarios;
+}
+
+// A validated invite code, kept for the tab's lifetime so the candidate isn't
+// asked again on every gated surface (catalog → start screen). sessionStorage,
+// not localStorage: same trade-off as the session token above.
+const INVITE_CODE_KEY = "crucible.invite.code";
+
+export function storeInviteCode(code: string): void {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.setItem(INVITE_CODE_KEY, code); } catch { /* ignore */ }
+}
+
+export function getStoredInviteCode(): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(INVITE_CODE_KEY); } catch { return null; }
 }
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {

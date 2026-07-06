@@ -10,11 +10,21 @@
 //   client_persona, team_persona, curveballs, dataset_ref.
 
 import { z } from "zod";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { loadScenarioBySlug, listScenarios } from "../services/scenarios.js";
 import { env } from "../env.js";
 
 const ParamsSchema = z.object({ slug: z.string().min(1).max(120) });
+
+/** Invite-code gate shared by the catalog list and the detail route — the
+ *  same shared-secret pattern as POST /sessions. Off (always allowed) when
+ *  env.INVITE_CODE is unset (local dev / preview). */
+function inviteAllowed(request: FastifyRequest): boolean {
+  if (!env.INVITE_CODE) return true;
+  const provided = request.headers["x-invite-code"];
+  const code = Array.isArray(provided) ? provided[0] : provided;
+  return code === env.INVITE_CODE;
+}
 
 interface DeliverableComponent {
   key: string;
@@ -23,13 +33,16 @@ interface DeliverableComponent {
 }
 
 export async function scenariosRoutes(server: FastifyInstance) {
-  // GET /api/scenarios — catalog list.
-  //
-  // Public on purpose: the candidate-facing catalog page needs to render
-  // titles/roles/difficulty without the invite code (the invite-gated
-  // detail route /api/scenarios/:slug carries the actual IP — brief,
-  // constraints, deliverable shape — and stays behind the gate).
-  server.get("/", async (_request, reply) => {
+  // GET /api/scenarios — catalog list. Invite-gated like the detail route:
+  // the list of what we assess (titles, roles, difficulty) is itself
+  // competitive surface, so only invited visitors get to see it.
+  server.get("/", async (request, reply) => {
+    if (!inviteAllowed(request)) {
+      return reply.status(401).send({
+        error: "invite_required",
+        message: "The simulation catalog requires an invite code.",
+      });
+    }
     const rows = await listScenarios();
     return reply.send({ scenarios: rows });
   });
@@ -40,19 +53,13 @@ export async function scenariosRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: "Invalid slug" });
     }
 
-    // Invite-code gate. Same shared-secret pattern as POST /sessions so
-    // competitors can't dump the brief / constraints / deliverable shape
-    // by hitting the URL directly. Gate is off when env.INVITE_CODE is
-    // unset (local dev / preview) — backward-compatible.
-    if (env.INVITE_CODE) {
-      const provided = request.headers["x-invite-code"];
-      const code = Array.isArray(provided) ? provided[0] : provided;
-      if (code !== env.INVITE_CODE) {
-        return reply.status(401).send({
-          error: "invite_required",
-          message: "This assessment requires an invite code.",
-        });
-      }
+    // Invite-code gate so competitors can't dump the brief / constraints /
+    // deliverable shape by hitting the URL directly.
+    if (!inviteAllowed(request)) {
+      return reply.status(401).send({
+        error: "invite_required",
+        message: "This assessment requires an invite code.",
+      });
     }
 
     const scenario = await loadScenarioBySlug(parsed.data.slug);

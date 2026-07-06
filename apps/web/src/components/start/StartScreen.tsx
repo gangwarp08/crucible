@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   createSession, getScenarioBySlug,
+  storeInviteCode, getStoredInviteCode,
   ScenarioNotFoundError, ScenarioInviteRequiredError,
   type Scenario,
 } from "@/lib/api";
@@ -46,16 +47,21 @@ export default function StartScreen({ slug }: Props) {
   // Begin so we don't ask twice. null when the server isn't gating.
   const [validatedInviteCode, setValidatedInviteCode] = useState<string | null>(null);
 
-  // Probe the server for the scenario without an invite code. Two outcomes:
-  //   - 200 → server not gating (or already valid) → render the scenario.
+  // Probe the server for the scenario, reusing any invite code already
+  // validated this tab (e.g. on the catalog page) so the candidate isn't
+  // asked twice. Two outcomes:
+  //   - 200 → server not gating (or the code is valid) → render the scenario.
   //   - 401 → INVITE_CODE is set on the server → flip to invite-required UI
   //          and let the candidate enter the code before the brief loads.
   useEffect(() => {
     let cancelled = false;
     setPhase({ kind: "loading" });
-    getScenarioBySlug(slug)
+    const stored = getStoredInviteCode();
+    getScenarioBySlug(slug, stored ?? undefined)
       .then((scenario) => {
-        if (!cancelled) setPhase({ kind: "ready", scenario });
+        if (cancelled) return;
+        if (stored) setValidatedInviteCode(stored);
+        setPhase({ kind: "ready", scenario });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -81,6 +87,7 @@ export default function StartScreen({ slug }: Props) {
     try {
       const scenario = await getScenarioBySlug(slug, trimmed);
       setValidatedInviteCode(trimmed);
+      storeInviteCode(trimmed);
       setPhase({ kind: "ready", scenario });
     } catch (err) {
       if (err instanceof ScenarioInviteRequiredError) {
