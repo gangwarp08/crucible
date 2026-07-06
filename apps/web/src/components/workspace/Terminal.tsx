@@ -5,6 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { AttachAddon } from "@xterm/addon-attach";
 import "@xterm/xterm/css/xterm.css";
 import { getSessionToken } from "@/lib/api";
+import { color, font } from "@/styles/tokens";
 
 interface Props {
   sessionId: string;
@@ -20,24 +21,28 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
     if (!containerRef.current) return;
 
     const term = new XTerm({
+      // Chrome (background/foreground/cursor/selection) comes from the brand
+      // tokens; ANSI red/green/yellow map to the semantic status tokens.
+      // ANSI blue/cyan/magenta stay functional cool colors — terminal
+      // semantics (paths, prompts, syntax), not brand accents.
       theme: {
-        background: "#0c0c10",         // tokens.color.bg.page
-        foreground: "#e6e6ea",         // tokens.color.text.primary
-        cursor: "#7c7fff",             // tokens.color.accent.base
-        cursorAccent: "#0c0c10",
-        selectionBackground: "rgba(124, 127, 255, 0.30)",
-        black: "#0c0c10",
-        red: "#ff7a7a",
-        green: "#56d6a8",
-        yellow: "#e0b66e",
-        blue: "#7c7fff",
+        background: color.bg.input,
+        foreground: color.text.primary,
+        cursor: color.accent.base,
+        cursorAccent: color.text.inverse,
+        selectionBackground: color.accent.glow,
+        black: color.bg.input,
+        red: color.error.base,
+        green: color.success.base,
+        yellow: color.warn.base,
+        blue: "#7aa2f7",
         magenta: "#b48ce6",
         cyan: "#5cc8d7",
-        white: "#e6e6ea",
-        brightBlack: "#6a6a78",
+        white: color.text.primary,
+        brightBlack: color.text.muted,
       },
       fontSize: 13,
-      fontFamily: "var(--font-mono, 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace)",
+      fontFamily: font.mono,
       cursorBlink: true,
       allowProposedApi: true,
     });

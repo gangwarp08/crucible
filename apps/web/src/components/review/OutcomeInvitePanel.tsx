@@ -10,12 +10,14 @@ import {
   type OutcomeInviteStatus,
   type SessionOutcome,
 } from "@/lib/api";
+import { color, radius, font } from "@/styles/tokens";
+import Button from "@/components/ui/Button";
 
 const STATUS_COLOR: Record<OutcomeInviteStatus, string> = {
-  active: "#3fb950",
-  submitted: "#58a6ff",
-  expired: "#8b949e",
-  revoked: "#f85149",
+  active: color.success.base,
+  submitted: color.accent.base,
+  expired: color.text.muted,
+  revoked: color.error.base,
 };
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -40,6 +42,14 @@ function fmtDate(iso: string): string {
     return iso;
   }
 }
+
+const monoLabel: React.CSSProperties = {
+  fontFamily: font.mono,
+  fontSize: 11,
+  fontWeight: 500,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
 
 interface Props {
   sessionId: string;
@@ -121,47 +131,39 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
   return (
     <section
       style={{
-        background: "#16161c",
-        border: "1px solid #26262e",
-        borderRadius: 10,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         padding: 16,
         marginBottom: 16,
+        fontFamily: font.sans,
+        color: color.text.primary,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Partner feedback</h2>
-        <button
-          onClick={() => void onGenerate()}
-          disabled={generating}
-          style={{
-            background: generating ? "#23304a" : "#1f6feb",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            padding: "6px 12px",
-            fontSize: 13,
-            cursor: generating ? "default" : "pointer",
-          }}
-        >
+        <h2 style={{ ...monoLabel, fontSize: 13, fontWeight: 600, margin: 0, color: color.text.primary }}>
+          Partner feedback
+        </h2>
+        <Button variant="primary" size="sm" disabled={generating} onClick={() => void onGenerate()}>
           {generating ? "Generating…" : "Generate link"}
-        </button>
+        </Button>
       </div>
-      <p style={{ fontSize: 12, color: "#8b949e", margin: "0 0 12px" }}>
+      <p style={{ fontSize: 12, color: color.text.secondary, margin: "0 0 12px" }}>
         Create a single-use link to send a hiring partner so they can report real-world outcomes
         (hired, ramp time, 90-day rating, retention) for this candidate. No account needed.
       </p>
 
       {error && (
-        <p style={{ color: "#f85149", fontSize: 12, marginBottom: 12 }}>Error: {error}</p>
+        <p style={{ color: color.error.base, fontSize: 12, marginBottom: 12 }}>Error: {error}</p>
       )}
 
       {/* Captured real-world outcomes — the payoff: score vs. reality in one place. */}
       {outcomes.length > 0 && (
         <div
           style={{
-            background: "#0c0c10",
-            border: "1px solid #238636",
-            borderRadius: 6,
+            background: color.bg.input,
+            border: `1px solid ${color.success.base}`,
+            borderRadius: radius.sm,
             padding: 12,
             marginBottom: 12,
           }}
@@ -174,13 +176,13 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
               marginBottom: 8,
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#3fb950" }}>
+            <span style={{ ...monoLabel, fontWeight: 600, color: color.success.base }}>
               Reported outcomes
             </span>
             {overallScore !== null && overallScore !== undefined && (
-              <span style={{ fontSize: 12, color: "#8b949e" }}>
+              <span style={{ fontSize: 12, color: color.text.secondary }}>
                 assessment score:{" "}
-                <strong style={{ color: "#e6e6ea" }}>{overallScore.toFixed(2)} / 5</strong>
+                <strong style={{ color: color.text.primary }}>{overallScore.toFixed(2)} / 5</strong>
               </span>
             )}
           </div>
@@ -189,18 +191,18 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
               <div
                 key={`${o.outcome_type}-${i}`}
                 style={{
-                  background: "#16161c",
-                  border: "1px solid #26262e",
-                  borderRadius: 6,
+                  background: color.bg.elevated,
+                  border: `1px solid ${color.border.default}`,
+                  borderRadius: radius.sm,
                   padding: "6px 10px",
                   minWidth: 110,
                 }}
                 title={`source: ${o.source} · ${fmtDate(o.captured_at)}`}
               >
-                <div style={{ fontSize: 11, color: "#8b949e" }}>
+                <div style={{ fontSize: 11, color: color.text.secondary }}>
                   {OUTCOME_LABEL[o.outcome_type] ?? o.outcome_type}
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: "#e6e6ea" }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: color.text.primary }}>
                   {fmtOutcomeValue(o.outcome_type, o.value)}
                 </div>
               </div>
@@ -212,14 +214,14 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
       {freshLink && (
         <div
           style={{
-            background: "#0c0c10",
-            border: "1px solid #1f6feb55",
-            borderRadius: 6,
+            background: color.accent.softer,
+            border: `1px solid ${color.accent.glow}`,
+            borderRadius: radius.sm,
             padding: 12,
             marginBottom: 12,
           }}
         >
-          <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 6 }}>
+          <div style={{ fontSize: 12, color: color.text.secondary, marginBottom: 6 }}>
             Copy this link now — it won&apos;t be shown again:
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -227,70 +229,54 @@ export default function OutcomeInvitePanel({ sessionId, overallScore }: Props) {
               style={{
                 flex: 1,
                 fontSize: 12,
-                color: "#e6e6ea",
+                color: color.text.primary,
                 wordBreak: "break-all",
-                fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                fontFamily: font.mono,
               }}
             >
               {freshLink}
             </code>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => void onCopy()}
-              style={{
-                background: copied ? "#238636" : "#30363d",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                padding: "6px 12px",
-                fontSize: 12,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
+              style={copied ? { color: color.success.base, borderColor: color.success.base } : undefined}
             >
               {copied ? "Copied ✓" : "Copy"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p style={{ fontSize: 12, color: "#8b949e" }}>Loading…</p>
+        <p style={{ fontSize: 12, color: color.text.secondary }}>Loading…</p>
       ) : invites.length === 0 ? (
-        <p style={{ fontSize: 12, color: "#8b949e", margin: 0 }}>No links issued yet.</p>
+        <p style={{ fontSize: 12, color: color.text.secondary, margin: 0 }}>No links issued yet.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
-            <tr style={{ color: "#8b949e", textAlign: "left" }}>
-              <th style={{ padding: "4px 8px", fontWeight: 500 }}>Status</th>
-              <th style={{ padding: "4px 8px", fontWeight: 500 }}>Outcomes requested</th>
-              <th style={{ padding: "4px 8px", fontWeight: 500 }}>Expires</th>
-              <th style={{ padding: "4px 8px", fontWeight: 500 }}></th>
+            <tr style={{ color: color.text.muted, textAlign: "left" }}>
+              <th style={{ ...monoLabel, fontSize: 10, padding: "4px 8px" }}>Status</th>
+              <th style={{ ...monoLabel, fontSize: 10, padding: "4px 8px" }}>Outcomes requested</th>
+              <th style={{ ...monoLabel, fontSize: 10, padding: "4px 8px" }}>Expires</th>
+              <th style={{ padding: "4px 8px" }}></th>
             </tr>
           </thead>
           <tbody>
             {invites.map((inv) => (
-              <tr key={inv.id} style={{ borderTop: "1px solid #26262e" }}>
+              <tr key={inv.id} style={{ borderTop: `1px solid ${color.border.subtle}` }}>
                 <td style={{ padding: "6px 8px" }}>
-                  <span style={{ color: STATUS_COLOR[inv.status], fontWeight: 600 }}>{inv.status}</span>
+                  <span style={{ fontFamily: font.mono, color: STATUS_COLOR[inv.status], fontWeight: 600 }}>
+                    {inv.status}
+                  </span>
                 </td>
-                <td style={{ padding: "6px 8px", color: "#c9d1d9" }}>{inv.outcome_types.join(", ")}</td>
-                <td style={{ padding: "6px 8px", color: "#8b949e" }}>{fmtDate(inv.expires_at)}</td>
+                <td style={{ padding: "6px 8px", color: color.text.primary }}>{inv.outcome_types.join(", ")}</td>
+                <td style={{ padding: "6px 8px", color: color.text.secondary }}>{fmtDate(inv.expires_at)}</td>
                 <td style={{ padding: "6px 8px", textAlign: "right" }}>
                   {inv.status === "active" && (
-                    <button
-                      onClick={() => void onRevoke(inv.id)}
-                      style={{
-                        background: "transparent",
-                        color: "#f85149",
-                        border: "1px solid #f8514955",
-                        borderRadius: 5,
-                        padding: "3px 8px",
-                        fontSize: 11,
-                        cursor: "pointer",
-                      }}
-                    >
+                    <Button variant="danger" size="sm" onClick={() => void onRevoke(inv.id)}>
                       Revoke
-                    </button>
+                    </Button>
                   )}
                 </td>
               </tr>

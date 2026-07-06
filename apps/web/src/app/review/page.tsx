@@ -1,4 +1,5 @@
 import SessionsTable from "@/components/review/SessionsTable";
+import { color } from "@/styles/tokens";
 
 export default function ReviewPage() {
   return (
@@ -15,14 +16,14 @@ export default function ReviewPage() {
             style={{
               fontSize: 26,
               fontWeight: 600,
-              color: "#e6e6ea",
+              color: color.text.primary,
               margin: 0,
               letterSpacing: "-0.4px",
             }}
           >
             Sessions
           </h1>
-          <p style={{ color: "#9999a3", fontSize: 13, margin: "8px 0 0" }}>
+          <p style={{ color: color.text.secondary, fontSize: 13, margin: "8px 0 0" }}>
             Recruiter review · all sessions across candidates
           </p>
         </header>

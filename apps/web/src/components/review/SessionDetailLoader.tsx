@@ -7,6 +7,7 @@ import {
   type ReviewSessionDetail,
 } from "@/lib/api";
 import SessionDetail from "./SessionDetail";
+import { color, font, radius } from "@/styles/tokens";
 
 interface Props {
   id: string;
@@ -59,9 +60,9 @@ function StatusShell({ children }: { children: React.ReactNode }) {
     <main
       style={{
         minHeight: "100vh",
-        background: "#0c0c10",
-        color: "#e6e6ea",
-        fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
+        background: color.bg.page,
+        color: color.text.primary,
+        fontFamily: font.sans,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -76,7 +77,7 @@ function StatusShell({ children }: { children: React.ReactNode }) {
 function Loading() {
   return (
     <StatusShell>
-      <div style={{ textAlign: "center", color: "#9999a3", fontSize: 14 }}>Loading session…</div>
+      <div style={{ textAlign: "center", color: color.text.secondary, fontSize: 14 }}>Loading session…</div>
     </StatusShell>
   );
 }
@@ -88,15 +89,15 @@ function NotFound({ id }: { id: string }) {
         style={{
           textAlign: "center",
           padding: 32,
-          background: "#15151b",
-          border: "1px solid #2a2a36",
-          borderRadius: 6,
+          background: color.bg.panel,
+          border: `1px solid ${color.border.default}`,
+          borderRadius: radius.md,
           maxWidth: 480,
         }}
       >
-        <div style={{ fontSize: 16, color: "#e6e6ea", marginBottom: 8 }}>Session not found</div>
-        <div style={{ fontSize: 12, color: "#9999a3", marginBottom: 20, fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)" }}>{id}</div>
-        <Link href="/review" style={{ color: "#7c7fff", textDecoration: "none", fontSize: 13 }}>
+        <div style={{ fontSize: 16, color: color.text.primary, marginBottom: 8 }}>Session not found</div>
+        <div style={{ fontSize: 12, color: color.text.secondary, marginBottom: 20, fontFamily: font.mono }}>{id}</div>
+        <Link href="/review" style={{ color: color.accent.base, textDecoration: "none", fontSize: 13 }}>
           ← Back to sessions
         </Link>
       </div>
@@ -111,22 +112,22 @@ function Errored({ message, onRetry }: { message: string; onRetry: () => void })
         style={{
           textAlign: "center",
           padding: 32,
-          background: "#15151b",
-          border: "1px solid #2a2a36",
-          borderRadius: 6,
+          background: color.bg.panel,
+          border: `1px solid ${color.border.default}`,
+          borderRadius: radius.md,
           maxWidth: 520,
         }}
       >
-        <div style={{ fontSize: 14, color: "#ff7a7a", marginBottom: 10 }}>Failed to load session</div>
-        <div style={{ fontSize: 12, color: "#9999a3", marginBottom: 20 }}>{message}</div>
+        <div style={{ fontSize: 14, color: color.error.base, marginBottom: 10 }}>Failed to load session</div>
+        <div style={{ fontSize: 12, color: color.text.secondary, marginBottom: 20 }}>{message}</div>
         <button
           onClick={onRetry}
           style={{
-            background: "#7c7fff",
-            color: "#e6e6ea",
+            background: color.accent.base,
+            color: color.text.inverse,
             border: "none",
             padding: "6px 18px",
-            borderRadius: 4,
+            borderRadius: radius.lg,
             cursor: "pointer",
             fontSize: 13,
             marginRight: 8,
@@ -134,7 +135,7 @@ function Errored({ message, onRetry }: { message: string; onRetry: () => void })
         >
           Retry
         </button>
-        <Link href="/review" style={{ color: "#7c7fff", textDecoration: "none", fontSize: 13, marginLeft: 8 }}>
+        <Link href="/review" style={{ color: color.accent.base, textDecoration: "none", fontSize: 13, marginLeft: 8 }}>
           ← Back to sessions
         </Link>
       </div>

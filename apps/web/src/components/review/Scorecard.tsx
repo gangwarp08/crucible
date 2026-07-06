@@ -7,8 +7,9 @@ import {
   type ReviewEvaluationItem,
   type ReviewEvent,
 } from "@/lib/api";
-import { scoreColor, prettyCompetency, asNumber, formatDateTime } from "./format";
+import { prettyCompetency, asNumber, formatDateTime } from "./format";
 import { scrollToHighlight } from "./Timeline";
+import { color, radius, font, scoreColor } from "@/styles/tokens";
 
 interface Props {
   evaluation: ReviewEvaluation | null;
@@ -79,14 +80,14 @@ export default function Scorecard({
   }
 
   const overall = evaluation ? asNumber(evaluation.overall_score) : null;
-  const overallColor = scoreColor(overall);
+  const overallColor = overall !== null ? scoreColor(overall) : color.text.muted;
 
   return (
     <section
       style={{
-        background: "#15151b",
-        border: "1px solid #2a2a36",
-        borderRadius: 6,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.default}`,
+        borderRadius: radius.md,
         marginBottom: 16,
         overflow: "hidden",
       }}
@@ -95,8 +96,8 @@ export default function Scorecard({
       <header
         style={{
           padding: "12px 16px",
-          background: "#1c1c24",
-          borderBottom: "1px solid #2a2a36",
+          background: color.bg.elevated,
+          borderBottom: `1px solid ${color.border.default}`,
           display: "flex",
           alignItems: "center",
           gap: 16,
@@ -107,7 +108,7 @@ export default function Scorecard({
           style={{
             fontSize: 12,
             fontWeight: 600,
-            color: "#9999a3",
+            color: color.text.secondary,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
           }}
@@ -127,8 +128,8 @@ export default function Scorecard({
             >
               {overall.toFixed(2)}
             </span>
-            <span style={{ fontSize: 13, color: "#9999a3", marginLeft: -10 }}>/ 5.00</span>
-            <span style={{ fontSize: 11, color: "#6a6a78" }}>
+            <span style={{ fontSize: 13, color: color.text.secondary, marginLeft: -10 }}>/ 5.00</span>
+            <span style={{ fontSize: 11, color: color.text.muted }}>
               · {evaluation.model ?? "model unknown"}
               · {formatDateTime(evaluation.created_at)}
             </span>
@@ -136,13 +137,13 @@ export default function Scorecard({
         )}
 
         {evaluation && evaluation.status === "error" && (
-          <span style={{ fontSize: 12, color: "#ff7a7a", fontWeight: 500 }}>
+          <span style={{ fontSize: 12, color: color.error.base, fontWeight: 500 }}>
             Evaluation errored — re-run to retry
           </span>
         )}
 
         {!evaluation && (
-          <span style={{ fontSize: 12, color: "#6a6a78", fontStyle: "italic" }}>
+          <span style={{ fontSize: 12, color: color.text.muted, fontStyle: "italic" }}>
             Not yet evaluated
           </span>
         )}
@@ -153,10 +154,10 @@ export default function Scorecard({
           onClick={() => void reevaluate()}
           disabled={run.kind === "running"}
           style={{
-            background: run.kind === "running" ? "#1c1c24" : "#7c7fff",
-            color: run.kind === "running" ? "#9999a3" : "#e6e6ea",
+            background: run.kind === "running" ? color.bg.elevated : color.accent.base,
+            color: run.kind === "running" ? color.text.secondary : color.text.inverse,
             border: "none",
-            borderRadius: 4,
+            borderRadius: radius.lg,
             padding: "6px 14px",
             fontSize: 12,
             cursor: run.kind === "running" ? "not-allowed" : "pointer",
@@ -175,13 +176,13 @@ export default function Scorecard({
         {run.kind === "error" && (
           <div
             style={{
-              background: "rgba(255, 122, 122, 0.10)",
-              color: "#ff7a7a",
+              background: color.error.soft,
+              color: color.error.base,
               padding: "8px 12px",
-              borderRadius: 4,
+              borderRadius: radius.lg,
               fontSize: 12,
               marginBottom: 12,
-              fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+              fontFamily: font.mono,
               wordBreak: "break-word",
             }}
           >
@@ -192,17 +193,17 @@ export default function Scorecard({
         {scorable === false && exclusionReason && (
           <div
             style={{
-              background: "rgba(124, 127, 255, 0.08)",
-              border: "1px solid rgba(124, 127, 255, 0.35)",
-              borderRadius: 4,
+              background: color.accent.soft,
+              border: `1px solid ${color.accent.glow}`,
+              borderRadius: radius.lg,
               padding: "10px 14px",
               marginBottom: 14,
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#9da0ff", letterSpacing: "0.04em" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: color.accent.base, letterSpacing: "0.04em" }}>
               EXCLUDED FROM VALIDITY DATASET · {exclusionReason}
             </div>
-            <div style={{ fontSize: 11.5, color: "#9999a3", marginTop: 5, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11.5, color: color.text.secondary, marginTop: 5, lineHeight: 1.5 }}>
               {EXCLUSION_COPY[exclusionReason] ?? "This session does not meet the scorable floor."}{" "}
               Any score below is informational only — it is NOT counted toward partner-facing
               aggregates and must never be read as &quot;weak candidate.&quot;
@@ -250,8 +251,8 @@ function VerificationCapBanner({
   onResolve: (decision: "confirm" | "override") => void;
 }) {
   const pending = status === "advisory_pending";
-  // amber for pending action, neutral once resolved
-  const accent = pending ? "#e0a83a" : status === "confirmed" ? "#ff7a7a" : "#6a6a78";
+  // warn tone for pending action, neutral once resolved
+  const accent = pending ? color.warn.base : status === "confirmed" ? color.error.base : color.text.muted;
   const reason =
     defenseOutcome === "declined"
       ? "The candidate declined to defend their key decisions"
@@ -260,9 +261,9 @@ function VerificationCapBanner({
   return (
     <div
       style={{
-        background: pending ? "rgba(224, 168, 58, 0.08)" : "#0c0c10",
-        border: `1px solid ${pending ? "rgba(224, 168, 58, 0.35)" : "#22222b"}`,
-        borderRadius: 4,
+        background: pending ? color.warn.soft : color.bg.page,
+        border: `1px solid ${pending ? color.warn.base : color.border.subtle}`,
+        borderRadius: radius.lg,
         padding: "10px 14px",
         marginBottom: 14,
       }}
@@ -276,7 +277,7 @@ function VerificationCapBanner({
               : "VERIFICATION CAP OVERRIDDEN"}
         </span>
         {defenseOutcome && (
-          <span style={{ fontSize: 11, color: "#9999a3" }}>defense: {defenseOutcome}</span>
+          <span style={{ fontSize: 11, color: color.text.secondary }}>defense: {defenseOutcome}</span>
         )}
         <div style={{ flex: 1 }} />
         {pending && (
@@ -284,21 +285,21 @@ function VerificationCapBanner({
             <button
               onClick={() => onResolve("confirm")}
               disabled={cap.kind === "running"}
-              style={capBtn("#ff7a7a", cap.kind === "running")}
+              style={capBtn(color.error.base, cap.kind === "running")}
             >
               {cap.kind === "running" ? "…" : "Confirm cap (exec → 3)"}
             </button>
             <button
               onClick={() => onResolve("override")}
               disabled={cap.kind === "running"}
-              style={capBtn("#7c7fff", cap.kind === "running")}
+              style={capBtn(color.accent.base, cap.kind === "running")}
             >
               Override (keep score)
             </button>
           </>
         )}
       </div>
-      <div style={{ fontSize: 11.5, color: "#9999a3", marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11.5, color: color.text.secondary, marginTop: 6, lineHeight: 1.5 }}>
         {pending
           ? `${reason}. The score below is UNCAPPED — confirm to cap execution at 3 and recompute the overall, or override to keep it as judged.`
           : status === "confirmed"
@@ -306,18 +307,18 @@ function VerificationCapBanner({
             : "A reviewer kept the as-judged score despite a weak defense."}
       </div>
       {cap.kind === "error" && (
-        <div style={{ fontSize: 11, color: "#ff7a7a", marginTop: 6 }}>{cap.message}</div>
+        <div style={{ fontSize: 11, color: color.error.base, marginTop: 6 }}>{cap.message}</div>
       )}
     </div>
   );
 }
 
-function capBtn(color: string, disabled: boolean): CSSProperties {
+function capBtn(bg: string, disabled: boolean): CSSProperties {
   return {
-    background: disabled ? "#1c1c24" : color,
-    color: disabled ? "#9999a3" : "#0c0c10",
+    background: disabled ? color.bg.elevated : bg,
+    color: disabled ? color.text.secondary : color.text.inverse,
     border: "none",
-    borderRadius: 4,
+    borderRadius: radius.lg,
     padding: "5px 12px",
     fontSize: 11.5,
     fontWeight: 600,
@@ -333,14 +334,14 @@ function EmptyState() {
       style={{
         padding: "32px 16px",
         textAlign: "center",
-        color: "#9999a3",
+        color: color.text.secondary,
         fontSize: 13,
         lineHeight: 1.6,
       }}
     >
       No evaluation has been run for this session yet.
       <br />
-      <span style={{ fontSize: 12, color: "#6a6a78" }}>
+      <span style={{ fontSize: 12, color: color.text.muted }}>
         Sessions without a scenario can&apos;t be evaluated.
       </span>
     </div>
@@ -352,13 +353,13 @@ function ErrorState({ summary }: { summary: string | null }) {
     <div
       style={{
         padding: 16,
-        background: "rgba(255, 122, 122, 0.10)",
-        border: "1px solid rgba(255, 122, 122, 0.30)",
-        borderRadius: 4,
-        color: "#ff7a7a",
+        background: color.error.soft,
+        border: `1px solid ${color.error.base}`,
+        borderRadius: radius.lg,
+        color: color.error.base,
         fontSize: 12,
         lineHeight: 1.55,
-        fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+        fontFamily: font.mono,
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
       }}
@@ -394,10 +395,10 @@ function CompleteScorecard({
           style={{
             margin: "0 0 16px",
             padding: "10px 14px",
-            background: "#0c0c10",
-            border: "1px solid #22222b",
-            borderRadius: 4,
-            color: "#e6e6ea",
+            background: color.bg.page,
+            border: `1px solid ${color.border.subtle}`,
+            borderRadius: radius.lg,
+            color: color.text.primary,
             fontSize: 13,
             lineHeight: 1.6,
           }}
@@ -423,7 +424,7 @@ function ItemCard({
   eventBySeq: Map<number, ReviewEvent>;
 }) {
   const notAssessed = item.assessed === false || item.score === null;
-  const color = notAssessed ? "#6a6a78" : scoreColor(item.score);
+  const itemColor = notAssessed ? color.text.muted : scoreColor(item.score as number);
   const stars = notAssessed
     ? ""
     : "★".repeat(item.score as number) + "☆".repeat(5 - (item.score as number));
@@ -431,9 +432,9 @@ function ItemCard({
   return (
     <div
       style={{
-        background: "#0c0c10",
-        border: "1px solid #22222b",
-        borderRadius: 4,
+        background: color.bg.page,
+        border: `1px solid ${color.border.subtle}`,
+        borderRadius: radius.lg,
         padding: "10px 12px",
       }}
     >
@@ -446,14 +447,14 @@ function ItemCard({
           marginBottom: 6,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#e6e6ea" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: color.text.primary }}>
           {prettyCompetency(item.competency)}
         </span>
         <span
           style={{
             fontSize: notAssessed ? 11 : 14,
             fontWeight: 600,
-            color,
+            color: itemColor,
             fontVariantNumeric: "tabular-nums",
             textTransform: notAssessed ? "uppercase" : "none",
             letterSpacing: notAssessed ? "0.04em" : undefined,
@@ -461,9 +462,11 @@ function ItemCard({
         >
           {notAssessed ? "Not assessed" : `${item.score}/5`}
         </span>
-        {!notAssessed && <span style={{ fontSize: 11, color, letterSpacing: 1 }}>{stars}</span>}
+        {!notAssessed && (
+          <span style={{ fontSize: 11, color: itemColor, letterSpacing: 1 }}>{stars}</span>
+        )}
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 10, color: "#6a6a78" }}>
+        <span style={{ fontSize: 10, color: color.text.muted }}>
           weight × {item.weight.toFixed(2)}
         </span>
       </div>
@@ -472,7 +475,7 @@ function ItemCard({
       <div
         style={{
           fontSize: 12,
-          color: "#e6e6ea",
+          color: color.text.primary,
           lineHeight: 1.55,
           marginBottom: item.evidence.length > 0 ? 8 : 0,
         }}
@@ -521,12 +524,12 @@ function EvidenceChip({
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        background: linkable ? "#15151b" : "#0c0c10",
-        border: `1px solid ${linkable ? "#2a2a36" : "#1c1c24"}`,
-        borderRadius: 4,
+        background: linkable ? color.bg.panel : color.bg.page,
+        border: `1px solid ${linkable ? color.border.default : color.border.subtle}`,
+        borderRadius: radius.lg,
         padding: "4px 8px",
         fontSize: 11,
-        color: linkable ? "#e6e6ea" : "#6a6a78",
+        color: linkable ? color.text.primary : color.text.muted,
         cursor: linkable ? "pointer" : "not-allowed",
         opacity: linkable ? 1 : 0.5,
         fontFamily: "inherit",
@@ -536,22 +539,22 @@ function EvidenceChip({
     >
       <span
         style={{
-          color: linkable ? "#7c7fff" : "#6a6a78",
-          fontFamily: "var(--font-mono, ui-monospace, JetBrains Mono, monospace)",
+          color: linkable ? color.accent.base : color.text.muted,
+          fontFamily: font.mono,
           fontWeight: 600,
           flexShrink: 0,
         }}
       >
         seq {eventSeq}
       </span>
-      <span style={{ color: "#6a6a78", flexShrink: 0 }}>·</span>
-      <span style={{ color: "#6a6a78", fontSize: 10, flexShrink: 0 }}>{summary}</span>
+      <span style={{ color: color.text.muted, flexShrink: 0 }}>·</span>
+      <span style={{ color: color.text.muted, fontSize: 10, flexShrink: 0 }}>{summary}</span>
       {note && (
         <>
-          <span style={{ color: "#6a6a78", flexShrink: 0 }}>·</span>
+          <span style={{ color: color.text.muted, flexShrink: 0 }}>·</span>
           <span
             style={{
-              color: "#e6e6ea",
+              color: color.text.primary,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",

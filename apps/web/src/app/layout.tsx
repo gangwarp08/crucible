@@ -11,9 +11,9 @@ const plexSans = IBM_Plex_Sans({
   variable: "--font-sans",
 });
 
-// Monospace — used for headlines, labels, editor, terminal, and any numerics
-// that benefit from tabular-nums. The asaya design system leans heavily
-// on Plex Mono for headings and structural copy.
+// Monospace — used for microlabels, data, editor, terminal, and any numerics
+// that benefit from tabular-nums. Headings run Plex Sans; Plex Mono carries
+// the structural labels and stats.
 const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
@@ -21,9 +21,25 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-mono",
 });
 
+const TITLE = "asaya — measure what matters";
+const DESCRIPTION =
+  "Simulation-based assessment for AI-augmented engineers. A personalized sandbox that scores how people actually work with AI, under real constraints.";
+
 export const metadata: Metadata = {
-  title: "asaya — measure what matters",
-  description: "Simulation-based assessment for AI-augmented engineers. A personalized sandbox that scores how people actually work with AI, under real constraints.",
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    siteName: "asaya",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

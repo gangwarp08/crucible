@@ -66,6 +66,7 @@ export const color = {
     team:      "#6fc7b2",  // teal — internal colleague
     system:    "#9aa094",  // muted gray — neutral
     assistant: "#d9f99d",  // pale lime — the AI, adjacent to brand
+    verifier:  "#8ab4a4",  // muted sage — end-of-session reviewer, distinct from team teal
   },
 } as const;
 

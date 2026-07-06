@@ -7,6 +7,8 @@ import {
   NotFoundError,
   type OutcomeInviteContext,
 } from "@/lib/api";
+import { color, radius, font } from "@/styles/tokens";
+import Button from "@/components/ui/Button";
 
 const LABELS: Record<string, string> = {
   hired: "Did you hire this candidate?",
@@ -17,9 +19,9 @@ const LABELS: Record<string, string> = {
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background: "#0c0c10",
-  color: "#e6e6ea",
-  fontFamily: "var(--font-sans, ui-sans-serif, system-ui, sans-serif)",
+  background: color.bg.page,
+  color: color.text.primary,
+  fontFamily: font.sans,
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "center",
@@ -28,19 +30,36 @@ const page: React.CSSProperties = {
 const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 520,
-  background: "#16161c",
-  border: "1px solid #26262e",
-  borderRadius: 12,
+  background: color.bg.panel,
+  border: `1px solid ${color.border.default}`,
+  borderRadius: radius.md,
   padding: 28,
 };
+const headingStyle: React.CSSProperties = {
+  fontFamily: font.mono,
+  fontSize: 16,
+  fontWeight: 600,
+  letterSpacing: "0.02em",
+  margin: "0 0 8px",
+};
 const fieldWrap: React.CSSProperties = { marginBottom: 18 };
-const labelStyle: React.CSSProperties = { display: "block", fontSize: 14, marginBottom: 6, color: "#c9d1d9" };
+const labelStyle: React.CSSProperties = {
+  display: "block",
+  fontFamily: font.mono,
+  fontSize: 11,
+  fontWeight: 500,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  marginBottom: 6,
+  color: color.text.secondary,
+};
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "#0c0c10",
-  border: "1px solid #30363d",
-  borderRadius: 6,
-  color: "#e6e6ea",
+  background: color.bg.input,
+  border: `1px solid ${color.border.default}`,
+  borderRadius: radius.sm,
+  color: color.text.primary,
+  fontFamily: font.sans,
   padding: "8px 10px",
   fontSize: 14,
 };
@@ -104,8 +123,8 @@ export default function FeedbackForm({ token }: { token: string }) {
   if (notFound) {
     return (
       <Shell>
-        <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Link not found</h1>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>
+        <h1 style={headingStyle}>Link not found</h1>
+        <p style={{ color: color.text.secondary, fontSize: 14 }}>
           This feedback link is invalid or no longer exists. Please ask for a new one.
         </p>
       </Shell>
@@ -114,23 +133,25 @@ export default function FeedbackForm({ token }: { token: string }) {
   if (loadErr) {
     return (
       <Shell>
-        <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Something went wrong</h1>
-        <p style={{ color: "#f85149", fontSize: 14 }}>{loadErr}</p>
+        <h1 style={headingStyle}>Something went wrong</h1>
+        <p style={{ color: color.error.base, fontSize: 14 }}>{loadErr}</p>
       </Shell>
     );
   }
   if (!ctx) {
     return (
       <Shell>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: color.text.secondary, fontSize: 14 }}>Loading…</p>
       </Shell>
     );
   }
   if (done || ctx.status === "submitted") {
     return (
       <Shell>
-        <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Thank you ✓</h1>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>
+        <h1 style={headingStyle}>
+          Thank you <span style={{ color: color.accent.base }}>✓</span>
+        </h1>
+        <p style={{ color: color.text.secondary, fontSize: 14 }}>
           Your feedback has been recorded. You can close this page.
         </p>
       </Shell>
@@ -139,10 +160,8 @@ export default function FeedbackForm({ token }: { token: string }) {
   if (ctx.status === "expired" || ctx.status === "revoked") {
     return (
       <Shell>
-        <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>
-          This link is no longer active
-        </h1>
-        <p style={{ color: "#8b949e", fontSize: 14 }}>
+        <h1 style={headingStyle}>This link is no longer active</h1>
+        <p style={{ color: color.text.secondary, fontSize: 14 }}>
           The feedback link has {ctx.status === "expired" ? "expired" : "been revoked"}. Please ask
           for a new one.
         </p>
@@ -153,8 +172,8 @@ export default function FeedbackForm({ token }: { token: string }) {
   // ── Active form ────────────────────────────────────────────────────────────
   return (
     <Shell>
-      <h1 style={{ fontSize: 18, margin: "0 0 4px" }}>Candidate outcome feedback</h1>
-      <p style={{ color: "#8b949e", fontSize: 13, margin: "0 0 20px" }}>
+      <h1 style={{ ...headingStyle, margin: "0 0 4px" }}>Candidate outcome feedback</h1>
+      <p style={{ color: color.text.secondary, fontSize: 13, margin: "0 0 20px" }}>
         {ctx.scenario_title ? `Assessment: ${ctx.scenario_title}. ` : ""}
         Fill in whatever you know — every field is optional, but please provide at least one.
       </p>
@@ -209,25 +228,19 @@ export default function FeedbackForm({ token }: { token: string }) {
         />
       </div>
 
-      {submitErr && <p style={{ color: "#f85149", fontSize: 13, marginBottom: 12 }}>{submitErr}</p>}
+      {submitErr && (
+        <p style={{ color: color.error.base, fontSize: 13, marginBottom: 12 }}>{submitErr}</p>
+      )}
 
-      <button
-        onClick={() => void onSubmit()}
+      <Button
+        variant="primary"
+        size="lg"
+        fullWidth
         disabled={submitting}
-        style={{
-          width: "100%",
-          background: submitting ? "#23304a" : "#1f6feb",
-          color: "#fff",
-          border: "none",
-          borderRadius: 8,
-          padding: "11px 0",
-          fontSize: 15,
-          fontWeight: 600,
-          cursor: submitting ? "default" : "pointer",
-        }}
+        onClick={() => void onSubmit()}
       >
         {submitting ? "Submitting…" : "Submit feedback"}
-      </button>
+      </Button>
     </Shell>
   );
 }

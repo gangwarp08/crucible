@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { color, font, radius } from "@/styles/tokens";
 import Wordmark from "@/components/ui/Wordmark";
 import SectionLabel from "@/components/ui/SectionLabel";
@@ -79,11 +78,9 @@ function Nav() {
               </a>
             ))}
           </div>
-          <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-            <Button variant="primary" size="md">
-              Start the assessment
-            </Button>
-          </Link>
+          <Button href={ASSESSMENT_HREF} variant="primary" size="md">
+            Start the assessment
+          </Button>
         </div>
       </div>
     </nav>
@@ -144,12 +141,8 @@ function Hero() {
             work with AI, under real constraints.
           </p>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 38 }}>
-            <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-              <Button variant="primary" size="lg">Try the simulation →</Button>
-            </Link>
-            <a href="#engine" style={{ textDecoration: "none" }}>
-              <Button variant="ghost" size="lg">See how it works</Button>
-            </a>
+            <Button href={ASSESSMENT_HREF} variant="primary" size="lg">Try the simulation →</Button>
+            <Button href="#engine" variant="ghost" size="lg">See how it works</Button>
           </div>
           <HeroChips />
         </div>
@@ -310,7 +303,7 @@ function Void() {
                       fontSize: m.length > 1 ? 11 : 14,
                       letterSpacing: m.length > 1 ? "0.08em" : undefined,
                       textTransform: m.length > 1 ? "uppercase" : undefined,
-                      color: m === "✓" ? color.accent.base : color.text.muted,
+                      color: m === "✓" ? color.accent.base : color.text.secondary,
                     }}>
                       {m}
                     </td>
@@ -598,9 +591,9 @@ function Signal() {
 
 function FluencyIndex() {
   const levels = [
-    { t: "AI-Dependent",    v: "~20", p: "Leans on AI for answers; can't tell when it's wrong.", tone: "muted" as const },
-    { t: "AI-Augmented",    v: "~55", p: "Directs AI well and verifies it; a reliable, productive contributor.", tone: "mid" as const },
-    { t: "AI-Orchestrator", v: "~90", p: "Multiplies output, catches model failures, and knows when not to use it.", tone: "hot" as const },
+    { t: "AI-Dependent",    p: "Leans on AI for answers; can't tell when it's wrong.", tone: "muted" as const },
+    { t: "AI-Augmented",    p: "Directs AI well and verifies it; a reliable, productive contributor.", tone: "mid" as const },
+    { t: "AI-Orchestrator", p: "Multiplies output, catches model failures, and knows when not to use it.", tone: "hot" as const },
   ];
   const c = (tone: "muted" | "mid" | "hot") =>
     tone === "hot" ? color.accent.base : tone === "mid" ? color.text.primary : color.text.muted;
@@ -617,10 +610,10 @@ function FluencyIndex() {
           a calibrated spectrum to measure AI orchestration
         </span>
       </div>
-      {/* spectrum bar */}
+      {/* spectrum bar — qualitative: dependent → augmented → orchestrator */}
       <div style={{ position: "relative", margin: "30px 0 24px" }}>
         <div style={{ height: 8, borderRadius: radius.sm, background: `linear-gradient(90deg, ${color.bg.selected}, ${color.accent.deep} 55%, ${color.accent.base} 90%, ${color.accent.bright})` }} />
-        {[20, 55, 90].map((left, i) => (
+        {[16, 50, 84].map((left, i) => (
           <span key={left} style={{
             position: "absolute", left: `${left}%`, top: "50%", transform: "translate(-50%, -50%)",
             width: i === 2 ? 14 : 10, height: i === 2 ? 14 : 10,
@@ -628,17 +621,11 @@ function FluencyIndex() {
             border: `2px solid ${i === 2 ? color.accent.bright : i === 1 ? color.text.secondary : color.text.muted}`,
           }} />
         ))}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, fontFamily: font.mono, fontSize: 10, letterSpacing: "0.12em", color: color.text.muted }}>
-          <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
-        </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 24 }}>
         {levels.map((l) => (
           <div key={l.t} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1rem", letterSpacing: "-0.01em", color: c(l.tone) }}>{l.t}</span>
-              <span style={{ fontFamily: font.mono, fontSize: 12, color: c(l.tone) }}>{l.v}</span>
-            </div>
+            <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1rem", letterSpacing: "-0.01em", color: c(l.tone) }}>{l.t}</span>
             <p style={{ color: l.tone === "hot" ? color.text.secondary : color.text.muted, fontSize: "0.9rem", lineHeight: 1.5, margin: 0 }}>{l.p}</p>
           </div>
         ))}
@@ -654,7 +641,7 @@ function Impact() {
     { n: "10×",    l: "faster screening" },
     { n: "95%",    l: "cost saving" },
     { n: "90%",    l: "SME time saved" },
-    { n: "40 → 4", l: "interviews per hire" },
+    { n: "40 → 4", l: "interviews per 20 candidates" },
   ];
   return (
     <section id="impact" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}` }}>
@@ -717,12 +704,8 @@ function CTABand() {
           another ghost-written résumé.
         </p>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
-          <Link href={ASSESSMENT_HREF} style={{ textDecoration: "none" }}>
-            <Button variant="primary" size="lg">Try the simulation →</Button>
-          </Link>
-          <a href={CONTACT_HREF} style={{ textDecoration: "none" }}>
-            <Button variant="ghost" size="lg">Talk to us</Button>
-          </a>
+          <Button href={ASSESSMENT_HREF} variant="primary" size="lg">Try the simulation →</Button>
+          <Button href={CONTACT_HREF} variant="ghost" size="lg">Talk to us</Button>
         </div>
       </div>
     </section>
@@ -785,11 +768,11 @@ function Footer() {
 function FooterCol({ heading, links }: { heading: string; links: { href: string; label: string }[] }) {
   return (
     <div>
-      <h5 style={{
+      <h4 style={{
         fontFamily: font.mono, fontSize: 11, fontWeight: 500,
         letterSpacing: "0.22em", textTransform: "uppercase",
         color: color.text.muted, margin: "0 0 16px",
-      }}>{heading}</h5>
+      }}>{heading}</h4>
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
         {links.map((l) => (
           <li key={l.label}>

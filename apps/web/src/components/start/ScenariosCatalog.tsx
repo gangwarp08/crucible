@@ -49,9 +49,7 @@ export default function ScenariosCatalog() {
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
         }}>
           <Wordmark />
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <Button variant="ghost" size="sm">Back to overview</Button>
-          </Link>
+          <Button href="/" variant="ghost" size="sm">Back to overview</Button>
         </header>
 
         <div style={{ marginBottom: 36 }}>
