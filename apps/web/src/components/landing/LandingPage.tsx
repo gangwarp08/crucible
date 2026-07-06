@@ -17,10 +17,8 @@ const FlameCube = dynamic(() => import("./FlameCube"), { ssr: false });
 
 const MAXW = 1180;
 
-// Where every "Start the assessment" CTA on the landing page points. The
-// catalog lists every scenario; the per-scenario start screen is one click
-// further in.
-const ASSESSMENT_HREF = "/scenarios";
+// The landing page's only conversion action: the contact/booking flow.
+// (The scenario catalog at /scenarios is reachable via invite links only.)
 const CONTACT_HREF = "/contact";
 
 const WRAP_STYLE = {
@@ -94,8 +92,8 @@ function Nav() {
               </a>
             ))}
           </div>
-          <Button href={ASSESSMENT_HREF} variant="primary" size="md">
-            Start the assessment
+          <Button href={CONTACT_HREF} variant="primary" size="md">
+            Talk to us
           </Button>
         </div>
       </div>
@@ -185,8 +183,8 @@ function Hero() {
               work with AI, under real constraints.
             </p>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 38 }}>
-              <Button href={ASSESSMENT_HREF} variant="primary" size="lg">Try the simulation →</Button>
-              <Button href="#engine" variant="ghost" size="lg">See how it works</Button>
+              <Button href="#engine" variant="primary" size="lg">See how it works →</Button>
+              <Button href={CONTACT_HREF} variant="ghost" size="lg">Talk to us</Button>
             </div>
           </Reveal>
           <Reveal delay={250}>
@@ -923,8 +921,7 @@ function CTABand() {
             another ghost-written résumé.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
-            <Button href={ASSESSMENT_HREF} variant="primary" size="lg">Try the simulation →</Button>
-            <Button href={CONTACT_HREF} variant="ghost" size="lg">Talk to us</Button>
+            <Button href={CONTACT_HREF} variant="primary" size="lg">Talk to us →</Button>
           </div>
         </Reveal>
       </div>
@@ -962,7 +959,6 @@ function Footer() {
             <FooterCol
               heading="Get started"
               links={[
-                { href: ASSESSMENT_HREF, label: "Try the simulation" },
                 { href: CONTACT_HREF, label: "Talk to us" },
               ]}
             />
