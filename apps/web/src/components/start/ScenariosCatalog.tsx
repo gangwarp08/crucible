@@ -155,7 +155,7 @@ function ScenarioCard({ scenario }: { scenario: ScenarioCatalogItem }) {
           </div>
           <div style={{
             fontFamily: font.mono, fontSize: 11, letterSpacing: "0.20em",
-            textTransform: "uppercase", color: color.accent.amber,
+            textTransform: "uppercase", color: color.accent.base,
             flexShrink: 0, paddingTop: 4,
           }}>
             Start →

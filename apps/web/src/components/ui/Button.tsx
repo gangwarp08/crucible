@@ -1,6 +1,6 @@
 "use client";
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
-import { color, radius, size as fontSize, font, gradient } from "@/styles/tokens";
+import { color, radius, size as fontSize, font } from "@/styles/tokens";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
@@ -33,7 +33,7 @@ function variantStyle(variant: Variant, disabled: boolean): CSSProperties {
       };
     }
     return {
-      background: gradient.fire,
+      background: color.accent.base,
       color: color.text.inverse,
       border: "1px solid transparent",
       fontFamily: font.mono,
@@ -52,7 +52,7 @@ function variantStyle(variant: Variant, disabled: boolean): CSSProperties {
       ? { background: color.bg.elevated, color: color.text.muted, border: `1px solid ${color.border.default}` }
       : { background: color.error.soft, color: color.error.base, border: `1px solid ${color.error.base}` };
   }
-  // ghost — uses the fire-button typographic system to pair with primary
+  // ghost — uses the CTA typographic system to pair with primary
   if (disabled) {
     return {
       background: "transparent",
@@ -105,8 +105,8 @@ export default function Button({
   // Variant-specific classes drive hover behavior (glow + lift) from
   // globals.css — inline styles can't express :hover.
   const variantClass =
-    variant === "primary" ? "btn-fire-primary"
-    : variant === "ghost" ? "btn-fire-ghost"
+    variant === "primary" ? "btn-cta-primary"
+    : variant === "ghost" ? "btn-cta-ghost"
     : "";
   const cls = [variantClass, className].filter(Boolean).join(" ");
   return (

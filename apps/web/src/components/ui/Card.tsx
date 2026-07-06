@@ -24,7 +24,7 @@ export default function Card({
 }: Props): React.ReactElement {
   return (
     <div
-      className={interactive ? "card-fire-interactive" : undefined}
+      className={interactive ? "card-interactive" : undefined}
       style={{
         // Subtle top-down gradient on a panel base — matches the design's
         // 180deg fade. Renders almost invisible on near-black but adds depth.

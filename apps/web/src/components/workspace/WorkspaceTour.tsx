@@ -101,7 +101,7 @@ export default function WorkspaceTour({ onDismiss }: Props): React.ReactElement 
             color.bg.panel,
           border: `1px solid ${color.border.strong}`,
           borderRadius: radius.md,
-          boxShadow: "0 24px 80px -20px rgba(0,0,0,0.6), 0 0 60px -20px rgba(255,106,0,0.20)",
+          boxShadow: "0 24px 80px -20px rgba(0,0,0,0.6)",
           padding: 32,
           fontFamily: font.sans,
           color: color.text.primary,
@@ -150,7 +150,7 @@ export default function WorkspaceTour({ onDismiss }: Props): React.ReactElement 
                 fontSize: 11,
                 letterSpacing: "0.18em",
                 textTransform: "uppercase",
-                color: color.accent.amber,
+                color: color.accent.base,
                 paddingTop: 2,
               }}>
                 {it.where}
