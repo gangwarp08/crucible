@@ -916,9 +916,16 @@ function CTABand() {
           }}>
             Measure what <span className="accent-text">matters</span>.
           </h2>
-          <p style={leadStyle({ margin: "24px auto 0", textAlign: "center" })}>
-            Run a pilot with one role for FREE. See real signal in a week, and never read
-            another ghost-written résumé.
+          <p style={{
+            fontFamily: font.sans, fontWeight: 600,
+            fontSize: "clamp(1.15rem, 2vw, 1.5rem)",
+            letterSpacing: "-0.015em", lineHeight: 1.45,
+            color: color.text.primary, textAlign: "center",
+            textWrap: "balance", maxWidth: "52ch",
+            margin: "28px auto 0",
+          }}>
+            Run a pilot with one role <span className="accent-text">for FREE</span>.
+            See real signal in a week, and never assess the old insufficient way.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
             <Button href={CONTACT_HREF} variant="primary" size="lg">Talk to us →</Button>
