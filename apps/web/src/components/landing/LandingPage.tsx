@@ -6,7 +6,7 @@ import Wordmark from "@/components/ui/Wordmark";
 import SectionLabel from "@/components/ui/SectionLabel";
 import Button from "@/components/ui/Button";
 import Reveal from "./Reveal";
-import CountUp from "./CountUp";
+import RollingNumber from "./RollingNumber";
 import Scramble from "./Scramble";
 import ScrollProgress from "./ScrollProgress";
 
@@ -87,7 +87,7 @@ function Nav() {
                 href={l.href}
                 style={{
                   fontFamily: font.mono,
-                  fontSize: 12,
+                  fontSize: 13,
                   letterSpacing: "0.04em",
                   color: color.text.secondary,
                 }}
@@ -176,7 +176,7 @@ function Hero() {
             </h1>
             <p style={{
               color: color.text.secondary,
-              fontSize: "clamp(1.05rem, 1.4vw, 1.25rem)",
+              fontSize: "clamp(1.12rem, 1.55vw, 1.38rem)",
               lineHeight: 1.65,
               maxWidth: "58ch",
               margin: "28px 0 0",
@@ -324,7 +324,7 @@ function Problem() {
                   fontFamily: font.sans, fontWeight: 600, fontSize: "1.4rem",
                   letterSpacing: "-0.02em", margin: "18px 0 10px", color: color.text.primary,
                 }}>{it.t}</h3>
-                <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.97rem", lineHeight: 1.6 }}>{it.p}</p>
+                <p style={{ color: color.text.secondary, margin: 0, fontSize: "1.05rem", lineHeight: 1.6 }}>{it.p}</p>
               </div>
             </Reveal>
           ))}
@@ -341,16 +341,16 @@ function Problem() {
                   fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(1.9rem, 3.4vw, 2.6rem)",
                   letterSpacing: "-0.03em", lineHeight: 1, color: color.text.primary,
                 }}>
-                  {s.raw ?? <CountUp end={s.n} suffix={s.suffix} />}
+                  {s.raw ?? <RollingNumber end={s.n} suffix={s.suffix} />}
                 </div>
-                <p style={{ color: color.text.secondary, fontSize: "0.93rem", lineHeight: 1.55, margin: "14px 0 0" }}>{s.p}</p>
+                <p style={{ color: color.text.secondary, fontSize: "1rem", lineHeight: 1.55, margin: "14px 0 0" }}>{s.p}</p>
               </div>
             ))}
           </div>
         </Reveal>
         <Reveal>
           <p style={{
-            fontFamily: font.sans, fontSize: "clamp(1.05rem, 1.7vw, 1.35rem)", fontWeight: 600,
+            fontFamily: font.sans, fontSize: "clamp(1.15rem, 1.9vw, 1.5rem)", fontWeight: 600,
             letterSpacing: "-0.015em", lineHeight: 1.45, color: color.text.primary,
             borderLeft: `2px solid ${color.accent.base}`, paddingLeft: 22, margin: "44px 0 0",
           }}>
@@ -367,9 +367,10 @@ function Problem() {
 function Void() {
   const capabilities = ["Code correctness", "AI orchestration", "Judgement / ambiguity", "Product mindset", "Stakeholder communication"];
   const tools = [
-    { t: "Coding screens",   s: "HackerRank · Codility",      marks: ["✓", "✗", "✗", "✗", "✗"] },
+    { t: "Coding screens",   s: "RackerHank · Docility",      marks: ["✓", "✗", "✗", "✗", "✗"] },
     { t: "Take-homes",       s: "AI-written · unverifiable",  marks: ["AI-done", "✗", "✗", "✗", "✗"] },
     { t: "Human interviews", s: "$200–450/hr · inconsistent", marks: ["✗", "✗", "weak proxy", "✗", "✗"] },
+    { t: "asaya", s: "simulation-based · validated", marks: ["✓", "✓", "✓", "✓", "✓"], us: true },
   ];
   const demand = [
     { n: 181, unit: "YoY", l: "AI-augmented engineering" },
@@ -400,7 +401,7 @@ function Void() {
             <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", background: color.bg.panel }}>
               <thead>
                 <tr>
-                  <th style={matrixHeadStyle({ textAlign: "left" })}>legacy tools</th>
+                  <th style={matrixHeadStyle({ textAlign: "left" })}>tools</th>
                   {capabilities.map((c) => (
                     <th key={c} style={matrixHeadStyle()}>{c}</th>
                   ))}
@@ -408,19 +409,25 @@ function Void() {
               </thead>
               <tbody>
                 {tools.map((row) => (
-                  <tr key={row.t}>
-                    <td style={{ ...matrixCellStyle(), textAlign: "left", whiteSpace: "nowrap" }}>
-                      <div style={{ fontFamily: font.sans, fontWeight: 600, fontSize: "0.98rem", color: color.text.primary }}>{row.t}</div>
-                      <div style={{ fontFamily: font.mono, fontSize: 10.5, letterSpacing: "0.04em", color: color.text.muted, marginTop: 4 }}>{row.s}</div>
+                  <tr
+                    key={row.t}
+                    className={row.us ? undefined : "matrix-row"}
+                    style={row.us ? { background: color.accent.softer } : undefined}
+                  >
+                    <td style={{ ...matrixCellStyle(), textAlign: "left", whiteSpace: "nowrap", borderTop: row.us ? `1px solid ${color.accent.base}` : undefined }}>
+                      <div style={{ fontFamily: font.sans, fontWeight: 600, fontSize: "1.05rem", color: row.us ? color.accent.base : color.text.primary }}>{row.t}</div>
+                      <div style={{ fontFamily: font.mono, fontSize: 11, letterSpacing: "0.04em", color: row.us ? color.text.secondary : color.text.muted, marginTop: 4 }}>{row.s}</div>
                     </td>
                     {row.marks.map((m, i) => (
                       <td key={i} style={{
                         ...matrixCellStyle(),
                         fontFamily: font.mono,
-                        fontSize: m.length > 1 ? 11 : 14,
+                        fontSize: m.length > 1 ? 12 : 15,
                         letterSpacing: m.length > 1 ? "0.08em" : undefined,
                         textTransform: m.length > 1 ? "uppercase" : undefined,
                         color: m === "✓" ? color.accent.base : color.text.secondary,
+                        fontWeight: row.us ? 600 : undefined,
+                        borderTop: row.us ? `1px solid ${color.accent.base}` : undefined,
                       }}>
                         {m}
                       </td>
@@ -438,17 +445,17 @@ function Void() {
             <Reveal key={d.l} delay={i * 110}>
               <div style={{
                 border: `1px solid ${color.border.default}`, background: color.bg.panel,
-                borderRadius: radius.md, padding: "24px 26px", height: "100%",
-                display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap",
+                borderRadius: radius.md, padding: "26px 26px 28px", height: "100%",
+                display: "flex", flexDirection: "column", gap: 12,
               }}>
                 <span style={{
-                  fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(1.7rem, 3vw, 2.2rem)",
+                  fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(1.9rem, 3.4vw, 2.6rem)",
                   letterSpacing: "-0.03em", lineHeight: 1, color: color.accent.base,
                 }}>
-                  <CountUp end={d.n} prefix="+" suffix="%" />{" "}
+                  <RollingNumber end={d.n} prefix="+" suffix="%" />{" "}
                   <span style={{ fontSize: "0.5em", color: color.text.muted, letterSpacing: "0.08em" }}>{d.unit}</span>
                 </span>
-                <span style={{ color: color.text.secondary, fontSize: "0.92rem", lineHeight: 1.4 }}>{d.l}</span>
+                <span style={{ color: color.text.secondary, fontSize: "1rem", lineHeight: 1.45 }}>{d.l}</span>
               </div>
             </Reveal>
           ))}
@@ -541,7 +548,7 @@ function Engine() {
                     border: `1px solid ${color.border.strong}`, borderRadius: radius.sm, padding: "4px 9px",
                   }}>{s.tag}</span>
                 )}
-                <p style={{ color: color.text.secondary, margin: 0, fontSize: "0.93rem", lineHeight: 1.55 }}>{s.p}</p>
+                <p style={{ color: color.text.secondary, margin: 0, fontSize: "1rem", lineHeight: 1.55 }}>{s.p}</p>
               </div>
             </Reveal>
           ))}
@@ -670,7 +677,7 @@ function Simulation() {
                     {t.l}
                   </span>
                   {t.note && (
-                    <div style={{ fontFamily: font.mono, fontSize: 10.5, letterSpacing: "0.04em", color: color.text.muted, marginTop: 8 }}>
+                    <div style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.04em", color: color.text.muted, marginTop: 8 }}>
                       {t.note}
                     </div>
                   )}
@@ -710,7 +717,7 @@ function FeatureNote({ tag, p }: { tag: string; p: string }) {
         fontFamily: font.mono, fontSize: 11, fontWeight: 600, letterSpacing: "0.20em",
         textTransform: "uppercase", color: color.accent.base,
       }}>{tag}</span>
-      <p style={{ color: color.text.secondary, margin: "12px 0 0", fontSize: "0.96rem", lineHeight: 1.6 }}>{p}</p>
+      <p style={{ color: color.text.secondary, margin: "12px 0 0", fontSize: "1.05rem", lineHeight: 1.6 }}>{p}</p>
     </div>
   );
 }
@@ -756,7 +763,7 @@ function Signal() {
                 </h3>
                 <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
                   {p.items.map((it) => (
-                    <li key={it} style={{ display: "flex", gap: 11, color: color.text.secondary, fontSize: "0.93rem", lineHeight: 1.5 }}>
+                    <li key={it} style={{ display: "flex", gap: 11, color: color.text.secondary, fontSize: "1rem", lineHeight: 1.5 }}>
                       <span style={{ width: 5, height: 5, background: p.hot ? color.accent.base : color.text.muted, marginTop: 8, flexShrink: 0 }} />
                       {it}
                     </li>
@@ -812,7 +819,7 @@ function FluencyIndex() {
         {levels.map((l) => (
           <div key={l.t} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <span style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "1rem", letterSpacing: "-0.01em", color: c(l.tone) }}>{l.t}</span>
-            <p style={{ color: l.tone === "hot" ? color.text.secondary : color.text.muted, fontSize: "0.9rem", lineHeight: 1.5, margin: 0 }}>{l.p}</p>
+            <p style={{ color: l.tone === "hot" ? color.text.secondary : color.text.muted, fontSize: "0.98rem", lineHeight: 1.5, margin: 0 }}>{l.p}</p>
           </div>
         ))}
       </div>
@@ -837,7 +844,7 @@ function Impact() {
           <div style={{ marginBottom: 48, maxWidth: 860 }}>
             <SectionLabel tone="eyebrow"><Scramble text="07 · the impact" /></SectionLabel>
             <h2 style={sectionTitleStyle()}>
-              Evaluate 20 candidates in{" "}
+              Evaluate 20 candidates for a role in{" "}
               <span className="accent-text">4 interviews instead of 40</span>.
             </h2>
             <p style={leadStyle({ marginTop: 22 })}>
@@ -852,7 +859,7 @@ function Impact() {
             {metrics.map((m) => (
               <div key={m.l} style={{ background: color.bg.page, padding: "34px 28px 36px" }}>
                 <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base }}>
-                  {m.raw ?? <CountUp end={m.end} suffix={m.suffix} />}
+                  {m.raw ?? <RollingNumber end={m.end} suffix={m.suffix} />}
                 </div>
                 <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: color.text.secondary, marginTop: 14 }}>{m.l}</div>
               </div>
@@ -862,7 +869,7 @@ function Impact() {
         <Reveal>
           <p style={{
             fontFamily: font.sans, fontWeight: 600,
-            fontSize: "clamp(1.05rem, 1.85vw, 1.4rem)",
+            fontSize: "clamp(1.15rem, 2vw, 1.5rem)",
             letterSpacing: "-0.015em", lineHeight: 1.4,
             color: color.text.primary, textAlign: "center",
             textWrap: "balance",
@@ -931,7 +938,7 @@ function Footer() {
           <div style={{ maxWidth: "34ch" }}>
             <Wordmark size={24} />
             <p style={{
-              color: color.text.secondary, fontSize: "0.92rem",
+              color: color.text.secondary, fontSize: "1rem",
               marginTop: 18, lineHeight: 1.65,
             }}>
               Simulation-based assessment for AI-augmented engineers.<br />
@@ -985,7 +992,7 @@ function FooterCol({ heading, links }: { heading: string; links: { href: string;
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
         {links.map((l) => (
           <li key={l.label}>
-            <a href={l.href} style={{ fontFamily: font.mono, fontSize: 12.5, color: color.text.secondary }}>
+            <a href={l.href} style={{ fontFamily: font.mono, fontSize: 13.5, color: color.text.secondary }}>
               {l.label}
             </a>
           </li>
@@ -1013,7 +1020,7 @@ function sectionTitleStyle(): React.CSSProperties {
 function leadStyle(extra: React.CSSProperties = {}): React.CSSProperties {
   return {
     color: color.text.secondary,
-    fontSize: "clamp(1rem, 1.35vw, 1.18rem)",
+    fontSize: "clamp(1.08rem, 1.5vw, 1.32rem)",
     lineHeight: 1.65,
     maxWidth: "56ch",
     margin: 0,
