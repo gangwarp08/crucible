@@ -45,6 +45,17 @@ export const color = {
     // Halo used in box-shadows (button hover, card hover). Kept subtle.
     glow:    "rgba(163, 230, 53, 0.30)",
   },
+  // Fire family — the simulation itself (the thing under test) renders as
+  // real fire: the cube glyph's flame, ember/flame canvases, burning-down
+  // constraints. Brand lime stays the accent for measurement, scores, CTAs.
+  fire: {
+    base:   "#ff6a00",
+    bright: "#ff9500",
+    yellow: "#ffd400",
+    ember:  "#ff4d00",
+    core:   "#ffe487",
+    glow:   "rgba(255, 122, 20, 0.40)",
+  },
   success: {
     base: "#56d6a8",
     soft: "rgba(86, 214, 168, 0.12)",

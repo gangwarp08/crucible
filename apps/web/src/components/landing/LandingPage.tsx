@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { color, font, radius } from "@/styles/tokens";
 import Wordmark from "@/components/ui/Wordmark";
 import CubeFlame from "@/components/ui/CubeFlame";
@@ -7,6 +8,11 @@ import SectionLabel from "@/components/ui/SectionLabel";
 import Button from "@/components/ui/Button";
 import Reveal from "./Reveal";
 import CountUp from "./CountUp";
+
+// Canvas-heavy fire layers are client-only and tree-split out of the initial
+// payload so the marketing page still renders fast on first paint.
+const EmberCanvas = dynamic(() => import("./EmberCanvas"), { ssr: false });
+const FlameCube = dynamic(() => import("./FlameCube"), { ssr: false });
 
 const MAXW = 1180;
 
@@ -27,18 +33,23 @@ const SECTION_PAD = "clamp(72px, 11vw, 140px) 0";
 
 export default function LandingPage(): React.ReactElement {
   return (
-    <div style={{ position: "relative" }}>
-      <Nav />
-      <Hero />
-      <Problem />
-      <Void />
-      <Engine />
-      <Simulation />
-      <Signal />
-      <Impact />
-      <CTABand />
-      <Footer />
-    </div>
+    <>
+      <EmberCanvas intensity={40} hue={26} />
+      <div className="landing-vignette" />
+      <div style={{ position: "relative", zIndex: 2 }}>
+        <Nav />
+        <Hero />
+        <Ticker />
+        <Problem />
+        <Void />
+        <Engine />
+        <Simulation />
+        <Signal />
+        <Impact />
+        <CTABand />
+        <Footer />
+      </div>
+    </>
   );
 }
 
@@ -103,12 +114,13 @@ function Hero() {
         paddingTop: 66,
       }}
     >
-      <div style={WRAP_STYLE}>
-        <div style={{ maxWidth: 880 }}>
+      <div style={{
+        ...WRAP_STYLE,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 24, flexWrap: "wrap",
+      }}>
+        <div style={{ maxWidth: 720, flex: "1 1 520px" }}>
           <Reveal>
-            <div style={{ marginBottom: 26 }}>
-              <CubeFlame size={72} />
-            </div>
             <span style={{
               fontFamily: font.mono,
               fontSize: 11.5,
@@ -157,8 +169,58 @@ function Hero() {
             <HeroChips />
           </Reveal>
         </div>
+        {/* The sandbox itself: a wireframe cube with fire burning inside. */}
+        <div className="hero-cube" style={{ flex: "0 0 auto", marginRight: -34 }}>
+          <Reveal delay={150}>
+            <FlameCube size={215} intensity={62} hue={26} />
+          </Reveal>
+        </div>
       </div>
     </header>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────── Ticker */
+
+function Ticker() {
+  const items = [
+    "behavioural telemetry", "live-proctored", "dynamic scenario engine",
+    "evidence you can audit", "AI-Fluency Index™", "real constraints",
+  ];
+  const strip = (hidden: boolean) => (
+    <span aria-hidden={hidden || undefined} style={{ display: "inline-flex", alignItems: "center" }}>
+      {items.map((t) => (
+        <span key={t} style={{ display: "inline-flex", alignItems: "center" }}>
+          <span style={{
+            width: 6, height: 6, background: color.fire.base,
+            margin: "0 28px", flex: "none",
+          }} />
+          <span style={{
+            fontFamily: font.mono, fontSize: 12, fontWeight: 500,
+            letterSpacing: "0.22em", textTransform: "uppercase",
+            color: color.text.secondary, whiteSpace: "nowrap",
+          }}>
+            {t}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+  return (
+    <div
+      className="ticker"
+      style={{
+        borderTop: `1px solid ${color.border.default}`,
+        borderBottom: `1px solid ${color.border.default}`,
+        padding: "16px 0",
+        background: "rgba(15, 19, 16, 0.6)",
+      }}
+    >
+      <div className="ticker-track">
+        {strip(false)}
+        {strip(true)}
+      </div>
+    </div>
   );
 }
 
@@ -538,7 +600,7 @@ function Simulation() {
               {constraints.map((c) => (
                 <span key={c.l} style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ fontFamily: font.mono, fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: color.text.muted }}>{c.l}</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 600, color: c.l === "time" ? color.accent.base : color.text.primary, fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 600, color: c.l === "time" ? color.fire.bright : color.text.primary, fontVariantNumeric: "tabular-nums" }}>
                     {c.v} <span style={{ color: color.text.muted, fontWeight: 400 }}>{c.cap}</span>
                   </span>
                 </span>
@@ -774,8 +836,8 @@ function CTABand() {
     }}>
       <div style={WRAP_STYLE}>
         <Reveal>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
-            <CubeFlame size={64} />
+          <div style={{ display: "flex", justifyContent: "center", marginTop: -46, marginBottom: -52 }}>
+            <FlameCube size={124} intensity={70} hue={26} />
           </div>
           <span style={{
             fontFamily: font.mono, fontSize: 11.5, fontWeight: 500,

@@ -84,6 +84,7 @@ button { font-family: inherit; }
 .card-interactive:hover {
   border-color: rgba(236, 238, 233, 0.22) !important;
   transform: translateY(-2px);
+  box-shadow: 0 24px 60px -30px rgba(255, 122, 20, 0.40);
 }
 .card-interactive:hover::after { opacity: 1; }
 
@@ -91,9 +92,9 @@ button { font-family: inherit; }
  * Solid brand lime; no gradients. */
 .accent-text { color: #a3e635; }
 
-/* Brand glyph — the cube with the flame inside (ui/CubeFlame.tsx). The
+/* Brand glyph — the cube with the fire inside (ui/CubeFlame.tsx). The
  * flame gently flickers with a scaleY/scaleX pulse from its base. */
-.brand-glyph { filter: drop-shadow(0 0 6px rgba(163, 230, 53, 0.35)); }
+.brand-glyph { filter: drop-shadow(0 0 6px rgba(255, 122, 20, 0.45)); }
 .brand-glyph .flame {
   transform-box: fill-box;
   transform-origin: 50% 100%;
@@ -102,6 +103,88 @@ button { font-family: inherit; }
 @keyframes flameFlick {
   0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.92; }
   50%      { transform: scaleY(1.14) scaleX(0.92); opacity: 1; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+ * Landing-page fire stage — the CSS-3D wireframe cube that the canvas
+ * fire burns inside (landing/FlameCube.tsx), plus the ambient layers.
+ * ──────────────────────────────────────────────────────────────── */
+.cube-glow {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 106, 0, 0.34),
+    rgba(255, 61, 0, 0.10) 40%,
+    transparent 70%
+  );
+  filter: blur(6px);
+  pointer-events: none;
+}
+.cube-flame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.cube-3d {
+  animation: cube-spin 22s linear infinite;
+}
+.cube-face {
+  border: 1px solid rgba(236, 238, 233, 0.75);
+  background: linear-gradient(180deg, rgba(255, 150, 30, 0.015), rgba(255, 80, 0, 0.05));
+  box-shadow: inset 0 0 24px rgba(255, 120, 0, 0.08);
+}
+.cube-foot {
+  position: absolute;
+  left: 50%;
+  bottom: -4%;
+  transform: translateX(-50%);
+  width: 62%;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 106, 0, 0.5), transparent 80%);
+  filter: blur(4px);
+}
+@keyframes cube-spin {
+  from { transform: rotateX(-22deg) rotateY(0deg); }
+  to   { transform: rotateX(-22deg) rotateY(360deg); }
+}
+@media (max-width: 960px) {
+  .hero-cube { display: none !important; }
+}
+
+/* Landing-page vignette layered above the ember canvas — a warm hearth
+ * glow rising from the bottom of the viewport. */
+.landing-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 120%, rgba(255, 106, 0, 0.09), transparent 55%),
+    radial-gradient(100% 60% at 50% -10%, rgba(255, 180, 80, 0.04), transparent 60%);
+}
+
+/* Keyword ticker — full-width marquee strip under the hero. The track
+ * holds two copies of the content; sliding -50% loops seamlessly. */
+.ticker {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ticker-track {
+  display: inline-flex;
+  align-items: center;
+  animation: ticker-slide 36s linear infinite;
+  will-change: transform;
+}
+@keyframes ticker-slide {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
 }
 
 /* Scroll-reveal (landing/Reveal.tsx): fade + slide-up once per element. */
@@ -120,6 +203,8 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .brand-glyph .flame { animation: none; }
   .reveal { opacity: 1; transform: none; transition: none; }
+  .cube-3d { animation: none; }
+  .ticker-track { animation: none; }
 }
 
 /* Landing nav links + hover. Hidden on narrow screens to keep the bar clean. */

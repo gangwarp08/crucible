@@ -8,8 +8,8 @@ interface Props {
 }
 
 /** Brand glyph: a wireframe isometric cube with a flame burning inside it,
- *  depicting the sandboxed testing environment. The flame renders in the
- *  brand lime family and gently flickers (globals.css .brand-glyph .flame). */
+ *  depicting the sandboxed testing environment. The flame renders in real
+ *  fire colors and gently flickers (globals.css .brand-glyph .flame). */
 export default function CubeFlame({ size = 22 }: Props): React.ReactElement {
   const rawId = useId();
   const gid = rawId.replace(/:/g, "");
@@ -28,9 +28,9 @@ export default function CubeFlame({ size = 22 }: Props): React.ReactElement {
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <defs>
           <linearGradient id={`flm-${gid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={color.accent.pale} />
-            <stop offset="0.55" stopColor={color.accent.base} />
-            <stop offset="1" stopColor={color.accent.deep} />
+            <stop offset="0" stopColor={color.fire.yellow} />
+            <stop offset="0.55" stopColor={color.fire.bright} />
+            <stop offset="1" stopColor={color.fire.ember} />
           </linearGradient>
         </defs>
         {/* cube silhouette */}
@@ -56,7 +56,7 @@ export default function CubeFlame({ size = 22 }: Props): React.ReactElement {
           />
           <path
             d="M12 3.9 C12.95 5.1 13.4 5.8 13.4 6.8 C13.4 7.8 12.8 8.4 12 8.4 C11.2 8.4 10.6 7.8 10.6 6.9 C10.6 6.2 10.9 5.8 11.3 5.4 C11.4 6 11.7 6.3 12 6.3 C11.7 5.4 11.7 4.6 12 3.9 Z"
-            fill="#ecfccb"
+            fill={color.fire.core}
           />
         </g>
       </svg>
