@@ -60,10 +60,8 @@ export default function LandingPage(): React.ReactElement {
 
 function Nav() {
   const links = [
-    { href: "#problem", label: "The problem" },
     { href: "#engine", label: "How it works" },
     { href: "#simulation", label: "The simulation" },
-    { href: "#signal", label: "The signal" },
   ];
   return (
     <nav
@@ -352,7 +350,8 @@ function Problem() {
           <p style={{
             fontFamily: font.sans, fontSize: "clamp(1.15rem, 1.9vw, 1.5rem)", fontWeight: 600,
             letterSpacing: "-0.015em", lineHeight: 1.45, color: color.text.primary,
-            borderLeft: `2px solid ${color.accent.base}`, paddingLeft: 22, margin: "44px 0 0",
+            textAlign: "center", textWrap: "balance", margin: "52px auto 0",
+            paddingTop: 36, borderTop: `2px solid ${color.accent.base}`,
           }}>
             Every fake signal adds another interview a human must absorb.
           </p>
@@ -492,9 +491,9 @@ function matrixCellStyle(): React.CSSProperties {
 function Engine() {
   const steps = [
     { n: "01", t: "Quick intake", p: "A five-minute form on your stack, the role, and the capabilities that matter. Everything we need to build your simulation, nothing more.", tag: "~5 minutes" },
-    { n: "02", t: "Intelligence engine", p: "The asaya engine personalizes and calibrates a simulation from your real environment: your tools, your problems, fixed in difficulty." },
-    { n: "03", t: "Personalized sandbox", p: "A browser-accessible workspace with live personas, an AI assistant, and real-world constraints. Generated in seconds, not months." },
-    { n: "04", t: "Scientific evaluation", p: "Behavioural telemetry captures every decision, prompt, and recovery as it happens. Every action scored; every score evidence-linked." },
+    { n: "02", t: "Intelligence engine", p: "The asaya engine personalizes and calibrates a simulation from your real environment: your tools, your problems, fixed in difficulty.", layer: true },
+    { n: "03", t: "Personalized sandbox", p: "A browser-accessible workspace with live personas, an AI assistant, and real-world constraints. Generated in seconds, not months.", layer: true },
+    { n: "04", t: "Scientific evaluation", p: "Behavioural telemetry captures every decision, prompt, and recovery as it happens. Every action scored; every score evidence-linked.", layer: true },
     { n: "05", t: "Capability, measured", p: "A full competency profile and an AI-Fluency Index™ come out the other side: ranked, comparable, and fully auditable.", hot: true },
   ];
   return (
@@ -525,15 +524,16 @@ function Engine() {
           {steps.map((s, i) => (
             <Reveal key={s.n} delay={i * 90} style={{ height: "100%" }}>
               <div style={{
-                background: s.hot ? color.bg.selected : color.bg.page,
+                background: s.hot ? color.bg.selected : s.layer ? color.accent.softer : color.bg.page,
+                borderTop: s.layer ? `2px solid ${color.accent.base}` : "2px solid transparent",
                 padding: "30px 26px 34px",
                 height: "100%",
               }}>
                 <div style={{
                   fontFamily: font.mono, fontSize: 11, letterSpacing: "0.20em", textTransform: "uppercase",
-                  color: s.hot ? color.accent.base : color.text.muted,
+                  color: s.hot || s.layer ? color.accent.base : color.text.muted,
                 }}>
-                  stage {s.n}
+                  stage {s.n}{s.layer && <span> · asaya layer</span>}
                 </div>
                 <h3 style={{
                   fontFamily: font.sans, fontWeight: 600, fontSize: "1.16rem",
@@ -698,8 +698,12 @@ function Simulation() {
 
         <Reveal>
           <p style={{
-            fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.16em", textTransform: "uppercase",
-            color: color.text.muted, textAlign: "center", margin: "36px 0 0",
+            fontFamily: font.mono, fontSize: "clamp(12px, 1.1vw, 14.5px)", fontWeight: 600,
+            letterSpacing: "0.18em", textTransform: "uppercase",
+            color: color.text.primary, textAlign: "center",
+            border: `1px solid ${color.accent.base}`, borderRadius: radius.md,
+            background: color.accent.softer,
+            padding: "18px 24px", margin: "36px 0 0",
           }}>
             grounded in assessment science:{" "}
             <span style={{ color: color.accent.base }}>fairness · comparability · validity · reliability</span>
@@ -915,7 +919,7 @@ function CTABand() {
             Measure what <span className="accent-text">matters</span>.
           </h2>
           <p style={leadStyle({ margin: "24px auto 0", textAlign: "center" })}>
-            Run a pilot with one role. See real signal in a week, and never read
+            Run a pilot with one role for FREE. See real signal in a week, and never read
             another ghost-written résumé.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
@@ -935,7 +939,7 @@ function Footer() {
     <footer style={{ borderTop: `1px solid ${color.border.default}`, padding: "56px 0 40px" }}>
       <div style={WRAP_STYLE}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 30, flexWrap: "wrap" }}>
-          <div style={{ maxWidth: "34ch" }}>
+          <div style={{ maxWidth: "52ch" }}>
             <Wordmark size={24} />
             <p style={{
               color: color.text.secondary, fontSize: "1rem",
