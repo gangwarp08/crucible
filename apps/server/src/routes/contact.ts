@@ -358,6 +358,13 @@ export async function contactRoutes(server: FastifyInstance) {
             },
           );
           if (!res.ok) throw new Error(`form relay failed: ${res.status}`);
+          // FormSubmit answers HTTP 200 even when it rejects (e.g. the form
+          // needs re-activation) — the body's success field is the truth.
+          // Without this check a dropped note would still show "Sent".
+          const data = (await res.json()) as { success?: string | boolean; message?: string };
+          if (String(data.success) !== "true") {
+            throw new Error(`form relay rejected: ${data.message ?? "no message"}`);
+          }
           bookingsToday++;
           bookedEmailsToday.add(email.toLowerCase());
           request.log.info("[contact] note relayed by email");
