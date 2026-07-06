@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-mono",
 });
 
-const TITLE = "asaya — measure what matters";
+const TITLE = "asaya · measure what matters";
 const DESCRIPTION =
   "Simulation-based assessment for AI-augmented engineers. A personalized sandbox that scores how people actually work with AI, under real constraints.";
 

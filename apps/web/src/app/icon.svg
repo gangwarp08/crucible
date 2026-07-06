@@ -1,4 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="#0f1310"/>
-  <rect x="14" y="14" width="36" height="36" fill="#a3e635"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <rect width="24" height="24" fill="#0f1310"/>
+  <defs>
+    <linearGradient id="f" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9f99d"/>
+      <stop offset="0.55" stop-color="#a3e635"/>
+      <stop offset="1" stop-color="#65a30d"/>
+    </linearGradient>
+  </defs>
+  <path d="M12 2.2 L20 6.9 L20 16.1 L12 20.8 L4 16.1 L4 6.9 Z" fill="none" stroke="#eceee9" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M4 6.9 L12 11.4 L20 6.9 M12 11.4 L12 20.8" fill="none" stroke="#eceee9" stroke-width="1" stroke-linejoin="round" opacity="0.4"/>
+  <g transform="translate(12 15.55) scale(0.92) translate(-12 -5.05)">
+    <path d="M12 0.7 C13.9 3.2 15.1 4.4 15.1 6.4 C15.1 8.2 13.7 9.4 12 9.4 C10.3 9.4 8.9 8.1 8.9 6.4 C8.9 5.1 9.5 4.3 10.1 3.6 C10.3 4.5 10.7 4.9 11.2 5 C10.8 3.5 11.2 1.9 12 0.7 Z" fill="url(#f)"/>
+    <path d="M12 3.9 C12.95 5.1 13.4 5.8 13.4 6.8 C13.4 7.8 12.8 8.4 12 8.4 C11.2 8.4 10.6 7.8 10.6 6.9 C10.6 6.2 10.9 5.8 11.3 5.4 C11.4 6 11.7 6.3 12 6.3 C11.7 5.4 11.7 4.6 12 3.9 Z" fill="#ecfccb"/>
+  </g>
 </svg>

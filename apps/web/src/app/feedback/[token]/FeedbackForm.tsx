@@ -175,7 +175,7 @@ export default function FeedbackForm({ token }: { token: string }) {
       <h1 style={{ ...headingStyle, margin: "0 0 4px" }}>Candidate outcome feedback</h1>
       <p style={{ color: color.text.secondary, fontSize: 13, margin: "0 0 20px" }}>
         {ctx.scenario_title ? `Assessment: ${ctx.scenario_title}. ` : ""}
-        Fill in whatever you know — every field is optional, but please provide at least one.
+        Fill in whatever you know. Every field is optional, but please provide at least one.
       </p>
 
       {ctx.outcome_types.map((type) => (
@@ -189,7 +189,7 @@ export default function FeedbackForm({ token }: { token: string }) {
                 setVal(type, e.target.value === "" ? "" : e.target.value === "yes")
               }
             >
-              <option value="">— select —</option>
+              <option value="">select…</option>
               <option value="yes">Yes</option>
               <option value="no">No</option>
             </select>
@@ -199,7 +199,7 @@ export default function FeedbackForm({ token }: { token: string }) {
               value={values[type] === "" || values[type] === undefined ? "" : String(values[type])}
               onChange={(e) => setVal(type, e.target.value === "" ? "" : Number(e.target.value))}
             >
-              <option value="">— select —</option>
+              <option value="">select…</option>
               {[1, 2, 3, 4, 5].map((n) => (
                 <option key={n} value={n}>
                   {n}
