@@ -24,11 +24,6 @@ import { appendEvent } from "../services/events-direct.js";
 import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
 
 const LIST_LIMIT = 100;
-// Cap for the per-table grouped-count scans below. Bigger than supabase-js's
-// 1000-row default so counts don't silently undercount once events/transcript
-// grow past a few hundred sessions' worth. Order of 100k is well under any
-// realistic single-deploy footprint for an MVP.
-const COUNT_QUERY_MAX_ROWS = 100_000;
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -41,12 +36,6 @@ interface SessionRow {
   ended_at: string | null;
   duration_ms: number | null;
   spend_usd: number | string;
-}
-
-function countBySessionId(rows: Array<{ session_id: string }>): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const r of rows) out.set(r.session_id, (out.get(r.session_id) ?? 0) + 1);
-  return out;
 }
 
 export async function reviewRoutes(server: FastifyInstance) {
@@ -78,43 +67,40 @@ export async function reviewRoutes(server: FastifyInstance) {
 
     const ids = sessions.map((s) => s.id);
 
-    // One grouped query per child table, fired in parallel.
-    // We fetch only session_id and aggregate in JS — avoids the N+1 trap and
-    // doesn't require an RPC. supabase-js caps select() at 1000 rows by
-    // default, so we explicitly request up to COUNT_QUERY_MAX_ROWS — once any
-    // child table grows past that, counts silently undercount and sessions
-    // start showing 0. TODO(option B): replace these scans with a Postgres
-    // RPC that returns (session_id, count) per child table.
-    const [eventsRes, msgsRes, filesRes, evalsRes] = await Promise.all([
-      supabase.from("events").select("session_id").in("session_id", ids).range(0, COUNT_QUERY_MAX_ROWS - 1),
-      supabase
-        .from("transcript")
-        .select("session_id")
-        .in("session_id", ids)
-        .neq("role", "system")
-        .range(0, COUNT_QUERY_MAX_ROWS - 1),
-      supabase.from("file_snapshots").select("session_id").in("session_id", ids).range(0, COUNT_QUERY_MAX_ROWS - 1),
-      supabase
-        .from("evaluations")
-        .select("session_id, overall_score, status, created_at")
-        .in("session_id", ids)
-        .order("created_at", { ascending: false })
-        .range(0, COUNT_QUERY_MAX_ROWS - 1),
+    // Two Postgres RPCs (migration 0017), fired in parallel: grouped
+    // per-session counts over events/transcript/file_snapshots, and the
+    // latest evaluation per session (DISTINCT ON). Aggregation happens in
+    // the database, so only ~LIST_LIMIT rows cross the network instead of
+    // up to 100k raw child rows per table.
+    const [countsRes, evalsRes] = await Promise.all([
+      supabase.rpc("review_session_counts", { ids }),
+      supabase.rpc("review_latest_evaluations", { ids }),
     ]);
 
-    for (const res of [eventsRes, msgsRes, filesRes, evalsRes]) {
+    for (const res of [countsRes, evalsRes]) {
       if (res.error) {
         server.log.error({ err: res.error }, "[review] count query failed");
         return reply.status(500).send({ error: "Failed to load session counts" });
       }
     }
 
-    const eventCounts = countBySessionId(eventsRes.data ?? []);
-    const msgCounts   = countBySessionId(msgsRes.data ?? []);
-    const fileCounts  = countBySessionId(filesRes.data ?? []);
+    interface CountRow {
+      session_id: string;
+      event_count: number;
+      message_count: number;
+      file_count: number;
+    }
+    const eventCounts = new Map<string, number>();
+    const msgCounts   = new Map<string, number>();
+    const fileCounts  = new Map<string, number>();
+    for (const r of (countsRes.data ?? []) as CountRow[]) {
+      eventCounts.set(r.session_id, r.event_count);
+      msgCounts.set(r.session_id, r.message_count);
+      fileCounts.set(r.session_id, r.file_count);
+    }
 
-    // Build latest-evaluation-per-session map. Rows arrived sorted by
-    // created_at DESC so the first row we see for a given session_id wins.
+    // Latest-evaluation-per-session map — the RPC already returns exactly
+    // one (most recent) row per session_id.
     interface EvalListRow {
       session_id: string;
       overall_score: number | string;
@@ -123,7 +109,7 @@ export async function reviewRoutes(server: FastifyInstance) {
     }
     const latestEval = new Map<string, EvalListRow>();
     for (const r of (evalsRes.data ?? []) as EvalListRow[]) {
-      if (!latestEval.has(r.session_id)) latestEval.set(r.session_id, r);
+      latestEval.set(r.session_id, r);
     }
 
     const rows = (sessions as SessionRow[]).map((s) => {

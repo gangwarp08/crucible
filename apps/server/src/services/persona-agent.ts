@@ -70,6 +70,11 @@ export class PersonaConfigError extends Error {
   }
 }
 
+/** Drop the cached scenario for an ended session so the cache stays bounded. */
+export function clearScenarioCache(sessionId: string): void {
+  scenarioCache.delete(sessionId);
+}
+
 async function getScenarioForSession(sessionId: string): Promise<Scenario | null> {
   const cached = scenarioCache.get(sessionId);
   if (cached) return cached;

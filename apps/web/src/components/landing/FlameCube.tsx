@@ -58,6 +58,9 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
     let raf = 0;
     let running = true;
     let visible = true;
+    // Guards against queueing two concurrent rAF loops (e.g. rapid
+    // visibility/intersection flips before a queued frame has run).
+    let pending = false;
     const W = stageW;
     const H = stageH;
     canvas.width = W * dpr;
@@ -103,11 +106,11 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
     }
 
     function frame() {
+      pending = false;
       if (!running) return;
-      if (!visible) {
-        raf = requestAnimationFrame(frame);
-        return;
-      }
+      // Off-screen: stop the loop entirely; the IntersectionObserver below
+      // restarts it when the cube scrolls back into view.
+      if (!visible) return;
       ctx!.clearRect(0, 0, W, H);
       ctx!.globalCompositeOperation = "lighter";
       const dens = intRef.current / 100;
@@ -165,20 +168,28 @@ export default function FlameCube({ size = 200, intensity = 60, hue = 28 }: Prop
         ctx!.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx!.fill();
       }
-      raf = requestAnimationFrame(frame);
+      schedule();
     }
-    raf = requestAnimationFrame(frame);
+    const schedule = () => {
+      if (!pending) {
+        pending = true;
+        raf = requestAnimationFrame(frame);
+      }
+    };
+    schedule();
 
     let io: IntersectionObserver | undefined;
     if ("IntersectionObserver" in window) {
       io = new IntersectionObserver((es) => {
+        const was = visible;
         visible = !!es[0]?.isIntersecting;
+        if (visible && !was && running) schedule();
       }, { threshold: 0.01 });
       io.observe(wrap);
     }
     const onVis = () => {
       running = !document.hidden;
-      if (running) raf = requestAnimationFrame(frame);
+      if (running) schedule();
     };
     document.addEventListener("visibilitychange", onVis);
 

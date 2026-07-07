@@ -23,7 +23,11 @@ import { supabase } from "./supabase.js";
 import { chatCompletionWithMessages, type ChatMessage } from "./litellm.js";
 import { recordCost } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
-import { extractAndPersistEvidence, DETECTOR_VERSION } from "./evidence-extractor.js";
+import {
+  extractAndPersistEvidenceWithEvents,
+  DETECTOR_VERSION,
+  type EventRow,
+} from "./evidence-extractor.js";
 import { updateScenarioStats } from "./scenario-stats.js";
 import {
   assembleAnalysisInput,
@@ -440,26 +444,20 @@ async function persistEvaluation(
 
 // ─── Main entry ────────────────────────────────────────────────────────────
 
-async function runStageB(sessionId: string): Promise<EvaluationResult> {
+async function runStageB(
+  sessionId: string,
+  // When Stage A just ran, it hands over the event stream it already loaded so
+  // assembleAnalysisInput skips the duplicate fetch. Absent (reinterpret path /
+  // Stage A failure), Stage B self-loads exactly as before.
+  preloadedEvents?: EventRow[],
+): Promise<EvaluationResult> {
   let input: AnalysisInput;
+  let scenarioId: string;
   try {
-    input = await assembleAnalysisInput(sessionId);
+    ({ input, scenarioId } = await assembleAnalysisInput(sessionId, preloadedEvents));
   } catch (err) {
     if (err instanceof AnalysisInputError) throw new AnalysisError(err.message);
     throw err;
-  }
-
-  // Resolve scenario_id again (we have it implicitly via input — read from the
-  // session row's scenario_id). assembleAnalysisInput already validated.
-  // Re-read it here for the persist call; cheap.
-  const { data: sessRow } = await supabase!
-    .from("sessions")
-    .select("scenario_id")
-    .eq("id", sessionId)
-    .single();
-  const scenarioId = (sessRow as unknown as { scenario_id: string } | null)?.scenario_id;
-  if (!scenarioId) {
-    throw new AnalysisError(`session ${sessionId} has no scenario_id`);
   }
 
   // Full provenance stamp for this verdict (Slice 5.7). competency_model_version
@@ -673,16 +671,19 @@ export async function runAnalysisAgent(sessionId: string): Promise<EvaluationRes
   // Stage A — deterministic evidence extraction (Slice 5.2). Runs BEFORE the
   // judge so Stage B reads fresh units. Non-fatal: a detector failure must
   // never block the evaluation (Stage B can still judge the raw signal).
+  let preloadedEvents: EventRow[] | undefined;
   try {
-    const units = await extractAndPersistEvidence(sessionId);
+    const { units, events } = await extractAndPersistEvidenceWithEvents(sessionId);
     console.log(`[analysis] extracted ${units.length} evidence units for session ${sessionId}`);
+    // Hand Stage A's event stream to Stage B so it isn't fetched twice.
+    preloadedEvents = events;
   } catch (err) {
     console.error(
       `[analysis] evidence extraction failed for session ${sessionId}:`,
       (err as Error).message,
     );
   }
-  return runStageB(sessionId);
+  return runStageB(sessionId, preloadedEvents);
 }
 
 /**

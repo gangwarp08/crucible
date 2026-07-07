@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSession } from "@/lib/api";
 import { useSessionStore } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
@@ -15,17 +15,22 @@ const POLL_INTERVAL_MS = 3_000;
 
 function useCountdown(deadline: string | null, onExpire: () => void): number {
   const [remaining, setRemaining] = useState(0);
+  // Latest-ref pattern: keeps the interval stable across renders while the
+  // tick always sees the caller's freshest onExpire closure.
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
   useEffect(() => {
     if (!deadline) return;
+    const deadlineMs = new Date(deadline).getTime();
     const tick = () => {
-      const secs = Math.max(0, Math.floor((new Date(deadline).getTime() - Date.now()) / 1000));
+      const secs = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
       setRemaining(secs);
-      if (secs === 0) onExpire();
+      if (secs === 0) onExpireRef.current();
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [deadline, onExpire]);
+  }, [deadline]);
   return remaining;
 }
 
@@ -38,17 +43,15 @@ function fmtTime(seconds: number): string {
 type Tone = "default" | "warn" | "error" | "muted";
 
 export default function ConstraintHUD() {
-  const {
-    sessionId,
-    deadline,
-    tokensRemaining,
-    computeMinutesRemaining,
-    scenarioConstraints,
-    status,
-    setStatus,
-    setTokensRemaining,
-    setComputeMinutesRemaining,
-  } = useSessionStore();
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const deadline = useSessionStore((s) => s.deadline);
+  const tokensRemaining = useSessionStore((s) => s.tokensRemaining);
+  const computeMinutesRemaining = useSessionStore((s) => s.computeMinutesRemaining);
+  const scenarioConstraints = useSessionStore((s) => s.scenarioConstraints);
+  const status = useSessionStore((s) => s.status);
+  const setStatus = useSessionStore((s) => s.setStatus);
+  const setTokensRemaining = useSessionStore((s) => s.setTokensRemaining);
+  const setComputeMinutesRemaining = useSessionStore((s) => s.setComputeMinutesRemaining);
 
   const remainingSec = useCountdown(deadline, () => {
     if (status === "active") setStatus("ended");

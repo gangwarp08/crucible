@@ -199,6 +199,8 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
 
     ptyOutputBuffer: [],
     ptyInputBuffer: [],
+    ptyOutputBytes: 0,
+    ptyInputBytes: 0,
     ptyOutputFlushTimer: null,
     ptyInputFlushTimer: null,
 

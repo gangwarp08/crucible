@@ -12,9 +12,12 @@ function isChatError(r: object): r is ChatError {
 }
 
 export default function ChatHUD() {
-  const {
-    sessionId, status, addMessage, setSpendBudget, setStatus, setTokensRemaining,
-  } = useSessionStore();
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const status = useSessionStore((s) => s.status);
+  const addMessage = useSessionStore((s) => s.addMessage);
+  const setSpendBudget = useSessionStore((s) => s.setSpendBudget);
+  const setStatus = useSessionStore((s) => s.setStatus);
+  const setTokensRemaining = useSessionStore((s) => s.setTokensRemaining);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const messages = useSessionStore((s) => s.messages);

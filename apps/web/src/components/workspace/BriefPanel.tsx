@@ -18,8 +18,8 @@ function fmtNum(n: number | null): string {
  *  ConstraintHUD in the top chrome owns live balances; this panel is the
  *  static "what am I doing again?" card the candidate can re-open any time. */
 export default function BriefPanel() {
-  const { scenario, scenarioConstraints } = useSessionStore();
-  const c = scenarioConstraints;
+  const scenario = useSessionStore((s) => s.scenario);
+  const c = useSessionStore((s) => s.scenarioConstraints);
 
   if (!scenario.title && !scenario.brief && !c) {
     return (

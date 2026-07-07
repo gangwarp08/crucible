@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import type { ResolvedRubricItem } from "@crucible/shared";
 import { supabase } from "./supabase.js";
 import { resolveScenarioRubric } from "./competencies.js";
-import { loadStoredEvidenceUnits } from "./evidence-extractor.js";
+import { loadStoredEvidenceUnits, type EventRow } from "./evidence-extractor.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // apps/server/src/services/ → repo root is 4 levels up.
@@ -226,13 +226,6 @@ function clip(s: string, max: number): string {
 
 // ─── Main entry ────────────────────────────────────────────────────────────
 
-interface EventRow {
-  seq: number;
-  type: string;
-  actor: string;
-  payload: Record<string, unknown>;
-}
-
 interface SessionRow {
   id: string;
   scenario_id: string | null;
@@ -267,7 +260,13 @@ interface FileSnapRow {
   ts: string;
 }
 
-export async function assembleAnalysisInput(sessionId: string): Promise<AnalysisInput> {
+export async function assembleAnalysisInput(
+  sessionId: string,
+  // Stage A already loaded the full event stream; when provided, skip the
+  // duplicate fetch (the two queries are identical and no events are written
+  // between the stages in any caller).
+  preloadedEvents?: EventRow[],
+): Promise<{ input: AnalysisInput; scenarioId: string }> {
   if (!supabase) {
     throw new AnalysisInputError("Supabase service-role client unavailable");
   }
@@ -293,6 +292,7 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       `session ${sessionId} has no scenario — Analysis Agent requires a scenario-bound session`,
     );
   }
+  const scenarioId = sessionRow.scenario_id;
   if (!sessionRow.ended_at) {
     throw new AnalysisInputError(
       `session ${sessionId} has not ended — call DELETE /sessions/:id first or wait for the orchestrator timeout`,
@@ -343,15 +343,20 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
   }
 
   // ── 4. Events ────────────────────────────────────────────────────────
-  const { data: eventsRaw, error: evErr } = await supabase
-    .from("events")
-    .select("seq, type, actor, payload")
-    .eq("session_id", sessionId)
-    .order("seq", { ascending: true });
-  if (evErr) {
-    throw new AnalysisInputError(`events read failed: ${evErr.message}`);
+  let events: EventRow[];
+  if (preloadedEvents) {
+    events = preloadedEvents;
+  } else {
+    const { data: eventsRaw, error: evErr } = await supabase
+      .from("events")
+      .select("seq, type, actor, payload")
+      .eq("session_id", sessionId)
+      .order("seq", { ascending: true });
+    if (evErr) {
+      throw new AnalysisInputError(`events read failed: ${evErr.message}`);
+    }
+    events = (eventsRaw ?? []) as unknown as EventRow[];
   }
-  const events = (eventsRaw ?? []) as unknown as EventRow[];
 
   // ── 5. File snapshots — latest per path ─────────────────────────────
   const { data: snapsRaw } = await supabase
@@ -664,7 +669,10 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
       ? Math.round((sessionRow.duration_ms / 60_000) * 10) / 10
       : null;
 
-  return {
+  // scenarioId rides alongside the input (NOT inside it — the input object is
+  // JSON.stringify'd into the judge prompt and must stay byte-identical) so
+  // the caller doesn't have to re-read the session row for the persist call.
+  const input: AnalysisInput = {
     session: {
       id: sessionId,
       scenario_slug: scenarioRow.slug as string,
@@ -697,4 +705,5 @@ export async function assembleAnalysisInput(sessionId: string): Promise<Analysis
     },
     surfaced_seqs: Array.from(surfaced).sort((a, b) => a - b),
   };
+  return { input, scenarioId };
 }

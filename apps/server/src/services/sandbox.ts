@@ -231,6 +231,8 @@ export async function createSandbox(
     flushTimer: null,
     ptyOutputBuffer: [],
     ptyInputBuffer: [],
+    ptyOutputBytes: 0,
+    ptyInputBytes: 0,
     ptyOutputFlushTimer: null,
     ptyInputFlushTimer: null,
     lastFileHashes: new Map(),
