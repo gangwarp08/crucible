@@ -121,6 +121,9 @@ export async function createSandbox(
   scenarioId?: string,
   beatTimingOverridesMs?: Record<string, number>,
   tokenBudgetOverride?: number,
+  // P2: owning tenant for the sessions row — the session-link's org when a
+  // linkToken started the session, else the default org (resolved by caller).
+  orgId?: string,
 ): Promise<string> {
   const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
@@ -259,7 +262,7 @@ export async function createSandbox(
 
   // Persist the sessions row synchronously so FK constraints on telemetry tables
   // are satisfied before any subsequent writes (events, file_snapshots, etc.) land.
-  await persistSessionCreated(sessionId);
+  await persistSessionCreated(sessionId, orgId);
 
   logEvent(sessionId, "session.created", "system", {
     sandboxId: sandbox.sandboxId,

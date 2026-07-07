@@ -12,6 +12,7 @@
 
 import { z } from "zod";
 import { supabase } from "./supabase.js";
+import { getDefaultOrg, orgsTableKnownToExist, scopeToOrg, type OrgRow } from "./orgs.js";
 
 export class OutcomesError extends Error {
   constructor(msg: string) {
@@ -78,9 +79,42 @@ export function numericOutcomeValue(value: boolean | number): number {
   return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
 
+/** P2 tenant gate for outcome writes that reference a session: the session
+ *  must exist AND belong to the authenticated org (admin sees all; a null org
+ *  is the pre-0018 legacy path — existence check only). Missing and foreign
+ *  sessions throw the SAME error so a partner can't use the webhook as an
+ *  existence oracle for other tenants' session ids. */
+export async function assertSessionVisibleToOrg(
+  sessionId: string,
+  org: Pick<OrgRow, "id" | "role"> | null | undefined,
+): Promise<void> {
+  if (!supabase) throw new OutcomesError("Supabase service-role client unavailable");
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("id, org_id")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error) throw new OutcomesError(`session lookup failed: ${error.message}`);
+  const visible =
+    !!data &&
+    (!org || org.role === "admin" || (data as { org_id: string | null }).org_id === org.id);
+  // IDENTICAL message for "doesn't exist" and "belongs to another org".
+  if (!visible) throw new OutcomesError(`session ${sessionId} not found`);
+}
+
 /** Insert one validated outcome. When session_id is given but scenario_id is
- *  not, backfill scenario_id from the session so the row is self-describing. */
-export async function insertOutcome(input: OutcomeInput, source: OutcomeSource): Promise<OutcomeRow> {
+ *  not, backfill scenario_id from the session so the row is self-describing.
+ *
+ *  P2 tenant stamping: `orgId` is the attributing tenant (webhook → resolved
+ *  from the per-org secret; partner_form → inherited from the invite row).
+ *  When absent (CSV import script, manual), the default 'asaya' org is used;
+ *  pre-0018 databases fall through with no org_id (column is still nullable
+ *  there). */
+export async function insertOutcome(
+  input: OutcomeInput,
+  source: OutcomeSource,
+  orgId?: string | null,
+): Promise<OutcomeRow> {
   if (!supabase) throw new OutcomesError("Supabase service-role client unavailable");
 
   let scenarioId = input.scenario_id ?? null;
@@ -95,6 +129,16 @@ export async function insertOutcome(input: OutcomeInput, source: OutcomeSource):
     scenarioId = (sess as { scenario_id: string | null }).scenario_id;
   }
 
+  const resolvedOrgId = orgId ?? (await getDefaultOrg())?.id ?? null;
+  // Post-migration safety: once the orgs table is known to exist, an outcome
+  // without a tenant is a HARD error — omitting org_id would only trip the
+  // NOT NULL constraint downstream (0018) and hide the real cause.
+  if (!resolvedOrgId && orgsTableKnownToExist()) {
+    throw new OutcomesError(
+      "org resolution failed: orgs table exists but no org was supplied and the default org could not be resolved",
+    );
+  }
+
   const row = {
     candidate_ref: input.candidate_ref,
     session_id: input.session_id ?? null,
@@ -102,6 +146,7 @@ export async function insertOutcome(input: OutcomeInput, source: OutcomeSource):
     outcome_type: input.outcome_type,
     outcome_value: { value: input.value },
     source,
+    ...(resolvedOrgId ? { org_id: resolvedOrgId } : {}),
     ...(input.captured_at ? { captured_at: input.captured_at } : {}),
   };
 
@@ -120,14 +165,18 @@ export interface SessionOutcome {
 }
 
 /** All captured outcomes for one session, newest first — powers the review
- *  page's "real-world outcome" view next to the assessment score. */
-export async function listSessionOutcomes(sessionId: string): Promise<SessionOutcome[]> {
+ *  page's "real-world outcome" view next to the assessment score.
+ *  P2: partner orgs see only outcomes stamped with their own org_id (admin —
+ *  and the pre-0018 undefined org — see all rows for the session). */
+export async function listSessionOutcomes(sessionId: string, org?: OrgRow): Promise<SessionOutcome[]> {
   if (!supabase) throw new OutcomesError("Supabase service-role client unavailable");
-  const { data, error } = await supabase
-    .from("outcomes")
-    .select("outcome_type, outcome_value, source, captured_at")
-    .eq("session_id", sessionId)
-    .order("captured_at", { ascending: false });
+  const { data, error } = await scopeToOrg(
+    supabase
+      .from("outcomes")
+      .select("outcome_type, outcome_value, source, captured_at")
+      .eq("session_id", sessionId),
+    org,
+  ).order("captured_at", { ascending: false });
   if (error) throw new OutcomesError(`session outcomes read failed: ${error.message}`);
   return ((data ?? []) as Array<{
     outcome_type: string;
@@ -187,6 +236,10 @@ export async function correlateOutcomes(
   // type (production behaviour). Used by tests to isolate their seeded rows from
   // real data in the shared DB.
   candidateRefPrefix: string | null = null,
+  // P2 tenant scoping: when set, only outcomes stamped with this org_id are
+  // correlated (partner orgs). null = unscoped — the ADMIN role and the
+  // pre-0018 legacy path (routes decide; see routes/outcomes.ts).
+  orgId: string | null = null,
 ): Promise<CorrelationResult> {
   if (!supabase) throw new OutcomesError("Supabase service-role client unavailable");
 
@@ -197,6 +250,9 @@ export async function correlateOutcomes(
     .not("session_id", "is", null);
   if (candidateRefPrefix) {
     outcomeQuery = outcomeQuery.like("candidate_ref", `${candidateRefPrefix}%`);
+  }
+  if (orgId) {
+    outcomeQuery = outcomeQuery.eq("org_id", orgId);
   }
   const { data: outcomeRows, error: oErr } = await outcomeQuery;
   if (oErr) throw new OutcomesError(`outcomes read failed: ${oErr.message}`);

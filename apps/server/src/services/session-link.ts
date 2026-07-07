@@ -11,6 +11,7 @@
 
 import { randomBytes, createHash } from "node:crypto";
 import { supabase } from "./supabase.js";
+import { scopeToOrg, type OrgRow } from "./orgs.js";
 
 const DEFAULT_TTL_MINUTES = Number(process.env["SESSION_LINK_TTL_MINUTES"]) || 120;
 const MIN_MS = 60_000;
@@ -37,6 +38,8 @@ export interface SessionLinkRow {
   session_id: string | null;
   revoked_at: string | null;
   created_at: string;
+  // P2: owning tenant. NOT NULL after migration 0018.
+  org_id: string | null;
 }
 
 export interface SessionLinkSummary {
@@ -47,10 +50,11 @@ export interface SessionLinkSummary {
   consumed_at: string | null;
   session_id: string | null;
   status: SessionLinkStatus;
+  org_id: string | null;
 }
 
 const SELECT_COLS =
-  "id, candidate_label, scenario_id, expires_at, consumed_at, session_id, revoked_at, created_at";
+  "id, candidate_label, scenario_id, expires_at, consumed_at, session_id, revoked_at, created_at, org_id";
 
 function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
@@ -74,6 +78,7 @@ function toSummary(row: SessionLinkRow): SessionLinkSummary {
     consumed_at: row.consumed_at,
     session_id: row.session_id,
     status: deriveStatus(row),
+    org_id: row.org_id ?? null,
   };
 }
 
@@ -96,6 +101,9 @@ export async function createSessionLink(opts: {
   candidateLabel: string;
   scenarioId?: string | null;
   ttlMinutes?: number;
+  /** P2: owning tenant — the org whose API key created the link. A session
+   *  started from this link inherits it (sessionOrgIdFromLink). */
+  orgId?: string | null;
 }): Promise<{ token: string; link: SessionLinkSummary }> {
   if (!supabase) throw new SessionLinkError("server", "Supabase service-role client unavailable");
   const label = opts.candidateLabel?.trim();
@@ -112,6 +120,9 @@ export async function createSessionLink(opts: {
       candidate_label: label,
       scenario_id: opts.scenarioId ?? null,
       expires_at: expiresAt,
+      // org_id is NOT NULL after 0018 — only omit when the caller couldn't
+      // resolve one (pre-migration back-compat path).
+      ...(opts.orgId ? { org_id: opts.orgId } : {}),
     })
     .select(SELECT_COLS)
     .single();
@@ -121,32 +132,42 @@ export async function createSessionLink(opts: {
   return { token, link: toSummary(inserted.data as unknown as SessionLinkRow) };
 }
 
-export async function listSessionLinks(): Promise<SessionLinkSummary[]> {
+export async function listSessionLinks(org?: OrgRow): Promise<SessionLinkSummary[]> {
   if (!supabase) throw new SessionLinkError("server", "Supabase service-role client unavailable");
-  const { data, error } = await supabase
-    .from("session_links")
-    .select(SELECT_COLS)
+  // P2: partner orgs see only their own links; admin (asaya) sees all.
+  const { data, error } = await scopeToOrg(
+    supabase.from("session_links").select(SELECT_COLS),
+    org,
+  )
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw new SessionLinkError("server", `session_links read failed: ${error.message}`);
   return ((data ?? []) as unknown as SessionLinkRow[]).map(toSummary);
 }
 
-/** Revoke a link (idempotent). */
-export async function revokeSessionLink(id: string): Promise<SessionLinkSummary> {
+/** Revoke a link (idempotent). P2: partner orgs can only revoke their own
+ *  links — a foreign link reads as not-found (no existence leak). */
+export async function revokeSessionLink(id: string, org?: OrgRow): Promise<SessionLinkSummary> {
   if (!supabase) throw new SessionLinkError("server", "Supabase service-role client unavailable");
-  const updated = await supabase
-    .from("session_links")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("id", id)
-    .is("revoked_at", null)
-    .is("consumed_at", null)
+  const updated = await scopeToOrg(
+    supabase
+      .from("session_links")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", id)
+      .is("revoked_at", null)
+      .is("consumed_at", null),
+    org,
+  )
     .select(SELECT_COLS)
     .maybeSingle();
   if (updated.error) throw new SessionLinkError("server", `revoke failed: ${updated.error.message}`);
   if (updated.data) return toSummary(updated.data as unknown as SessionLinkRow);
-  // Already revoked/consumed or unknown — return current state if it exists.
-  const { data: cur } = await supabase.from("session_links").select(SELECT_COLS).eq("id", id).maybeSingle();
+  // Already revoked/consumed or unknown — return current state if it exists
+  // (still org-scoped: a foreign org's link stays a 404-shaped error).
+  const { data: cur } = await scopeToOrg(
+    supabase.from("session_links").select(SELECT_COLS).eq("id", id),
+    org,
+  ).maybeSingle();
   if (!cur) throw new SessionLinkError("invalid", `session_link ${id} not found`);
   return toSummary(cur as unknown as SessionLinkRow);
 }

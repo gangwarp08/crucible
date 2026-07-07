@@ -2,9 +2,24 @@
 // These power the post-session review UI. They MUST work for ended sessions
 // no longer in the in-memory registry, so all data comes from Supabase via
 // the server-only service-role client. Browser never queries Supabase directly.
+//
+// P2 TENANT AUTH: every route in this plugin runs behind requireOrg — a valid
+// X-Org-Key header resolves the calling org; with ORG_AUTH_REQUIRED off (the
+// rollout default) a key-less request falls back to the default 'asaya' admin
+// org so the existing review UI keeps working. Every session-shaped query is
+// then scoped to the caller's org (role 'admin' sees all); foreign sessions
+// read as 404 so existence never leaks across tenants. The service role
+// bypasses RLS, so THIS app-layer scoping is the isolation mechanism (the
+// deny-all RLS posture is the DB backstop — see migration 0019).
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { supabase } from "../services/supabase.js";
+import {
+  requireOrg,
+  orgCanAccess,
+  scopeToOrg,
+  type OrgRow,
+} from "../services/orgs.js";
 import { runAnalysisAgent, reinterpretEvaluation, AnalysisError } from "../services/analysis-agent.js";
 import {
   createInvite,
@@ -44,17 +59,51 @@ export async function reviewRoutes(server: FastifyInstance) {
     server.log.warn("[review] supabase client unavailable — /api/review routes will 503");
   }
 
+  // P2: org auth on EVERY /api/review route (see module header).
+  server.addHook("preHandler", requireOrg);
+
+  /** Tenant gate for session-scoped endpoints: does the caller's org own this
+   *  session (admin sees all)? Foreign/missing sessions are indistinguishable
+   *  ("not_found") so a partner can't probe another org's session ids.
+   *  On "ok" the SESSION's org_id rides along so writes derived from the
+   *  session (e.g. outcome invites) can be stamped with the owning tenant
+   *  rather than the requesting org — an admin acting on a partner's session
+   *  must not pull the artifact into the admin org. */
+  type OrgGateResult =
+    | { status: "ok"; sessionOrgId: string | null }
+    | { status: "not_found" }
+    | { status: "error" };
+  async function sessionOrgGate(
+    sessionId: string,
+    org: OrgRow | undefined,
+  ): Promise<OrgGateResult> {
+    if (!supabase) return { status: "error" };
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("id, org_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (error) return { status: "error" };
+    if (!data) return { status: "not_found" };
+    const sessionOrgId = (data as { org_id: string | null }).org_id;
+    return orgCanAccess(org, sessionOrgId)
+      ? { status: "ok", sessionOrgId }
+      : { status: "not_found" };
+  }
+
   // ─── List ────────────────────────────────────────────────────────────────
-  server.get("/sessions", async (_request, reply) => {
+  server.get("/sessions", async (request, reply) => {
     if (!supabase) {
       return reply.status(503).send({ error: "Supabase unavailable" });
     }
 
-    const { data: sessions, error: sessErr } = await supabase
-      .from("sessions")
-      .select(
-        "id, status, end_reason, model, created_at, ended_at, duration_ms, spend_usd",
-      )
+    // P2: partner orgs list only their own sessions; admin (asaya) sees all.
+    const { data: sessions, error: sessErr } = await scopeToOrg(
+      supabase
+        .from("sessions")
+        .select("id, status, end_reason, model, created_at, ended_at, duration_ms, spend_usd"),
+      request.org,
+    )
       .order("created_at", { ascending: false })
       .limit(LIST_LIMIT);
 
@@ -187,7 +236,11 @@ export async function reviewRoutes(server: FastifyInstance) {
       server.log.error({ err: sessRes.error, id }, "[review] session lookup failed");
       return reply.status(500).send({ error: "Failed to load session" });
     }
-    if (!sessRes.data) {
+    // P2: a foreign org's session is a 404, not a 403 — no existence leak.
+    if (
+      !sessRes.data ||
+      !orgCanAccess(request.org, (sessRes.data as { org_id?: string | null }).org_id)
+    ) {
       return reply.status(404).send({ error: "Session not found" });
     }
 
@@ -244,7 +297,7 @@ export async function reviewRoutes(server: FastifyInstance) {
       const id = idParse.data.id;
 
       const [sessRes, eventsRes] = await Promise.all([
-        supabase.from("sessions").select("id").eq("id", id).maybeSingle(),
+        supabase.from("sessions").select("id, org_id").eq("id", id).maybeSingle(),
         supabase
           .from("events")
           .select("seq, type, ts, payload")
@@ -258,7 +311,10 @@ export async function reviewRoutes(server: FastifyInstance) {
         server.log.error({ err: sessRes.error, id }, "[review] suspicion: session lookup failed");
         return reply.status(500).send({ error: "Failed to load session" });
       }
-      if (!sessRes.data) {
+      if (
+        !sessRes.data ||
+        !orgCanAccess(request.org, (sessRes.data as { org_id?: string | null }).org_id)
+      ) {
         return reply.status(404).send({ error: "Session not found" });
       }
       if (eventsRes.error) {
@@ -292,6 +348,10 @@ export async function reviewRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: "Invalid session id" });
       }
       const sessionId = idParse.data.id;
+      // P2: only the owning org (or admin) may trigger an evaluation.
+      const gate = await sessionOrgGate(sessionId, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
         const result = await runAnalysisAgent(sessionId);
         return reply.send(result);
@@ -326,6 +386,10 @@ export async function reviewRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: "Invalid session id" });
       }
       const sessionId = idParse.data.id;
+      // P2: only the owning org (or admin) may re-judge stored evidence.
+      const gate = await sessionOrgGate(sessionId, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
         const result = await reinterpretEvaluation(sessionId);
         return reply.send(result);
@@ -368,14 +432,17 @@ export async function reviewRoutes(server: FastifyInstance) {
 
       const { data: sess, error: sessErr } = await supabase
         .from("sessions")
-        .select("id, verification_cap_status, defense_outcome")
+        .select("id, verification_cap_status, defense_outcome, org_id")
         .eq("id", sessionId)
         .maybeSingle();
       if (sessErr) {
         server.log.error({ err: sessErr, sessionId }, "[review] cap: session lookup failed");
         return reply.status(500).send({ error: "Failed to load session" });
       }
-      if (!sess) return reply.status(404).send({ error: "Session not found" });
+      // P2: foreign org's session → 404 (no existence leak).
+      if (!sess || !orgCanAccess(request.org, (sess as { org_id?: string | null }).org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
       if (sess.verification_cap_status !== "advisory_pending") {
         return reply.status(409).send({
           error: "no_pending_cap",
@@ -489,6 +556,9 @@ export async function reviewRoutes(server: FastifyInstance) {
         candidateLabel: parse.data.candidateLabel,
         scenarioId: parse.data.scenarioId ?? null,
         ...(parse.data.ttlMinutes !== undefined ? { ttlMinutes: parse.data.ttlMinutes } : {}),
+        // P2: the link belongs to the REQUESTING org; the session started from
+        // it inherits this org_id (routes/sessions.ts).
+        orgId: request.org?.id ?? null,
       });
       return reply.status(201).send({ token, link });
     } catch (err) {
@@ -498,9 +568,9 @@ export async function reviewRoutes(server: FastifyInstance) {
     }
   });
 
-  server.get("/session-links", async (_request, reply) => {
+  server.get("/session-links", async (request, reply) => {
     try {
-      return reply.send({ links: await listSessionLinks() });
+      return reply.send({ links: await listSessionLinks(request.org) });
     } catch (err) {
       server.log.error({ err }, "session-links list failed");
       return reply.status(500).send({ error: "session_links list failed" });
@@ -511,7 +581,7 @@ export async function reviewRoutes(server: FastifyInstance) {
     const idParse = z.object({ id: z.string().uuid() }).safeParse(request.params);
     if (!idParse.success) return reply.status(400).send({ error: "Invalid link id" });
     try {
-      return reply.send({ link: await revokeSessionLink(idParse.data.id) });
+      return reply.send({ link: await revokeSessionLink(idParse.data.id, request.org) });
     } catch (err) {
       if (err instanceof SessionLinkError) return reply.status(404).send({ error: err.code, message: err.message });
       server.log.error({ err }, "session-link revoke failed");
@@ -536,11 +606,18 @@ export async function reviewRoutes(server: FastifyInstance) {
               typeof t === "string" && (OUTCOME_TYPES as readonly string[]).includes(t),
           )
         : undefined;
+      // P2: only the owning org (or admin) may mint an invite for a session;
+      // the invite carries the SESSION's org (not the requesting org) so
+      // partner_form outcomes inherit the owning tenant — an admin minting an
+      // invite for a partner's session must not pull it into the admin org.
+      const gate = await sessionOrgGate(idParse.data.id, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
-        const { token, invite } = await createInvite(
-          idParse.data.id,
-          requested ? { outcomeTypes: requested } : {},
-        );
+        const { token, invite } = await createInvite(idParse.data.id, {
+          ...(requested ? { outcomeTypes: requested } : {}),
+          orgId: gate.sessionOrgId ?? request.org?.id ?? null,
+        });
         return reply.status(201).send({ token, invite });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -558,8 +635,11 @@ export async function reviewRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const idParse = ParamsSchema.safeParse(request.params);
       if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const gate = await sessionOrgGate(idParse.data.id, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
-        const invites = await listInvites(idParse.data.id);
+        const invites = await listInvites(idParse.data.id, request.org);
         return reply.send({ invites });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -575,7 +655,8 @@ export async function reviewRoutes(server: FastifyInstance) {
       const idParse = z.object({ inviteId: z.string().uuid() }).safeParse(request.params);
       if (!idParse.success) return reply.status(400).send({ error: "Invalid invite id" });
       try {
-        const invite = await revokeInvite(idParse.data.inviteId);
+        // P2: revokeInvite is org-scoped — a foreign invite reads as not found.
+        const invite = await revokeInvite(idParse.data.inviteId, request.org);
         return reply.send({ invite });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -596,8 +677,12 @@ export async function reviewRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const idParse = ParamsSchema.safeParse(request.params);
       if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const gate = await sessionOrgGate(idParse.data.id, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
-        const outcomes = await listSessionOutcomes(idParse.data.id);
+        // P2: partner orgs see only outcomes stamped with their org.
+        const outcomes = await listSessionOutcomes(idParse.data.id, request.org);
         return reply.send({ outcomes });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

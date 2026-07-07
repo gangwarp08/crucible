@@ -12,6 +12,7 @@ import {
   consumeSessionLink,
   SessionLinkError,
 } from "../services/session-link.js";
+import { getDefaultOrg, orgsTableKnownToExist, sessionOrgIdFromLink } from "../services/orgs.js";
 import { env } from "../env.js";
 
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
@@ -84,9 +85,16 @@ export async function sessionRoutes(server: FastifyInstance) {
     if (linkRequired && !linkToken) {
       return reply.status(401).send({ error: "session_link_required", message: "A session link is required to start." });
     }
+    // P2: the session row's org comes from the consumed link's org when a
+    // linkToken is used (the link is the tenant authority — the partner who
+    // minted it owns the resulting session), else the default 'asaya' org.
+    // Resolved BEFORE sandbox creation because persistSessionCreated runs
+    // inside createSandbox and sessions.org_id is NOT NULL after 0018.
+    let linkOrgId: string | null = null;
     if (linkToken) {
       try {
-        await peekSessionLink(linkToken);
+        const link = await peekSessionLink(linkToken);
+        linkOrgId = link.org_id;
       } catch (err) {
         if (err instanceof SessionLinkError) {
           return reply.status(err.code === "invalid" ? 401 : 409).send({
@@ -97,13 +105,38 @@ export async function sessionRoutes(server: FastifyInstance) {
         throw err;
       }
     }
+    let sessionOrgId: string | undefined;
+    try {
+      sessionOrgId = sessionOrgIdFromLink(linkOrgId, (await getDefaultOrg())?.id);
+    } catch (err) {
+      // Post-0018 the orgs table exists; a transient default-org failure must
+      // fail the request (getDefaultOrg only throws once the table has been
+      // seen), never fall through to a tenant-less session row.
+      request.log.error({ err }, "org resolution failed — refusing session create");
+      return reply.status(503).send({
+        error: "org_resolution_failed",
+        message: "Unable to resolve the owning organization right now. Please try again shortly.",
+      });
+    }
+    if (!sessionOrgId && orgsTableKnownToExist()) {
+      // Same post-migration safety as persistSessionCreated: the orgs table
+      // exists (0018 applied) so sessions.org_id is NOT NULL — starting a
+      // session without a tenant would only die later on the insert.
+      request.log.error(
+        "orgs table exists but no org could be resolved (link org + default org both null) — refusing session create",
+      );
+      return reply.status(503).send({
+        error: "org_resolution_failed",
+        message: "Unable to resolve the owning organization right now. Please try again shortly.",
+      });
+    }
 
     const scenarioId = parsed.data?.scenarioId;
     const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;
     const tokenBudgetOverride = parsed.data?.tokenBudgetOverride;
     const sessionId = randomUUID();
     try {
-      await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride);
+      await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride, sessionOrgId);
     } catch (err) {
       if (err instanceof DatasetUnavailableError) {
         // Scenario row exists but its dataset isn't deployed on this server —

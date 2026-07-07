@@ -1,15 +1,40 @@
-// Supabase session persistence — best-effort, never throws into the request path.
+// Supabase session persistence — best-effort, never throws into the request
+// path (EXCEPTION: persistSessionCreated throws on a post-0018 org-resolution
+// failure — see its doc comment).
 import { supabase } from "./supabase.js";
 import { sessionRegistry } from "./registry.js";
+import { getDefaultOrg, orgsTableKnownToExist } from "./orgs.js";
 import { env } from "../env.js";
 
-/** Insert the sessions row when a new session is created. */
-export async function persistSessionCreated(sessionId: string): Promise<void> {
+/** Insert the sessions row when a new session is created.
+ *
+ *  P2: `orgId` is the owning tenant — the session-link's org when a linkToken
+ *  started the session, else the default 'asaya' org. Resolved here as a last
+ *  resort too, because sessions.org_id is NOT NULL after 0018; on a pre-0018
+ *  database (orgs table absent) getDefaultOrg() returns null and the column is
+ *  omitted (still nullable there).
+ *
+ *  POST-MIGRATION SAFETY: once the orgs table is known to exist
+ *  (orgsTableKnownToExist), a null org resolution is a HARD error — this
+ *  function THROWS (failing the session-create request) instead of omitting
+ *  org_id, because that insert would only die on the NOT NULL constraint and
+ *  the session row would silently vanish. */
+export async function persistSessionCreated(sessionId: string, orgId?: string): Promise<void> {
   if (!supabase) return;
-  try {
-    const entry = sessionRegistry.get(sessionId);
-    if (!entry) return;
 
+  const entry = sessionRegistry.get(sessionId);
+  if (!entry) return;
+
+  // Outside the best-effort try: a resolution failure here must propagate.
+  const resolvedOrgId = orgId ?? (await getDefaultOrg())?.id ?? null;
+  if (!resolvedOrgId && orgsTableKnownToExist()) {
+    console.error(
+      `[db] persistSessionCreated HARD FAIL: orgs table exists but no org_id could be resolved for session ${sessionId} — refusing to insert a tenant-less session row`,
+    );
+    throw new Error("persistSessionCreated: org resolution failed post-0018 (org_id is required)");
+  }
+
+  try {
     const { error } = await supabase.from("sessions").insert({
       id: sessionId,
       assessment_id: null,
@@ -27,6 +52,7 @@ export async function persistSessionCreated(sessionId: string): Promise<void> {
       updated_at: entry.createdAt.toISOString(),
       scenario_id: entry.scenarioId,
       scenario_state: entry.scenarioState,
+      ...(resolvedOrgId ? { org_id: resolvedOrgId } : {}),
     });
 
     if (error) console.error("[db] persistSessionCreated failed", error.message);

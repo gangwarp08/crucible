@@ -222,6 +222,33 @@ export function getStoredInviteCode(): string | null {
   try { return window.sessionStorage.getItem(INVITE_CODE_KEY); } catch { return null; }
 }
 
+// ── Org API key (P2, review surface) ─────────────────────────────────────────
+// NEVER a NEXT_PUBLIC_ env var — org keys must not be baked into the browser
+// bundle. The reviewer pastes their key once per tab (OrgKeyInput on /review);
+// it lives in sessionStorage and is attached as X-Org-Key on /api/review/*
+// calls. While the server's ORG_AUTH_REQUIRED flag is off, a missing key falls
+// back to the default org server-side, so the current UX keeps working.
+const ORG_KEY_STORAGE = "crucible.org.key";
+
+export function storeOrgKey(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (key) window.sessionStorage.setItem(ORG_KEY_STORAGE, key);
+    else window.sessionStorage.removeItem(ORG_KEY_STORAGE);
+  } catch { /* ignore */ }
+}
+
+export function getStoredOrgKey(): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(ORG_KEY_STORAGE); } catch { return null; }
+}
+
+/** X-Org-Key header for /api/review/* calls; empty object when no key is set. */
+function orgKeyHeader(): Record<string, string> {
+  const key = getStoredOrgKey();
+  return key ? { "X-Org-Key": key } : {};
+}
+
 export async function getSession(sessionId: string): Promise<SessionInfo> {
   return apiFetch<SessionInfo>(`/sessions/${sessionId}`, { sessionId });
 }
@@ -486,7 +513,9 @@ export interface SuspicionReport {
  *  route — so the review panel can quietly not render. */
 export async function getSuspicionReport(sessionId: string): Promise<SuspicionReport | null> {
   try {
-    const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/suspicion`);
+    const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/suspicion`, {
+      headers: orgKeyHeader(),
+    });
     if (!res.ok) return null;
     const body = (await res.json()) as {
       suspicion?: { score?: unknown; factors?: SuspicionFactor[]; version?: unknown };
@@ -524,7 +553,9 @@ export interface ReviewSession {
 }
 
 export async function listReviewSessions(): Promise<ReviewSession[]> {
-  const data = await apiFetch<{ sessions: ReviewSession[] }>("/api/review/sessions");
+  const data = await apiFetch<{ sessions: ReviewSession[] }>("/api/review/sessions", {
+    headers: orgKeyHeader(),
+  });
   return data.sessions;
 }
 
@@ -642,7 +673,7 @@ export async function postEvaluate(sessionId: string): Promise<unknown> {
   // send "{}" explicitly. The route ignores the body.
   const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/evaluate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
     body: "{}",
   });
   if (!res.ok) {
@@ -660,7 +691,7 @@ export async function postVerificationCap(
 ): Promise<{ verification_cap_status: string; execution_score?: number; overall_score?: number }> {
   const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/verification-cap`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
     body: JSON.stringify({ decision }),
   });
   if (!res.ok) {
@@ -678,7 +709,7 @@ export class NotFoundError extends Error {
 }
 
 export async function getReviewSessionDetail(id: string): Promise<ReviewSessionDetail> {
-  const res = await fetch(`${SERVER_URL}/api/review/sessions/${id}`);
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${id}`, { headers: orgKeyHeader() });
   if (res.status === 404) throw new NotFoundError("Session not found");
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json() as Promise<ReviewSessionDetail>;
@@ -705,7 +736,7 @@ export async function generateOutcomeInvite(
 ): Promise<{ token: string; invite: OutcomeInviteSummary }> {
   const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invite`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
     body: JSON.stringify(outcomeTypes ? { outcome_types: outcomeTypes } : {}),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
@@ -713,7 +744,9 @@ export async function generateOutcomeInvite(
 }
 
 export async function listOutcomeInvites(sessionId: string): Promise<OutcomeInviteSummary[]> {
-  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invites`);
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invites`, {
+    headers: orgKeyHeader(),
+  });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { invites: OutcomeInviteSummary[] };
   return json.invites;
@@ -722,6 +755,7 @@ export async function listOutcomeInvites(sessionId: string): Promise<OutcomeInvi
 export async function revokeOutcomeInvite(inviteId: string): Promise<OutcomeInviteSummary> {
   const res = await fetch(`${SERVER_URL}/api/review/outcome-invites/${inviteId}/revoke`, {
     method: "POST",
+    headers: orgKeyHeader(),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { invite: OutcomeInviteSummary };
@@ -820,7 +854,9 @@ export interface SessionOutcome {
 }
 
 export async function listSessionOutcomes(sessionId: string): Promise<SessionOutcome[]> {
-  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcomes`);
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcomes`, {
+    headers: orgKeyHeader(),
+  });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const body = (await res.json()) as { outcomes: SessionOutcome[] };
   return body.outcomes;
