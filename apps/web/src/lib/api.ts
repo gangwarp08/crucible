@@ -418,6 +418,92 @@ export async function saveDeliverable(
   return res.deliverable;
 }
 
+// ── Passive integrity signals (Proctoring v1) ───────────────────────────────
+
+export interface IntegrityEventInput {
+  /** e.g. "integrity.tab_blur" — full taxonomy in lib/integrity.ts, validated
+   *  server-side against the shared IntegrityEventSchema. */
+  type: string;
+  /** Client-clock epoch ms of the detection (informational; the server stamps
+   *  its own ts of record). */
+  ts?: number;
+  /** Omitted for signal-only events (the server schema is strict-empty for
+   *  those); required for paste_burst / idle_gap / copy. */
+  payload?: Record<string, unknown>;
+}
+
+/** Batch-post integrity events for a live session. Fire-and-forget: NEVER
+ *  throws — telemetry must not disturb the candidate, and older server
+ *  deploys without the route should be a silent no-op. */
+export async function postIntegrityEvents(
+  sessionId: string,
+  events: IntegrityEventInput[],
+): Promise<void> {
+  if (events.length === 0) return;
+  try {
+    await fetch(`${SERVER_URL}/sessions/${sessionId}/integrity`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader(sessionId),
+      },
+      body: JSON.stringify({ events }),
+    });
+  } catch { /* swallow — integrity telemetry never throws */ }
+}
+
+// ── Suspicion report (review page; informational, not scored) ───────────────
+
+export interface SuspicionFactor {
+  kind: string;
+  count: number;
+  weight: number;
+  contribution: number;
+}
+
+/** Integrity-event row subset the suspicion route returns for the timeline. */
+export interface IntegrityTimelineEvent {
+  seq: number;
+  type: string;
+  ts: string;
+  payload: Record<string, unknown> | null;
+}
+
+export interface SuspicionReport {
+  /** 0–100; deterministic aggregation of integrity events (suspicion-score.ts).
+   *  min(100, sum of factor contributions). */
+  score: number;
+  factors: SuspicionFactor[];
+  /** suspicion_detector_version — separate namespace from detector_version. */
+  version: string;
+  /** The session's integrity.* events, seq-ordered (mini-timeline source). */
+  events: IntegrityTimelineEvent[];
+}
+
+/** Fetch the server-computed Suspicion Score for a session
+ *  (GET /api/review/sessions/:id/suspicion → { suspicion, events }).
+ *  Returns null on ANY failure — including 404 from older deploys without the
+ *  route — so the review panel can quietly not render. */
+export async function getSuspicionReport(sessionId: string): Promise<SuspicionReport | null> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/suspicion`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      suspicion?: { score?: unknown; factors?: SuspicionFactor[]; version?: unknown };
+      events?: IntegrityTimelineEvent[];
+    };
+    if (typeof body.suspicion?.score !== "number") return null;
+    return {
+      score: body.suspicion.score,
+      factors: body.suspicion.factors ?? [],
+      version: typeof body.suspicion.version === "string" ? body.suspicion.version : "?",
+      events: body.events ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Recruiter review ────────────────────────────────────────────────────────
 
 export interface ReviewSession {

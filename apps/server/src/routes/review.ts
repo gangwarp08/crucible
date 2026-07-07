@@ -22,6 +22,7 @@ import {
 import { persistSessionUpdate } from "../services/db.js";
 import { appendEvent } from "../services/events-direct.js";
 import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
+import { computeSuspicionScore, type SuspicionEventInput } from "../services/suspicion-score.js";
 
 const LIST_LIMIT = 100;
 
@@ -223,6 +224,58 @@ export async function reviewRoutes(server: FastifyInstance) {
       evaluation,
     });
   });
+
+  // ─── Suspicion score (P1 — proctoring v1, informational) ────────────────
+  // Recomputes the deterministic suspicion score on demand from the session's
+  // integrity.* events and returns it with the raw integrity timeline. This
+  // channel is INFORMATIONAL ONLY — it never touches evidence/evaluations
+  // (isolation enforced in evidence-extractor / analysis-input). Additive:
+  // no existing review endpoint changes.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/suspicion",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const [sessRes, eventsRes] = await Promise.all([
+        supabase.from("sessions").select("id").eq("id", id).maybeSingle(),
+        supabase
+          .from("events")
+          .select("seq, type, ts, payload")
+          .eq("session_id", id)
+          .like("type", "integrity.%")
+          .order("seq", { ascending: true })
+          .limit(1000),
+      ]);
+
+      if (sessRes.error) {
+        server.log.error({ err: sessRes.error, id }, "[review] suspicion: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (!sessRes.data) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (eventsRes.error) {
+        server.log.error({ err: eventsRes.error, id }, "[review] suspicion: events load failed");
+        return reply.status(500).send({ error: "Failed to load integrity events" });
+      }
+
+      const events = (eventsRes.data ?? []) as unknown as SuspicionEventInput[];
+      return reply.send({
+        suspicion: computeSuspicionScore(events),
+        events,
+        // Explicit .limit(1000) above — at exactly 1000 rows the timeline (and
+        // therefore the recomputed score) may be missing later events.
+        truncated: events.length === 1000,
+      });
+    },
+  );
 
   // ─── Manual evaluation trigger (calibration / rubric iteration) ─────────
   // Runs the Analysis Agent against any completed session. Replaces any prior

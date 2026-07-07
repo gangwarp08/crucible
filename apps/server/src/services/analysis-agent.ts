@@ -29,6 +29,7 @@ import {
   type EventRow,
 } from "./evidence-extractor.js";
 import { updateScenarioStats } from "./scenario-stats.js";
+import { updateDifficultyStats } from "./difficulty-stats.js";
 import {
   assembleAnalysisInput,
   AnalysisInputError,
@@ -614,6 +615,15 @@ async function runStageB(
   void updateScenarioStats(scenarioId).catch((err) => {
     console.error(
       `[analysis] scenario_stats update failed for scenario ${scenarioId}:`,
+      (err as Error).message,
+    );
+  });
+
+  // Refresh the per-difficulty-band calibration aggregates (P5.2). Same
+  // fire-and-forget + non-fatal contract as scenario_stats above.
+  void updateDifficultyStats(scenarioId).catch((err) => {
+    console.error(
+      `[analysis] competency_difficulty_stats update failed for scenario ${scenarioId}:`,
       (err as Error).message,
     );
   });

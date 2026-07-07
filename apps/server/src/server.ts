@@ -9,6 +9,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import { healthRoutes } from "./routes/health.js";
 import { ptyRoutes } from "./routes/pty.js";
 import { fileRoutes } from "./routes/files.js";
+import { integrityRoutes } from "./routes/integrity.js";
 import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
 import { queryRoutes } from "./routes/query.js";
@@ -70,6 +71,7 @@ export async function buildServer() {
   await server.register(sessionRoutes, { prefix: "/sessions" });
   await server.register(ptyRoutes);
   await server.register(fileRoutes);
+  await server.register(integrityRoutes);
   await server.register(chatRoutes, { prefix: "/api" });
   await server.register(queryRoutes, { prefix: "/api" });
   await server.register(messageRoutes);

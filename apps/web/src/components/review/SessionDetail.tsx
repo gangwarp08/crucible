@@ -9,6 +9,7 @@ import TranscriptPanel from "./TranscriptPanel";
 import FilesDiffPanel from "./FilesDiffPanel";
 import Timeline from "./Timeline";
 import CostPanel from "./CostPanel";
+import SuspicionPanel from "./SuspicionPanel";
 
 // xterm and Monaco need the browser — load these client-side only.
 const TerminalReplay = dynamic(() => import("./TerminalReplay"), { ssr: false });
@@ -44,6 +45,14 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
           exclusionReason={detail.session.exclusion_reason ?? null}
           events={detail.events}
           onRefetch={onRefetch}
+        />
+
+        {/* Proctoring v1 — informational integrity signals, never scored.
+            Renders nothing on older servers without the suspicion route. */}
+        <SuspicionPanel
+          sessionId={detail.session.id}
+          events={detail.events}
+          sessionStart={detail.session.created_at}
         />
 
         <OutcomeInvitePanel

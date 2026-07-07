@@ -404,6 +404,17 @@ function ScenarioBody({
         </section>
       )}
 
+      <section style={{ marginBottom: 32 }}>
+        <SectionLabel>Session integrity</SectionLabel>
+        <p style={{ color: color.text.muted, fontSize: 12, margin: "8px 0 0", lineHeight: 1.6 }}>
+          During the session we record passive integrity signals from this
+          browser tab — tab focus changes, large paste bursts, long idle gaps,
+          and copy events from the brief and docs. Reviewers see these as
+          informational signals only; they never change your competency score.
+          No webcam, no biometrics.
+        </p>
+      </section>
+
       <div style={{
         display: "flex", flexDirection: "column",
         alignItems: "flex-start", gap: 14,
