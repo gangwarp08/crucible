@@ -11,8 +11,10 @@
 //
 // MUST NEVER appear here (spec P4.3): cost/spend, model names, raw
 // transcript/events, sandbox ids, org ids, session ids, other candidates'
-// data. Evidence carries seq numbers + judge notes only — seq numbers are
-// meaningless without the (internal-only) event stream.
+// data, suspicion factor details (kinds/counts/weights/contributions — those
+// are recruiter-only, via the SuspicionPanel endpoint). Evidence carries seq
+// numbers + judge notes only — seq numbers are meaningless without the
+// (internal-only) event stream.
 
 import { z } from "zod";
 import { supabase } from "./supabase.js";
@@ -77,19 +79,11 @@ export const SharedReportSchema = z
         informational: z.literal(true),
       })
       .strict(),
+    // Score + version only — the per-factor breakdown is recruiter-facing and
+    // must not leave through the public share link.
     suspicion: z
       .object({
         score: z.number(),
-        factors: z.array(
-          z
-            .object({
-              kind: z.string(),
-              count: z.number(),
-              weight: z.number(),
-              contribution: z.number(),
-            })
-            .strict(),
-        ),
         version: z.string(),
         informational: z.literal(true),
       })
@@ -252,12 +246,6 @@ export async function buildSharedReport(
     },
     suspicion: {
       score: suspicion.score,
-      factors: suspicion.factors.map((f) => ({
-        kind: f.kind,
-        count: f.count,
-        weight: f.weight,
-        contribution: f.contribution,
-      })),
       version: suspicion.version,
       informational: true,
     },

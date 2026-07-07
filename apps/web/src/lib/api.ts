@@ -1058,12 +1058,9 @@ export interface SharedReport {
   verification: { defense_outcome: string | null; cap_status: string | null };
   competencies: SharedReportCompetency[];
   ai_fluency: { placement: AiFluencyPlacement | null; informational: true };
-  suspicion: {
-    score: number;
-    factors: Array<{ kind: string; count: number; weight: number; contribution: number }>;
-    version: string;
-    informational: true;
-  };
+  // Score + version only — factor details are recruiter-facing (SuspicionPanel)
+  // and never appear in the public shared report.
+  suspicion: { score: number; version: string; informational: true };
   share: { expires_at: string };
 }
 

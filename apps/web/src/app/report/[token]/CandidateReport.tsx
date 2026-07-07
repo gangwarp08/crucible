@@ -180,15 +180,6 @@ export default function CandidateReport({ token }: { token: string }) {
             {r.suspicion.score}/100
           </span>
         </div>
-        {r.suspicion.factors.length > 0 && (
-          <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: color.text.secondary, lineHeight: 1.7 }}>
-            {r.suspicion.factors.map((f) => (
-              <li key={f.kind}>
-                {f.kind.replace(/_/g, " ")} × {f.count} (+{f.contribution})
-              </li>
-            ))}
-          </ul>
-        )}
         <div style={{ fontSize: 11, color: color.text.muted, marginTop: 8, lineHeight: 1.5 }}>
           Passive browser signals aggregated for context. Informational only — this number
           is never part of the assessment score.

@@ -19,7 +19,8 @@
  *   [e] AI-Fluency placement maps the ai_orchestration score (thresholds:
  *       <2.5 dependent, 2.5–3.9 augmented, >=4 orchestrator) and is labeled
  *       informational;
- *   [f] suspicion is present, informational, computed from integrity events;
+ *   [f] suspicion is present, informational, computed from integrity events —
+ *       score + version ONLY, no per-factor breakdown (recruiter-only);
  *   [g] the allowlist is STRICT — injecting an extra key makes parsing throw
  *       (internal fields are excludable by construction, not by omission).
  *
@@ -232,6 +233,9 @@ async function main(): Promise<void> {
       "model", "sandbox_id", "litellm_key_alias", "template",
       "transcript", "events", "payload",
       "session_id", "org_id", "id", "token_hash", "summary", "scenario_state",
+      // Suspicion factor breakdown is recruiter-only — the public report
+      // carries the score + version, nothing per-factor.
+      "factors", "kind", "weight", "contribution",
     ];
     for (const fk of FORBIDDEN_KEYS) {
       check(`no "${fk}" key anywhere in the payload`, !keys.has(fk));
@@ -283,7 +287,8 @@ async function main(): Promise<void> {
     console.log("\n[f] suspicion (informational)");
     check("computed from integrity events (>0)", report.suspicion.score > 0, `score=${report.suspicion.score}`);
     check("labeled informational", report.suspicion.informational === true);
-    check("factors enumerated", report.suspicion.factors.some((f) => f.kind === "blur" && f.count === 2));
+    check("version present", typeof report.suspicion.version === "string" && report.suspicion.version.length > 0);
+    check("no factor breakdown in the shared payload", !("factors" in report.suspicion));
 
     // ── [g] strictness: extra keys are a thrown error, not a leak ────────
     console.log("\n[g] allowlist is strict");
