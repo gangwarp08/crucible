@@ -1,0 +1,382 @@
+{
+  "slug": "fde-api-integration",
+  "title": "Contact sync triage (API integration)",
+  "role": "fde",
+  "difficulty": "mid",
+  "dataset_ref": "fixtures/fde-api-integration",
+  "family_id": "fde-api-integration",
+  "isomorph_of": null,
+  "docs": [
+    {
+      "id": "data-dictionary",
+      "title": "Solstice Sync Data Dictionary",
+      "body": "## api_requests\n\nOne row per HTTP request the nightly ContactHub sync made (latest run only).\n\n- `id` — opaque request identifier\n- `endpoint` — request path (e.g. `/v2/contacts`, `/v2/auth/token`)\n- `method` — HTTP method\n- `status_code` — HTTP response status\n- `cursor` — the page token this request sent (NULL for the first page and for auth calls)\n- `next_cursor` — the page token the provider returned for the next page (NULL when absent)\n- `retry_of` — `id` of the request this one retried, NULL otherwise\n- `requested_at` — when the request was made, in UTC\n\n## provider_contacts\n\nContactHub's full contact export — the source of truth. The export is ordered by `updated_at`.\n\n- `external_id` — ContactHub's unique id for the contact\n- `name` — contact name\n- `email` — contact email\n- `updated_at` — last modification time in ContactHub, UTC\n\n## local_contacts\n\nOur synced local copy — what the Solstice app actually serves.\n\n- `id` — local row identifier\n- `external_id` — references `provider_contacts.external_id`\n- `name` — contact name as synced\n- `email` — contact email as synced\n- `updated_at` — the provider timestamp at sync time\n"
+    },
+    {
+      "id": "integration-runbook",
+      "title": "ContactHub Sync Runbook",
+      "body": "## Schedule\n\nNightly at 02:00 UTC.\n\n## Method\n\nFull refresh: the job truncates `local_contacts`, then pages through `GET /v2/contacts` and inserts every record it receives. The first request sends no cursor; each subsequent request sends the page token from the previous response. Whatever the run fetched is what the app serves the next morning.\n\n## Retries\n\nAll requests go through the shared retry wrapper, which retries any 401 / 429 / timeout exactly once. The wrapper predates the provider's pagination change.\n\n## Auth\n\nShort-lived access token from `POST /v2/auth/token`, minted at run start and refreshed on a 401.\n\n## Monitoring\n\nNone beyond the raw request log. There is no provider-vs-local reconciliation check today.\n"
+    },
+    {
+      "id": "provider-changelog",
+      "title": "ContactHub API Changelog (excerpt)",
+      "body": "## 2026-05-14 — /v2/contacts pagination\n\nOffset/limit pagination has been REMOVED from `/v2/contacts`. Cursor paging is now required: each response returns a `next_cursor` token for the following page. Tokens are opaque — never construct or modify them. A request carrying a stale or constructed cursor returns the page that token pointed at when it was minted.\n\n## 2026-04-02 — rate limits\n\nBurst rate limits tightened; export-sized reads are more likely to see intermittent 429s. Standard retry guidance applies.\n\n## 2026-02-20 — /v1/contacts sunset\n\nThe legacy `/v1/contacts` endpoint is sunset for all tenants.\n"
+    }
+  ],
+  "brief": "You're the forward-deployed engineer assigned to Solstice Retail, a B2B commerce company. Their ops team has flagged that contacts are quietly going missing from the app: records that clearly exist in ContactHub (their CRM provider) never show up locally, support tickets are piling up, and nobody trusts the sync any more. You have read access to a copy of the integration's sync database — the API request log from the nightly run, the provider's full contact export, and the local synced copy — plus an internal channel with your teammate. Figure out what's going on, fix it properly, and give ops something they can trust. Your client (Maya, Head of Operations) is in the client channel.",
+  "constraints": {
+    "time_minutes": 60,
+    "tokens": 200000,
+    "compute_minutes": 60,
+    "money_usd": 25,
+    "memory_mb": 2048
+  },
+  "client_persona": {
+    "name": "Maya",
+    "role": "Head of Operations",
+    "voice": "non-technical, pragmatic, increasingly frustrated",
+    "goal": "Her team's contacts reliably back in the app, an exact count of what was missing, and a plain-English explanation she can send to the exec team.",
+    "knows": [
+      "Contacts that exist in ContactHub keep not showing up in the app.",
+      "It's been happening since around mid-May, and it's different contacts on different days.",
+      "Support estimates 'a few hundred' are missing at any given time.",
+      "The ContactHub export is the source of truth."
+    ],
+    "never_reveals": [
+      "The technical root cause.",
+      "Anything about cursors, pagination, tokens, retries, or the request log.",
+      "Any opinion about the teammate's theories."
+    ],
+    "beats": [
+      {
+        "id": "open",
+        "trigger": "session_start",
+        "behavior": "Opens with the vague, urgent ask from the brief. Does not volunteer specifics."
+      },
+      {
+        "id": "specifics_on_ask",
+        "trigger": "candidate_asks_clarifying_question",
+        "behavior": "Reveals: it's the ContactHub contact sync; contacts present in ContactHub are absent from the app; roughly a few hundred at any time, different ones day to day; it started around mid-May; the ContactHub export is the source of truth."
+      },
+      {
+        "id": "relief_on_update",
+        "trigger": "candidate_gives_status_update",
+        "behavior": "Expresses relief and adds slight extra pressure: 'Can you have it sorted by end of session?'"
+      },
+      {
+        "id": "curveball_1_relay",
+        "trigger": "curveball.requirement_change",
+        "behavior": "Relays leadership's new ask: the exact number of missing contacts, confirmation they're restored, and a one-paragraph plain-English explanation for the exec team, by end of session."
+      },
+      {
+        "id": "skeptical_acceptance",
+        "trigger": "candidate_delivers_final",
+        "behavior": "Asks one skeptical follow-up — 'Are you sure they'll all come back and STAY back?' — before accepting."
+      }
+    ],
+    "guardrails": [
+      "Never volunteers or confirms the technical cause.",
+      "If asked leading API-ish questions, redirects to business context.",
+      "Stays in character; does not coach the candidate."
+    ]
+  },
+  "team_persona": {
+    "name": "Sam",
+    "role": "senior integrations engineer / teammate",
+    "voice": "helpful but busy, slightly overconfident",
+    "goal": "Be helpful while mid-task; nudge the candidate without doing the work for them.",
+    "beats": [
+      {
+        "id": "misleading_hint",
+        "trigger": "early_session",
+        "behavior": "Proactively messages: 'the contact sync thing? pretty sure it's the api tokens expiring mid-run — i keep seeing 401s in the log. add a token refresh and re-run it.' (There ARE 401s in the log, but every one was retried successfully — token expiry is a red herring.)"
+      },
+      {
+        "id": "concede_with_evidence",
+        "trigger": "candidate_pushes_back_with_evidence",
+        "behavior": "Concedes and offers a real clue: 'huh. if it's not the tokens… contacthub shipped an api change recently — worth checking their changelog against how our pager and retry wrapper behave.' Only fires if the candidate brings specific numbers (401s all retried successfully, or the missing records clustering at page boundaries)."
+      },
+      {
+        "id": "scope_boundary",
+        "trigger": "candidate_asks_for_prod_access",
+        "behavior": "Declines: 'can't hand out the prod ContactHub creds, but the request log and both exports you have should be enough.'"
+      },
+      {
+        "id": "shortcut_pitch",
+        "trigger": "mid_session_time_pressure",
+        "behavior": "Under deadline pressure, proposes hardcoding the old paging behaviour — pin the page size and skip the cursor handling — as a workaround that gets tonight's run green. A genuine, well-meant shortcut that is faster but silently keeps dropping the boundary-page records for exactly the users already hurt. Collaborative: concedes gracefully if the candidate insists on the real fix. This is a Product-Sense judgment fork (design_under_constraints), NOT a teamwork test."
+      }
+    ],
+    "guardrails": [
+      "Gives the misleading token hint exactly once.",
+      "Never hands over the answer.",
+      "The changelog clue only unlocks if the candidate brings evidence (rewards verification over trust).",
+      "Pitches the hardcode workaround exactly once; concedes gracefully if the candidate insists on fixing the pagination properly."
+    ]
+  },
+  "curveballs": [
+    {
+      "id": "requirement_change",
+      "trigger": {
+        "kind": "time_or_event",
+        "time_offset_minutes": 25,
+        "event": "candidate_first_substantive_client_update"
+      },
+      "payload": {
+        "channel": "client",
+        "speaker": "Maya",
+        "message": "Quick update from leadership — they now want the exact number of missing contacts, confirmation they're restored, and a one-paragraph plain-English explanation I can send to the exec team, by end of session."
+      },
+      "tests": [
+        "adaptability",
+        "reprioritization",
+        "outcome_communication"
+      ],
+      "difficulty_band": "mid"
+    },
+    {
+      "id": "misleading_teammate_hint",
+      "trigger": {
+        "kind": "time_or_event",
+        "time_offset_minutes": 0.5,
+        "event": "session_start"
+      },
+      "payload": {
+        "channel": "team",
+        "speaker": "Sam",
+        "message": "the contact sync thing? pretty sure it's the api tokens expiring mid-run — i keep seeing 401s in the log. just add a token refresh and re-run it."
+      },
+      "tests": [
+        "verification_over_trust",
+        "teamwork"
+      ],
+      "difficulty_band": "mid"
+    },
+    {
+      "id": "hardcode_workaround",
+      "trigger": {
+        "kind": "time_or_event",
+        "time_offset_minutes": 15,
+        "event": "candidate_first_pagination_or_reconciliation_query"
+      },
+      "payload": {
+        "channel": "team",
+        "speaker": "Sam",
+        "message": "honestly we're tight on time — quickest fix: pin the page size back and skip the cursor handling, hardcode the old paging behaviour as a workaround so tonight's sync runs clean. we can do it properly later."
+      },
+      "tests": [
+        "product_sense",
+        "design_under_constraints"
+      ],
+      "difficulty_band": "mid"
+    }
+  ],
+  "deliverable_spec": {
+    "components": [
+      {
+        "key": "reconciled_sync_report",
+        "label": "Reconciled sync report",
+        "what": "A query or script against the sync database that quantifies the gap: the provider's record count vs our distinct local count, the exact number of missing contacts, and where the missing records cluster.",
+        "accept_criteria": [
+          "Query executes successfully against the seeded database.",
+          "Compares provider count against DISTINCT local external_ids (not raw row count).",
+          "Missing-record count matches the fixture's ground truth.",
+          "Characterizes the missing records (they cluster at cursor-page boundaries)."
+        ]
+      },
+      {
+        "key": "root_cause_finding",
+        "label": "Root-cause finding",
+        "what": "A clear statement of what was wrong and why — the provider moved /v2/contacts to cursor pagination and our retry wrapper re-sends a stale cursor, so a retried page is fetched twice and its successor silently skipped. Not the token-expiry theory the teammate proposed.",
+        "accept_criteria": [
+          "Identifies the pagination contract drift plus the non-idempotent retry as the cause.",
+          "Cites the duplicate-cursor fingerprint (same cursor fetched twice with status 200).",
+          "Explicitly rejects the token-expiry hypothesis with evidence (every 401 was retried successfully)."
+        ]
+      },
+      {
+        "key": "client_facing_summary",
+        "label": "Exec-ready client-facing summary",
+        "what": "A one-paragraph explanation Maya can send to the exec team: what happened in plain English, that no data was ever lost on the provider side, that the sync is fixed and backfilled, and the reconciled count.",
+        "accept_criteria": [
+          "Written in plain language a non-technical exec can follow.",
+          "States the reconciled count clearly.",
+          "Makes clear the provider still has every contact — only our sync was skipping them.",
+          "Mentions the guard against recurrence."
+        ]
+      },
+      {
+        "key": "decisions_and_tradeoffs",
+        "label": "Key decisions and trade-offs",
+        "what": "A short engineering note: the decision on the proposed hardcode-the-paging workaround and why, the chosen fix (honor next_cursor on retry — idempotent pagination), the backfill approach, and what should change upstream.",
+        "accept_criteria": [
+          "States the decision on the hardcoded workaround explicitly, with the user impact of the alternative.",
+          "Names the fix (idempotent retry that honors next_cursor).",
+          "Addresses backfilling the missing records.",
+          "Recommends an upstream guard (pin the provider API version, a pagination contract test, or a nightly reconciliation alarm)."
+        ]
+      }
+    ]
+  },
+  "rubric": [
+    {
+      "competency_key": "problem_framing",
+      "weight": 0.12,
+      "load_bearing": true,
+      "scenario_description": "Asks what 'missing'/expected/since-when before digging; forms hypotheses (auth vs pagination vs provider-side loss) before querying; confirms the provider export is the source of truth.",
+      "scenario_signals": [
+        "Client questions asked before the first query.",
+        "Hypotheses stated explicitly before testing them.",
+        "Confirms the reconciliation baseline (provider export) before reconciling."
+      ],
+      "scenario_anchors": {
+        "5": "Clarifying question to the client BEFORE the first query AND explicit hypothesis-testing in queries (the token-expiry theory quantified against the request log before being accepted or rejected).",
+        "3": "At least one clarifying question to the client (even if generic), OR explicit hypothesis-testing queries — one of the two, not both.",
+        "1": "No clarifying question AND queries dive straight in without any hypothesis stated."
+      }
+    },
+    {
+      "competency_key": "data_fluency",
+      "weight": 0.18,
+      "load_bearing": true,
+      "scenario_description": "Explores the request log and both contact tables, quantifies the provider-vs-local gap, finds the duplicate-cursor fingerprint; does not accept the token-expiry hint blindly.",
+      "scenario_signals": [
+        "Progression from status-code exploration to the provider-vs-distinct-local gap to the cursor fingerprint.",
+        "LEFT JOIN (or equivalent) characterizing WHICH records are missing and where they cluster.",
+        "The 401s tested against their retries with numbers."
+      ],
+      "scenario_anchors": {
+        "5": "Full chain: status distribution → provider-vs-distinct-local gap → missing records characterized (clustering at page boundaries) → duplicate-cursor fingerprint (GROUP BY cursor HAVING COUNT(*) > 1), AND the token-expiry theory tested and rejected with numbers (every 401 retried successfully).",
+        "3": "Quantified the gap OR found the duplicate cursors, but did not connect the two — or did not test the auth theory numerically.",
+        "1": "Only naive counts; accepted the token-expiry hint without querying the request log."
+      }
+    },
+    {
+      "competency_key": "design_under_constraints",
+      "weight": 0.18,
+      "load_bearing": true,
+      "scenario_description": "The Product-Sense judgment fork: when the teammate pitches the hardcoded workaround (pin the page size, skip the cursor handling) that ships faster but silently keeps dropping the boundary-page records, does the candidate protect the end user? Plus: targeted queries over full scans; visible reprioritization after the requirement change.",
+      "scenario_signals": [
+        "Decision on the hardcode workaround observable in decisions_and_tradeoffs (Stage-A evidence, primary).",
+        "Edge-case / user-impact reasoning on the team channel after the pitch (corroborating, never sole).",
+        "Query selectivity and budget awareness; reprioritization after curveball 1."
+      ],
+      "scenario_anchors": {
+        "5": "Declines the hardcoded workaround, names the user cost (the boundary-page records would silently keep dropping — exactly the users already hurt), and ships the robust fix (honor next_cursor on retry — idempotent pagination) plus a backfill; the decision is stated in the deliverable.",
+        "3": "Hedges on the workaround: defers the decision, ships the robust fix without addressing the teammate's proposal, or accepts the hardcode 'temporarily' with a mitigation plan — trade-off awareness without a clean user-protecting call.",
+        "1": "Ships the hardcoded workaround (pins the page size / skips the cursor handling) with no edge-case impact analysis — the fast-but-worse shortcut taken at the users' expense."
+      },
+      "scenario_scoring_note": "The fork measures Product Sense ONLY and is graded 5/3/1 on this competency. The deliverable outcome is the primary evidence; team-channel reasoning corroborates. Teamwork is scored separately as a session-wide signal — never from this fork."
+    },
+    {
+      "competency_key": "execution",
+      "weight": 0.18,
+      "load_bearing": true,
+      "scenario_description": "Produces a reconciliation that actually runs and matches ground truth; the fix and backfill are concrete.",
+      "scenario_signals": [
+        "Missing-record count matches the fixture's ground truth (the reconciliation queries are deterministic).",
+        "Working reconciliation SQL present in the deliverable.",
+        "All four deliverable components present."
+      ],
+      "scenario_anchors": {
+        "5": "Correct root cause + exact missing-record count (provider vs distinct local) + working reconciliation SQL + a concrete fix (idempotent retry honoring next_cursor) and backfill plan.",
+        "3": "Correct root cause and sound method but the figure is off for a nameable reason (e.g. counted local rows instead of DISTINCT external_ids), or the fix is right but the backfill unaddressed. The diagnosis is real; precision is wrong for a specific reason.",
+        "1": "Wrong root cause (blamed the tokens) OR no working reconciliation query at all."
+      }
+    },
+    {
+      "competency_key": "ai_orchestration",
+      "weight": 0.08,
+      "load_bearing": true,
+      "scenario_description": "Uses the AI assistant on the real sub-problem (idempotent retries under cursor pagination) and verifies its output against the log and data.",
+      "scenario_signals": [
+        "ai.assistant turns followed by verification queries.",
+        "Does not paste assistant output as final without checking."
+      ],
+      "scenario_anchors": {
+        "5": "Focused assistant turn on the actual problem (e.g. how to make a retried page request idempotent under cursor pagination) followed by a verification query against the data.",
+        "3": "Assistant used, but on the wrong hypothesis (token refresh) OR not verified against the data.",
+        "1": "No AI-assistant use at all."
+      }
+    },
+    {
+      "competency_key": "teamwork",
+      "weight": 0.1,
+      "load_bearing": true,
+      "scenario_description": "Engages Sam, verifies the token-expiry hint against the request log rather than acting on it, brings evidence to unlock the changelog clue. Session-wide signal — deliberately independent of the product-sense fork (which feeds design_under_constraints only).",
+      "scenario_signals": [
+        "Exchange in the team channel before acting on the token hint.",
+        "401-vs-retry evidence brought to Sam, not just opinions.",
+        "Follow-ups that unlock the changelog clue."
+      ]
+    },
+    {
+      "competency_key": "customer_engagement",
+      "weight": 0.06,
+      "load_bearing": true,
+      "scenario_description": "Sets expectations with an anxious, non-technical ops lead; updates her as the picture firms up; absorbs the requirement change calmly.",
+      "scenario_signals": [
+        "Cadence and quality of client-channel updates.",
+        "Calm, non-defensive response to curveball 1.",
+        "Translates the integration failure into client-appropriate language."
+      ],
+      "scenario_anchors": {
+        "5": "Clarifying question upfront + calm, professional handling of the requirement change + a plain-language summary that actually answers 'are my contacts back, and will they stay back?'",
+        "3": "Clarifying question OR calm curveball handling but not both; professional tone throughout.",
+        "1": "Zero client-channel engagement AND no client-facing summary, or an actively dismissive tone."
+      }
+    },
+    {
+      "competency_key": "outcome_communication",
+      "weight": 0.1,
+      "load_bearing": true,
+      "scenario_description": "The exec-ready paragraph is clear, accurate, non-technical: what broke, that no provider data was lost, the reconciled count, and the guard against recurrence.",
+      "scenario_signals": [
+        "Final paragraph reads as exec-appropriate prose.",
+        "Reconciled count stated clearly and matches the candidate's own queries.",
+        "Cause described in plain English without pagination jargon."
+      ],
+      "scenario_anchors": {
+        "5": "Plain-English paragraph with the correct reconciled count, a non-technical cause ('the provider changed how its API pages through records; our sync skipped a page whenever a request was retried'), an explicit 'no data was ever lost on the provider side', and a recurrence guard.",
+        "3": "Clean professional prose that states a wrong cause or wrong count — clarity is real but the conclusion is wrong. CAP at this band when the content is incorrect.",
+        "1": "Terse one-liner, jargon-laden, or no client-facing summary at all."
+      },
+      "scenario_scoring_note": "Communication quality is structure, audience-fit, and clarity — scored independently of execution correctness. The CAP at 3 applies when the candidate confidently communicates an incorrect conclusion."
+    }
+  ],
+  "success_criteria": {
+    "must": [
+      "Identifies the pagination contract drift plus the non-idempotent retry as the root cause (not token expiry).",
+      "Quantifies the gap — provider count vs distinct local count — matching the fixture's ground truth.",
+      "Declines the hardcoded workaround and ships/specifies the robust fix (honor next_cursor on retry) with a backfill.",
+      "Delivers all four deliverable components."
+    ],
+    "bonus": [
+      "Recommends pinning the provider API version plus a pagination contract test and a nightly provider-vs-local reconciliation alarm."
+    ],
+    "tolerance": {
+      "record_count_pct": 0.02
+    }
+  },
+  "radical_values": {
+    "bug_class": "cursor_pagination_contract_drift",
+    "failure_mechanism": "non_idempotent_retry_stale_cursor",
+    "reconcile_key": "external_id",
+    "red_herrings": ["token_expiry_401", "rate_limit_429"],
+    "missing_cluster": "cursor_page_boundaries",
+    "ps_fork": {
+      "curveball_id": "hardcode_workaround",
+      "shortcut": "pin_page_size_skip_cursor_handling",
+      "measures": "design_under_constraints",
+      "grading": [5, 3, 1]
+    },
+    "deliverable_components": 4
+  },
+  "incidental_values": {
+    "seed_label": "fde-api-integration-v1",
+    "company": "Solstice Retail",
+    "provider": "ContactHub",
+    "page_size": 40,
+    "sync_run_at": "2026-06-12 02:00:00"
+  }
+}

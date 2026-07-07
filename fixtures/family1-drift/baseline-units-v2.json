@@ -1,0 +1,228 @@
+{
+  "detector_version": "2",
+  "units": [
+    {
+      "competency_key": "data_fluency",
+      "kind": "query_error_count",
+      "value": {
+        "errors": 1,
+        "total": 4
+      },
+      "weight": 1,
+      "event_seqs": [
+        2
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "deliverable_present",
+      "value": true,
+      "weight": 1,
+      "event_seqs": [
+        14
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "required_fields_present",
+      "value": {
+        "complete": true,
+        "missing": []
+      },
+      "weight": 1,
+      "event_seqs": [
+        14
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "iterated_after_failure",
+      "value": true,
+      "weight": 1,
+      "event_seqs": [
+        2,
+        3
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "verified_before_submit",
+      "value": true,
+      "weight": 1,
+      "event_seqs": [
+        7,
+        8
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "design_under_constraints",
+      "kind": "wasteful_select_star_count",
+      "value": 1,
+      "weight": 1,
+      "event_seqs": [
+        3
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "ai_orchestration",
+      "kind": "ai_turn_count",
+      "value": 1,
+      "weight": 1,
+      "event_seqs": [
+        9
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "ai_orchestration",
+      "kind": "ai_token_spend",
+      "value": 1234,
+      "weight": 1,
+      "event_seqs": [
+        10
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "problem_framing",
+      "kind": "clarifier_before_first_query",
+      "value": true,
+      "weight": 1,
+      "event_seqs": [
+        1
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "customer_engagement",
+      "kind": "client_update_count",
+      "value": 1,
+      "weight": 1,
+      "event_seqs": [
+        1
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "teamwork",
+      "kind": "team_engaged_count",
+      "value": 1,
+      "weight": 1,
+      "event_seqs": [
+        5
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "verification_engaged",
+      "value": {
+        "prompted": true,
+        "questions": 1,
+        "answered": 1,
+        "weak_count": 0
+      },
+      "weight": 1,
+      "event_seqs": [
+        12,
+        13
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "defense_weak",
+      "value": {
+        "weak": false,
+        "n_weak": 0,
+        "n_total": 1
+      },
+      "weight": 1,
+      "event_seqs": [
+        12,
+        13
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "data_fluency",
+      "kind": "dedup_correct",
+      "value": true,
+      "weight": 1,
+      "event_seqs": [
+        6,
+        8
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "data_fluency",
+      "kind": "status_filter_missing",
+      "value": false,
+      "weight": 1,
+      "event_seqs": [
+        6
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "execution",
+      "kind": "figures_match_truth",
+      "value": {
+        "matched": true,
+        "best_rel_delta": 0.6556,
+        "month_matches": 3,
+        "corrected_total_dollars": 3942038.52
+      },
+      "weight": 1,
+      "event_seqs": [
+        14
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "design_under_constraints",
+      "kind": "ps_fork_user_protected",
+      "value": {
+        "protected": true,
+        "corrected_month_hits": 2
+      },
+      "weight": 1,
+      "event_seqs": [
+        4,
+        14
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "design_under_constraints",
+      "kind": "ps_fork_shortcut_taken",
+      "value": {
+        "taken": false,
+        "naive_month_hits": 1
+      },
+      "weight": 1,
+      "event_seqs": [
+        4,
+        14
+      ],
+      "detector_version": "2"
+    },
+    {
+      "competency_key": "design_under_constraints",
+      "kind": "ps_fork_reasoning_present",
+      "value": true,
+      "weight": 1,
+      "event_seqs": [
+        5
+      ],
+      "detector_version": "2"
+    }
+  ]
+}

@@ -623,6 +623,35 @@ The candidate link token is consumed end-to-end from `/start/[slug]?link=…`,
 so org inheritance, single-use enforcement, and routing all operate through
 the real UI.
 
+### 13.5 Dormant builds (second scenario family)
+
+The second scenario family — **`fde-api-integration`** (API-integration
+debugging: auth, pagination, retries, contract drift), with the teammate
+product-sense fork **native** (the teammate proposes hardcoding a workaround
+that ships faster but breaks edge-case users; measured on
+`design_under_constraints` only, graded 5/3/1, decision observable in the
+deliverable) — is **built dormant**: migration 0023 seeds it with
+`catalog_visible = false`, so it never lists in the candidate catalog and is
+never assignable to pilot candidates. Its detectors (`DETECTOR_VERSION` 3) are
+slug-prefix-gated and **inert on family 1** (`verify-family1-drift-inert.ts`
+asserts family-1 re-scores are unchanged). Calibration runs only against
+internal hand-authored playthroughs via the direct-slug path and admin-minted
+session links (`verify-family2-discrimination.ts`, `verify-family2-isomorph.ts`,
+`verify-cross-family-scale.ts`, `verify-family2-dormant.ts`).
+
+**Activation is a manual, documented flip — never automatic.** Trigger:
+*cohort 1 closed* = all cohort-1 session links consumed or expired **and**
+every cohort-1 session's evaluation complete, plus family 2 green on the four
+calibration verifiers above. Then run:
+
+```sql
+UPDATE scenarios SET catalog_visible = true
+WHERE family_id = 'fde-api-integration';
+```
+
+(optionally enabling band routing to the family afterwards). Retrofitting the
+fork into `fde-db-triage` remains a separate, later versioning event.
+
 ---
 
 ## 14. Verification & regression system

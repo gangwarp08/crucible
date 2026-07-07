@@ -1,0 +1,20 @@
+{
+  "description": "Frozen synthetic family-1 (fde-db-triage) playthrough for the P3.2 drift-boundary assertion. Exercises every detector tier live at DETECTOR_VERSION 2: agnostic (queries, deliverable, AI, messages), verification (L4 defense), fde-db-triage-specific (dedup / status-filter / figures-match), the product-sense fork (curveball + reasoning + protected deliverable), and an integrity.* event that must stay filtered out. DO NOT EDIT: verify-family1-drift-inert.ts re-runs the full detector pipeline over this stream and asserts the emitted units are byte-identical to baseline-units-v2.json modulo the detector_version stamp.",
+  "slug": "fde-db-triage",
+  "events": [
+    { "seq": 1, "type": "message.client.candidate", "actor": "candidate", "payload": { "text": "Before I dig in — which report shows the wrong number, and what figure did you expect to see?" } },
+    { "seq": 2, "type": "db.query", "actor": "candidate", "payload": { "sql": "SELECT amount FROM paymentz", "status": "error", "error": "no such table: paymentz" } },
+    { "seq": 3, "type": "db.query", "actor": "candidate", "payload": { "sql": "SELECT * FROM payments LIMIT 10", "status": "ok", "row_count": 10 } },
+    { "seq": 4, "type": "curveball.fired", "actor": "system", "payload": { "curveball_id": "shortcut_suggestion" } },
+    { "seq": 5, "type": "message.team.candidate", "actor": "candidate", "payload": { "text": "can't just ship the raw sum — the webhook retries double-count ~8% of succeeded payments and overstate revenue; the board needs the reconciled number." } },
+    { "seq": 6, "type": "db.query", "actor": "candidate", "payload": { "sql": "WITH dedup AS (SELECT MIN(id) AS id FROM payments WHERE status = 'succeeded' GROUP BY external_payment_id) SELECT strftime('%Y-%m', created_at) AS month, SUM(amount_cents) FROM payments WHERE id IN (SELECT id FROM dedup) AND status = 'succeeded' GROUP BY month", "status": "ok", "row_count": 3 } },
+    { "seq": 7, "type": "deliverable.draft", "actor": "candidate", "payload": { "data": { "corrected_monthly_revenue": "draft figures pending final verification", "root_cause_finding": "webhook retry double-inserts", "client_facing_summary": "draft", "decisions_and_tradeoffs": "draft" } } },
+    { "seq": 8, "type": "db.query", "actor": "candidate", "payload": { "sql": "SELECT external_payment_id, COUNT(*) FROM payments WHERE status = 'succeeded' GROUP BY external_payment_id HAVING COUNT(*) > 1", "status": "ok", "row_count": 52 } },
+    { "seq": 9, "type": "ai.assistant.candidate", "actor": "candidate", "payload": { "text": "What's the idiomatic SQLite pattern to dedup rows sharing external_payment_id, keeping the earliest id?" } },
+    { "seq": 10, "type": "ai.assistant.response", "actor": "system", "payload": { "total_tokens": 1234 } },
+    { "seq": 11, "type": "integrity.tab_blur", "actor": "browser", "payload": { "ms": 1500 } },
+    { "seq": 12, "type": "verification.prompt", "actor": "system", "payload": { "index": 0, "competency_key": "execution", "text": "Walk me through how you derived the corrected April figure." } },
+    { "seq": 13, "type": "verification.response", "actor": "candidate", "payload": { "index": 0, "text": "I deduped by external_payment_id keeping MIN(id), filtered to status = 'succeeded', then summed amount_cents per month — April dropped by the 26 duplicate rows' value." } },
+    { "seq": 14, "type": "deliverable.submit", "actor": "candidate", "payload": { "data": { "corrected_monthly_revenue": "March $1334546.12, April $1357530.86, May $1249961.54", "root_cause_finding": "A webhook-retry bug double-inserted ~8% of succeeded payments in April and May; duplicates share external_payment_id.", "client_facing_summary": "Revenue was overstated by duplicate webhook inserts; corrected figures attached.", "decisions_and_tradeoffs": "Deduped by external_payment_id (MIN(id)) and filtered to succeeded before summing; declined the raw-sum shortcut because it overstates the board number." } } }
+  ]
+}
