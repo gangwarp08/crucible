@@ -72,6 +72,7 @@ async function main(): Promise<void> {
   console.log("Store these NOW — they are shown once and only hashes are persisted:");
   console.log(`  Org API key (X-Org-Key):        ${apiKey}`);
   console.log(`  Outcomes webhook secret (Bearer): ${webhookSecret}`);
+  console.log(`  Partner review link (share this single URL): https://tryassaya.com/review?key=${apiKey}`);
 }
 
 main().catch((err) => {
