@@ -210,7 +210,8 @@ fix for a real "stuck on defending" dry-run bug caused by deploying mid-session)
 ### 4.5 Environment & feature flags (`env.ts`, Zod-validated)
 
 Secrets (server-only): `LITELLM_MASTER_KEY`, `E2B_API_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`. Controls: `SESSION_BUDGET_USD`,
+`SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`, and `ORG_ADMIN_KEY` (operator-set
+admin credential for the asaya org — see §13.2 and §15). Controls: `SESSION_BUDGET_USD`,
 `SESSION_TIMEOUT_MIN`, `GLOBAL_DAILY_SPEND_CEILING_USD` (fail-closed breaker).
 Flags: `VERIFICATION_ENABLED`, `PILOT_VERIFICATION_ADVISORY`,
 `SESSION_LINK_REQUIRED`, `INVITE_CODE`, `OUTCOMES_WEBHOOK_SECRET`,
@@ -457,7 +458,9 @@ signal + factors — "informational, not scored"), **ShareReportModal**
 `SessionsTable` is the list view (now with difficulty band + suspicion flag);
 `SessionLinkMintPanel` mints candidate links with an optional difficulty-band
 select, and `OrgKeyInput` holds the recruiter's `X-Org-Key` in
-`sessionStorage` only (never bundled). The workspace additionally mounts the
+`sessionStorage` only (never bundled) — `OrgKeyBootstrap`, mounted by the
+review layout, fills the same slot from a `?key=` link and scrubs the URL
+(§13.2). The workspace additionally mounts the
 `useIntegrityMonitor` hook (`lib/integrity.ts`) that batches passive
 `integrity.*` events to the server (§13.1).
 
@@ -578,6 +581,21 @@ only after keys are minted. Sessions inherit their org from the session link
 org resolution breaks. Scenarios remain global (shared content, tenant data).
 `verify-tenant-isolation.ts` is the gate.
 
+Two access refinements sit on top. **`ORG_ADMIN_KEY`** is an operator-set env
+var accepted (constant-time compare) by `resolveOrgByApiKey` and
+`resolveOrgByWebhookSecret` *before* the hash lookup, resolving to the default
+asaya org — so the internal admin credential is a Railway variable to rotate,
+not a minted key; partner orgs still get minted per-org keys. And partners
+don't do a key exchange at all: `mint-org-key.ts` prints a single
+`https://tryassaya.com/review?key=<raw key>` link, and the review layout
+(`apps/web/src/app/review/layout.tsx` +
+`components/review/OrgKeyBootstrap.tsx`) moves `?key=` into the same
+sessionStorage org-key slot `OrgKeyInput` manages, then strips it from the URL
+and history — covering `/review`, `/review/[id]`, and `/review/cohorts/*`. The
+link **is** the credential, so treat it as a secret: the address bar is
+scrubbed on load, but the initial navigation can still leak the full URL via
+the Referer header before the strip.
+
 ### 13.3 Partner reports (cohorts + shareable candidate report)
 
 `GET /api/review/cohorts/:scenarioId` + the **CohortDashboard** rank an org's
@@ -636,10 +654,15 @@ proven not to regress scoring, security, or the candidate experience.
   0018–0022 (orgs, RLS posture, difficulty, report shares, link bands) are
   applied to the live DB as of 2026-07-07.
 - **Org-auth rollout order:** mint each partner org's API key with
-  `scripts/mint-org-key.ts` (the raw key is shown once — distribute it out of
-  band), *then* flip `ORG_AUTH_REQUIRED=true` on the server. Until the flip,
-  `/api/review/*` falls back to the default asaya org, so nothing breaks while
-  keys are being handed out.
+  `scripts/mint-org-key.ts` — it prints the raw key once, plus a single
+  ready-to-share review link (`https://tryassaya.com/review?key=<key>`) that
+  is the partner's entire access — *then* flip `ORG_AUTH_REQUIRED=true` on the
+  server. Until the flip, `/api/review/*` falls back to the default asaya org,
+  so nothing breaks while links are being handed out. Distribute the link out
+  of band and treat it like the key it embeds. The access model in one line:
+  **the link is the key, the org is the fence** — admin access is the
+  `ORG_ADMIN_KEY` env var, partner access is one shared URL, and every query
+  is scoped to the resolved org.
 - **Internal admin credential:** for the internal asaya org, set the
   `ORG_ADMIN_KEY` env var (min 16 chars) instead of minting a key. It is
   accepted (timing-safe compare) as both the org API key and the outcome

@@ -29,7 +29,8 @@ claim to do.
   Suspicion Score. Integrity signals are excluded from scoring by
   construction, and candidates see a disclosure up front.
 - Multi-tenant: partner orgs authenticate with an API key
-  (`X-Org-Key`) and see only their own sessions, plus per-scenario
+  (`X-Org-Key`) — delivered as a single review link (`/review?key=…`)
+  — and see only their own sessions, plus per-scenario
   cohort dashboards and public shareable candidate reports
   (allowlisted, PDF-printable).
 - Routes candidates to an easier/harder variant of a scenario family
@@ -181,7 +182,9 @@ sessions survive server restarts (E2B reconnect + LiteLLM re-mint),
 the workspace fully hydrates on refresh, costs are alerted daily.
 
 v-next shipped: passive proctoring + Suspicion Score, multi-tenant
-orgs (API-key auth behind the `ORG_AUTH_REQUIRED` rollout flag),
+orgs (API-key auth behind the `ORG_AUTH_REQUIRED` rollout flag;
+admin via the `ORG_ADMIN_KEY` env var, partners via a link-embedded
+key on the review surface),
 cohort dashboards + public shareable reports, and difficulty-band
 routing with calibration stats + equating. Migrations 0018–0022 are
 applied to the live DB; see `docs/ARCHITECTURE-REPORT.md` §13.

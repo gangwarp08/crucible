@@ -855,7 +855,11 @@ is the detailed source of truth. In brief:
   authenticates via `X-Org-Key` once `ORG_AUTH_REQUIRED=true` (default off →
   default-org fallback); every query is org-scoped, the RLS posture is
   deny-all, and cross-tenant probes return a uniform 404. Scenarios remain
-  global. `verify-tenant-isolation.ts` is the gate.
+  global. `verify-tenant-isolation.ts` is the gate. Access model: admin = the
+  operator-set `ORG_ADMIN_KEY` env var (constant-time compare, before the hash
+  lookup); partners = one shared review link (`/review?key=…`, moved into
+  sessionStorage and stripped from the URL on load — treat the link as a
+  secret).
 - **Reports.** Org-scoped cohort dashboard
   (`GET /api/review/cohorts/:scenarioId` → `/review/cohorts/[scenarioId]`) and
   shareable candidate reports (`report_shares`, 0021): mint/list/revoke from
