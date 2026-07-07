@@ -18,8 +18,20 @@ import { env } from "../env.js";
  *  (orgsTableKnownToExist), a null org resolution is a HARD error — this
  *  function THROWS (failing the session-create request) instead of omitting
  *  org_id, because that insert would only die on the NOT NULL constraint and
- *  the session row would silently vanish. */
-export async function persistSessionCreated(sessionId: string, orgId?: string): Promise<void> {
+ *  the session row would silently vanish.
+ *
+ *  P5.1: `difficultyBand` is the EFFECTIVE band the session was routed to at
+ *  creation (the routed scenario's own difficulty — see difficulty-routing.ts).
+ *  Stamped ONLY here, in the INSERT: routing happens at creation and nothing
+ *  may update sessions.difficulty_band afterwards (running sessions are never
+ *  re-routed). The column ships in migration 0020, which may not be applied —
+ *  a missing-column insert error retries once without the band (logged once,
+ *  session creation continues). */
+export async function persistSessionCreated(
+  sessionId: string,
+  orgId?: string,
+  difficultyBand?: string,
+): Promise<void> {
   if (!supabase) return;
 
   const entry = sessionRegistry.get(sessionId);
@@ -35,30 +47,54 @@ export async function persistSessionCreated(sessionId: string, orgId?: string): 
   }
 
   try {
-    const { error } = await supabase.from("sessions").insert({
-      id: sessionId,
-      assessment_id: null,
-      status: "active",
-      sandbox_id: entry.sandboxId,
-      template: "crucible-dev",
-      litellm_key_alias: `session-${sessionId}`,
-      model: "gemini-flash",
-      budget_usd: env.SESSION_BUDGET_USD,
-      spend_usd: 0,
-      timeout_min: env.SESSION_TIMEOUT_MIN,
-      deadline: entry.deadline.toISOString(),
-      created_at: entry.createdAt.toISOString(),
-      started_at: entry.createdAt.toISOString(),
-      updated_at: entry.createdAt.toISOString(),
-      scenario_id: entry.scenarioId,
-      scenario_state: entry.scenarioState,
-      ...(resolvedOrgId ? { org_id: resolvedOrgId } : {}),
-    });
+    const insertRow = (includeBand: boolean) =>
+      supabase!.from("sessions").insert({
+        id: sessionId,
+        assessment_id: null,
+        status: "active",
+        sandbox_id: entry.sandboxId,
+        template: "crucible-dev",
+        litellm_key_alias: `session-${sessionId}`,
+        model: "gemini-flash",
+        budget_usd: env.SESSION_BUDGET_USD,
+        spend_usd: 0,
+        timeout_min: env.SESSION_TIMEOUT_MIN,
+        deadline: entry.deadline.toISOString(),
+        created_at: entry.createdAt.toISOString(),
+        started_at: entry.createdAt.toISOString(),
+        updated_at: entry.createdAt.toISOString(),
+        scenario_id: entry.scenarioId,
+        scenario_state: entry.scenarioState,
+        ...(resolvedOrgId ? { org_id: resolvedOrgId } : {}),
+        // P5.1: effective band stamped at creation only (see doc comment).
+        ...(includeBand && difficultyBand ? { difficulty_band: difficultyBand } : {}),
+      });
+
+    let { error } = await insertRow(!sessionsBandColumnMissing);
+    if (error && difficultyBand && !sessionsBandColumnMissing && isMissingBandColumn(error)) {
+      // Migration 0020 not applied — log ONCE, drop the band, keep the session.
+      sessionsBandColumnMissing = true;
+      console.warn(
+        "[db] sessions.difficulty_band missing (migration 0020 not applied) — session persisted without band",
+      );
+      ({ error } = await insertRow(false));
+    }
 
     if (error) console.error("[db] persistSessionCreated failed", error.message);
   } catch (err) {
     console.error("[db] persistSessionCreated unexpected error", err);
   }
+}
+
+// ── P5.1: sessions.difficulty_band pre-migration tolerance ──────────────────
+// 42703 = undefined column (SELECT); PGRST204 = unknown column in an
+// INSERT/UPDATE payload. Latched so the warn logs once per process.
+let sessionsBandColumnMissing = false;
+
+function isMissingBandColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const mentionsBand = /difficulty_band/i.test(err.message ?? "");
+  return (err.code === "42703" || err.code === "PGRST204") && mentionsBand;
 }
 
 /** Source-of-truth read for the orphan-teardown path. When the in-memory

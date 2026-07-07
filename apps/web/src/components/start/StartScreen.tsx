@@ -15,7 +15,12 @@ import SectionLabel from "@/components/ui/SectionLabel";
 import Stat from "@/components/ui/Stat";
 import Wordmark from "@/components/ui/Wordmark";
 
-interface Props { slug: string; }
+interface Props {
+  slug: string;
+  /** RD6/P5.1 single-use session link token from ?link=… (read server-side in
+   *  app/start/[slug]/page.tsx). null when the candidate arrived without one. */
+  linkToken?: string | null;
+}
 
 type Phase =
   | { kind: "loading" }
@@ -39,7 +44,7 @@ function fmtNum(n: number | null): string {
   return n.toLocaleString("en-US");
 }
 
-export default function StartScreen({ slug }: Props) {
+export default function StartScreen({ slug, linkToken }: Props) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [inviteCode, setInviteCode] = useState("");
@@ -111,6 +116,10 @@ export default function StartScreen({ slug }: Props) {
       const { sessionId } = await createSession({
         scenarioId: scenario.id,
         ...(trimmedCode ? { inviteCode: trimmedCode } : {}),
+        // Single-use session link — the server validates + consumes it; a dead
+        // link (expired/consumed/revoked) rejects with a message we surface
+        // via the starting-failed phase below.
+        ...(linkToken ? { linkToken } : {}),
       });
       router.push(`/session/${sessionId}`);
     } catch (err) {

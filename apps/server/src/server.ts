@@ -12,6 +12,7 @@ import { fileRoutes } from "./routes/files.js";
 import { integrityRoutes } from "./routes/integrity.js";
 import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
+import { reportRoutes } from "./routes/report.js";
 import { queryRoutes } from "./routes/query.js";
 import { messageRoutes } from "./routes/messages.js";
 import { docsRoutes } from "./routes/docs.js";
@@ -79,6 +80,8 @@ export async function buildServer() {
   await server.register(deliverableRoutes, { prefix: "/api" });
   await server.register(scenariosRoutes, { prefix: "/api/scenarios" });
   await server.register(reviewRoutes, { prefix: "/api/review" });
+  // PUBLIC shared candidate report — token IS the auth (P4.3); no org key.
+  await server.register(reportRoutes, { prefix: "/api/report" });
   await server.register(outcomesRoutes, { prefix: "/api" });
   await server.register(contactRoutes, { prefix: "/api" });
 

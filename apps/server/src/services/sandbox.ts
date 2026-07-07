@@ -124,6 +124,11 @@ export async function createSandbox(
   // P2: owning tenant for the sessions row — the session-link's org when a
   // linkToken started the session, else the default org (resolved by caller).
   orgId?: string,
+  // P5.1: EFFECTIVE difficulty band the session was routed to at creation
+  // (the routed scenario's own difficulty — resolved by routes/sessions.ts
+  // via difficulty-routing.ts BEFORE this call). Stamped once on the sessions
+  // insert; never updated afterwards (running sessions are never re-routed).
+  difficultyBand?: string,
 ): Promise<string> {
   const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
@@ -262,7 +267,7 @@ export async function createSandbox(
 
   // Persist the sessions row synchronously so FK constraints on telemetry tables
   // are satisfied before any subsequent writes (events, file_snapshots, etc.) land.
-  await persistSessionCreated(sessionId, orgId);
+  await persistSessionCreated(sessionId, orgId, difficultyBand);
 
   logEvent(sessionId, "session.created", "system", {
     sandboxId: sandbox.sandboxId,

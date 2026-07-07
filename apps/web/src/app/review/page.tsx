@@ -1,5 +1,6 @@
 import SessionsTable from "@/components/review/SessionsTable";
 import OrgKeyInput from "@/components/review/OrgKeyInput";
+import SessionLinkMintPanel from "@/components/review/SessionLinkMintPanel";
 import { color } from "@/styles/tokens";
 
 export default function ReviewPage() {
@@ -42,6 +43,9 @@ export default function ReviewPage() {
               default org. */}
           <OrgKeyInput />
         </header>
+        {/* RD6 + P5.1: single-use candidate start links with optional
+            difficulty-band routing (consumed once at session creation). */}
+        <SessionLinkMintPanel />
         <SessionsTable />
       </div>
     </main>

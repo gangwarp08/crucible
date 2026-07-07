@@ -4,6 +4,7 @@ import type { ReviewSessionDetail } from "@/lib/api";
 import { color, font } from "@/styles/tokens";
 import SessionSummary from "./SessionSummary";
 import Scorecard from "./Scorecard";
+import ShareReportModal from "./ShareReportModal";
 import OutcomeInvitePanel from "./OutcomeInvitePanel";
 import TranscriptPanel from "./TranscriptPanel";
 import FilesDiffPanel from "./FilesDiffPanel";
@@ -35,6 +36,11 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
     >
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         <SessionSummary detail={detail} />
+
+        {/* P4.3: tokenized shareable candidate report (external-safe subset). */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ShareReportModal sessionId={detail.session.id} />
+        </div>
 
         <Scorecard
           evaluation={detail.evaluation}

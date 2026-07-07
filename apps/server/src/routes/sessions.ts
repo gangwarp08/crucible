@@ -13,6 +13,7 @@ import {
   SessionLinkError,
 } from "../services/session-link.js";
 import { getDefaultOrg, orgsTableKnownToExist, sessionOrgIdFromLink } from "../services/orgs.js";
+import { resolveScenarioForBand, type DifficultyBand } from "../services/difficulty-routing.js";
 import { env } from "../env.js";
 
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
@@ -91,10 +92,14 @@ export async function sessionRoutes(server: FastifyInstance) {
     // Resolved BEFORE sandbox creation because persistSessionCreated runs
     // inside createSandbox and sessions.org_id is NOT NULL after 0018.
     let linkOrgId: string | null = null;
+    // P5.1: band the recruiter requested when minting the link (0022).
+    // Null = no routing. Consumed once, below, BEFORE sandbox creation.
+    let linkBand: DifficultyBand | null = null;
     if (linkToken) {
       try {
         const link = await peekSessionLink(linkToken);
         linkOrgId = link.org_id;
+        linkBand = link.difficulty_band;
       } catch (err) {
         if (err instanceof SessionLinkError) {
           return reply.status(err.code === "invalid" ? 401 : 409).send({
@@ -134,15 +139,45 @@ export async function sessionRoutes(server: FastifyInstance) {
     const scenarioId = parsed.data?.scenarioId;
     const beatTimingOverridesMs = parsed.data?.beatTimingOverridesMs;
     const tokenBudgetOverride = parsed.data?.tokenBudgetOverride;
+
+    // ── P5.1: difficulty routing — AT CREATION ONLY ─────────────────────────
+    // A banded link routes the canonical scenario to its family sibling in the
+    // requested band BEFORE the sandbox exists. The session then runs the
+    // routed scenario end-to-end (curveball banding in sandbox.ts keys off
+    // that scenario's own difficulty). effectiveBand — the routed scenario's
+    // difficulty — is stamped once on the sessions INSERT and never updated:
+    // running sessions are never re-routed.
+    let effectiveScenarioId = scenarioId;
+    let effectiveBand: DifficultyBand | undefined;
+    if (linkBand && scenarioId) {
+      const routing = await resolveScenarioForBand(scenarioId, linkBand);
+      effectiveScenarioId = routing.scenarioId;
+      effectiveBand = routing.effectiveBand ?? undefined;
+      if (!routing.routed) {
+        // Never fail the session over a routing miss — run the original.
+        request.log.warn(
+          { scenarioId, requestedBand: linkBand, effectiveBand: routing.effectiveBand },
+          "difficulty routing found no family sibling for the requested band — starting the original scenario",
+        );
+      }
+    }
+
     const sessionId = randomUUID();
     try {
-      await createSandbox(sessionId, scenarioId, beatTimingOverridesMs, tokenBudgetOverride, sessionOrgId);
+      await createSandbox(
+        sessionId,
+        effectiveScenarioId,
+        beatTimingOverridesMs,
+        tokenBudgetOverride,
+        sessionOrgId,
+        effectiveBand,
+      );
     } catch (err) {
       if (err instanceof DatasetUnavailableError) {
         // Scenario row exists but its dataset isn't deployed on this server —
         // a config/deploy mismatch, not a candidate error. Clean 422 instead
         // of a raw 500 leaking the server path.
-        request.log.error({ err, scenarioId }, "scenario dataset unavailable");
+        request.log.error({ err, scenarioId, effectiveScenarioId }, "scenario dataset unavailable");
         return reply.status(422).send({
           error: "This assessment is temporarily unavailable. Please pick another or try again later.",
         });
