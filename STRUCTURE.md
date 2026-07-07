@@ -49,50 +49,67 @@ apps/
         docs.ts                    # scenario docs
         files.ts                   # sandbox file read/write
         health.ts
+        integrity.ts               # passive proctoring signals (integrity.* events)
         messages.ts                # message history
+        outcomes.ts                # partner outcome webhook + feedback invites
         pty.ts                     # terminal/PTY bridge
         query.ts                   # SQL query runner (scenarios)
-        review.ts                  # recruiter review data
+        report.ts                  # PUBLIC shareable candidate report (token-gated)
+        review.ts                  # recruiter review data (org-scoped via X-Org-Key)
         scenarios.ts               # scenario catalog
         sessions.ts                # session lifecycle
       services/
+        ai-fluency.ts              # presentation-only AI-Fluency placement
         analysis-agent.ts          # post-session analysis
         analysis-input.ts
+        cohort.ts                  # per-scenario cohort aggregates (org-scoped)
         compute-tracker.ts         # cost/compute accounting
         dataset-seed.ts
         db.ts                      # in-sandbox SQL DB helpers
+        difficulty-routing.ts      # band -> scenario-family sibling (at creation only)
+        difficulty-stats.ts        # competency_difficulty_stats accumulator
+        equating.ts                # cross-band equating readout
         events-direct.ts
         litellm.ts                 # mint/scope per-session LiteLLM keys
         messaging.ts
+        orgs.ts                    # org resolution + API key / webhook secret minting
         persona-agent.ts           # AI interviewer persona
         query-runner.ts
         registry.ts
+        report-share.ts            # mint/list/revoke shareable report tokens
         sandbox.ts                 # E2B sandbox lifecycle
         scenarios.ts
         scheduler.ts               # budget/timeout enforcement
         session-rehydrate.ts
         session-token.ts
         session.ts                 # core session state
+        shared-report.ts           # public report payload (strict Zod allowlist)
         sqlrun.py.ts
         supabase.ts
+        suspicion-score.ts         # deterministic 0-100 integrity score (never scored)
         telemetry.ts               # telemetry writes
       session.test.ts
-    scripts/                       # verify-*.ts harnesses + encode/seed helpers
+    scripts/                       # verify-*.ts harnesses (~49, incl. verify-tenant-isolation.ts)
+                                   # + encode/seed helpers + mint-org-key.ts
     package.json  tsconfig.json  vitest.config.ts
 
   web/                             # Next.js front end
     src/
       app/
         layout.tsx  page.tsx  globals.css
+        report/[token]/page.tsx                    # public shared candidate report (print-CSS PDF)
         review/page.tsx  review/[id]/page.tsx     # recruiter review
+        review/cohorts/[scenarioId]/page.tsx       # cohort dashboard
         scenarios/page.tsx
         session/[id]/page.tsx                      # candidate workspace
-        start/[slug]/page.tsx                      # session start
+        start/[slug]/page.tsx                      # session start (consumes ?link= token)
       components/
         landing/      # EmberCanvas, FlameCube, LandingPage
-        review/       # CostPanel, FilesDiffPanel, Scorecard, SessionDetail,
-                      # SessionSummary, SessionsTable, StatusBadge,
-                      # TerminalReplay, Timeline, TranscriptPanel, format.ts
+        review/       # CohortDashboard, CostPanel, FilesDiffPanel, OrgKeyInput,
+                      # Scorecard, SessionDetail, SessionLinkMintPanel,
+                      # SessionSummary, SessionsTable, ShareReportModal,
+                      # StatusBadge, SuspicionPanel, TerminalReplay, Timeline,
+                      # TranscriptPanel, format.ts
         start/        # ScenariosCatalog, StartScreen
         ui/           # Bubble, Button, Card, IconButton, Pill,
                       # SectionLabel, Stat, TabStrip, Wordmark
@@ -101,6 +118,8 @@ apps/
                       # FileTree, MarkdownView, Messages, Terminal,
                       # Workspace, WorkspaceLoader, WorkspaceTour
       lib/api.ts
+      lib/integrity.ts             # useIntegrityMonitor hook (passive proctoring)
+      lib/ai-fluency.ts
       stores/sessionStore.ts
       styles/tokens.ts
     next.config.ts  package.json  tsconfig.json
@@ -121,6 +140,13 @@ supabase/
     0004_fde_db_triage_content.sql
     0005_merge_scenario_state_rpc.sql
     0006_fde_db_triage_pro_content.sql
+    0007 … 0017                    # competency model, evidence units, outcomes,
+                                   # scenario families, lifecycle, session links
+    0018_orgs.sql                  # multi-tenant orgs (org_id NOT NULL everywhere)
+    0019_org_rls_posture.sql       # deny-all RLS posture on tenant tables
+    0020_difficulty_calibration.sql  # sessions.difficulty_band + competency_difficulty_stats
+    0021_report_shares.sql         # shareable candidate report tokens
+    0022_session_link_band.sql     # session_links.difficulty_band
 
 infra/
   e2b/

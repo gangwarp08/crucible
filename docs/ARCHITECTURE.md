@@ -633,8 +633,9 @@ by Fastify plugins in `server.ts`.)
 - **`scenarios.ts`** — `GET /api/scenarios/:slug`. Candidate-safe
   fields only (no rubric / ground_truth / personas).
 - **`review.ts`** — `GET /api/review/sessions`,
-  `GET /api/review/sessions/:id`, `POST /api/review/sessions/:id/evaluate`.
-  Recruiter-only by convention (no auth yet; later slice).
+  `GET /api/review/sessions/:id`, `POST /api/review/sessions/:id/evaluate`,
+  plus suspicion / cohorts / report-shares / equating (see § v-next below).
+  Org-authenticated via an `X-Org-Key` API key once `ORG_AUTH_REQUIRED=true`.
 
 ### Web UI primitives (Week 6)
 
@@ -828,6 +829,52 @@ SELECT status, overall_score, summary FROM evaluations WHERE session_id = '<uuid
   planning document in `.claude/plans/` and a one-shot verifier in
   `apps/server/scripts/verify-*.ts`. The verifier proves the slice
   in CI-style, end-to-end. Keep this pattern.
+
+---
+
+## v-next (July 2026) — proctoring, orgs, reports, difficulty routing
+
+Shipped after the guide above was written; `docs/ARCHITECTURE-REPORT.md` §13
+is the detailed source of truth. In brief:
+
+- **Passive proctoring + Suspicion Score.** The workspace emits `integrity.*`
+  events (tab/window blur, paste bursts, idle gaps, devtools, copy, fullscreen
+  exit — shared Zod taxonomy in `packages/shared/src/schemas/telemetry.ts`;
+  browser hook `apps/web/src/lib/integrity.ts`) to
+  `POST /sessions/:id/integrity` (rate-capped). `services/suspicion-score.ts`
+  computes a deterministic 0–100 score + factors
+  (`suspicion_detector_version=1`), shown in the review UI's SuspicionPanel.
+  **Hard rule:** the evidence extractor filters `integrity.*` before any
+  detector runs — proctoring signals never affect scores. Candidates see a
+  disclosure on the start screen; the public shared report shows the score
+  only (factors are recruiter-only).
+- **Multi-tenant orgs** (migrations 0018/0019, applied). `orgs` table;
+  `org_id NOT NULL` on sessions / session_links / outcomes / outcome_invites
+  (backfilled to the default asaya org); per-org API key + webhook secret,
+  sha256-hashed at rest, minted via `scripts/mint-org-key.ts`. `/api/review/*`
+  authenticates via `X-Org-Key` once `ORG_AUTH_REQUIRED=true` (default off →
+  default-org fallback); every query is org-scoped, the RLS posture is
+  deny-all, and cross-tenant probes return a uniform 404. Scenarios remain
+  global. `verify-tenant-isolation.ts` is the gate.
+- **Reports.** Org-scoped cohort dashboard
+  (`GET /api/review/cohorts/:scenarioId` → `/review/cohorts/[scenarioId]`) and
+  shareable candidate reports (`report_shares`, 0021): mint/list/revoke from
+  the review UI (ShareReportModal), public `GET /api/report/:token` behind a
+  strict Zod allowlist (no cost/model/sandbox/transcript data), rendered at
+  `/report/[token]` with print-CSS PDF export. AI-Fluency placement is a
+  presentation-only mapping of `ai_orchestration` (<2.5 Dependent · 2.5–3.9
+  Augmented · ≥4 Orchestrator).
+- **Difficulty routing + calibration** (0020/0022, applied). Session links
+  carry a `difficulty_band`; `services/difficulty-routing.ts` routes band →
+  scenario-family sibling at session **creation only** (a running session is
+  never re-routed). `services/difficulty-stats.ts` maintains
+  `competency_difficulty_stats` over scorable sessions only
+  (`difficulty_stats_version=1`); `services/equating.ts` +
+  `GET /api/review/equating/:familyId` compare bands within a family. The
+  candidate link token is consumed end-to-end from `/start/[slug]?link=…`.
+- **Ops:** to enable tenant auth, mint org keys first, then flip
+  `ORG_AUTH_REQUIRED=true`. The verify suite grew by nine scripts (~49 total),
+  including the tenant-isolation gate.
 
 ---
 
