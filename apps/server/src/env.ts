@@ -50,6 +50,13 @@ const EnvSchema = z.object({
   // import script bypasses HTTP and writes via the service role directly.
   OUTCOMES_WEBHOOK_SECRET: z.string().min(16).optional(),
 
+  // P2 multi-tenant org auth flag. When "true", every /api/review/* request
+  // MUST carry a valid X-Org-Key header (401 otherwise). Off by default: a
+  // key-less request resolves to the default 'asaya' admin org so the current
+  // review UI keeps working until org keys are distributed (services/orgs.ts
+  // requireOrg documents the back-compat switch).
+  ORG_AUTH_REQUIRED: z.string().optional(),
+
   // L4 interactive verification (Slice 5.4b) feature flag. OFF by default: the
   // near-deadline verification beat is only scheduled when this is "true" (or a
   // per-session test override is passed). Keeps it from firing for real

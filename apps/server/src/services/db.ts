@@ -1,38 +1,100 @@
-// Supabase session persistence — best-effort, never throws into the request path.
+// Supabase session persistence — best-effort, never throws into the request
+// path (EXCEPTION: persistSessionCreated throws on a post-0018 org-resolution
+// failure — see its doc comment).
 import { supabase } from "./supabase.js";
 import { sessionRegistry } from "./registry.js";
+import { getDefaultOrg, orgsTableKnownToExist } from "./orgs.js";
 import { env } from "../env.js";
 
-/** Insert the sessions row when a new session is created. */
-export async function persistSessionCreated(sessionId: string): Promise<void> {
+/** Insert the sessions row when a new session is created.
+ *
+ *  P2: `orgId` is the owning tenant — the session-link's org when a linkToken
+ *  started the session, else the default 'asaya' org. Resolved here as a last
+ *  resort too, because sessions.org_id is NOT NULL after 0018; on a pre-0018
+ *  database (orgs table absent) getDefaultOrg() returns null and the column is
+ *  omitted (still nullable there).
+ *
+ *  POST-MIGRATION SAFETY: once the orgs table is known to exist
+ *  (orgsTableKnownToExist), a null org resolution is a HARD error — this
+ *  function THROWS (failing the session-create request) instead of omitting
+ *  org_id, because that insert would only die on the NOT NULL constraint and
+ *  the session row would silently vanish.
+ *
+ *  P5.1: `difficultyBand` is the EFFECTIVE band the session was routed to at
+ *  creation (the routed scenario's own difficulty — see difficulty-routing.ts).
+ *  Stamped ONLY here, in the INSERT: routing happens at creation and nothing
+ *  may update sessions.difficulty_band afterwards (running sessions are never
+ *  re-routed). The column ships in migration 0020, which may not be applied —
+ *  a missing-column insert error retries once without the band (logged once,
+ *  session creation continues). */
+export async function persistSessionCreated(
+  sessionId: string,
+  orgId?: string,
+  difficultyBand?: string,
+): Promise<void> {
   if (!supabase) return;
-  try {
-    const entry = sessionRegistry.get(sessionId);
-    if (!entry) return;
 
-    const { error } = await supabase.from("sessions").insert({
-      id: sessionId,
-      assessment_id: null,
-      status: "active",
-      sandbox_id: entry.sandboxId,
-      template: "crucible-dev",
-      litellm_key_alias: `session-${sessionId}`,
-      model: "gemini-flash",
-      budget_usd: env.SESSION_BUDGET_USD,
-      spend_usd: 0,
-      timeout_min: env.SESSION_TIMEOUT_MIN,
-      deadline: entry.deadline.toISOString(),
-      created_at: entry.createdAt.toISOString(),
-      started_at: entry.createdAt.toISOString(),
-      updated_at: entry.createdAt.toISOString(),
-      scenario_id: entry.scenarioId,
-      scenario_state: entry.scenarioState,
-    });
+  const entry = sessionRegistry.get(sessionId);
+  if (!entry) return;
+
+  // Outside the best-effort try: a resolution failure here must propagate.
+  const resolvedOrgId = orgId ?? (await getDefaultOrg())?.id ?? null;
+  if (!resolvedOrgId && orgsTableKnownToExist()) {
+    console.error(
+      `[db] persistSessionCreated HARD FAIL: orgs table exists but no org_id could be resolved for session ${sessionId} — refusing to insert a tenant-less session row`,
+    );
+    throw new Error("persistSessionCreated: org resolution failed post-0018 (org_id is required)");
+  }
+
+  try {
+    const insertRow = (includeBand: boolean) =>
+      supabase!.from("sessions").insert({
+        id: sessionId,
+        assessment_id: null,
+        status: "active",
+        sandbox_id: entry.sandboxId,
+        template: "crucible-dev",
+        litellm_key_alias: `session-${sessionId}`,
+        model: "gemini-flash",
+        budget_usd: env.SESSION_BUDGET_USD,
+        spend_usd: 0,
+        timeout_min: env.SESSION_TIMEOUT_MIN,
+        deadline: entry.deadline.toISOString(),
+        created_at: entry.createdAt.toISOString(),
+        started_at: entry.createdAt.toISOString(),
+        updated_at: entry.createdAt.toISOString(),
+        scenario_id: entry.scenarioId,
+        scenario_state: entry.scenarioState,
+        ...(resolvedOrgId ? { org_id: resolvedOrgId } : {}),
+        // P5.1: effective band stamped at creation only (see doc comment).
+        ...(includeBand && difficultyBand ? { difficulty_band: difficultyBand } : {}),
+      });
+
+    let { error } = await insertRow(!sessionsBandColumnMissing);
+    if (error && difficultyBand && !sessionsBandColumnMissing && isMissingBandColumn(error)) {
+      // Migration 0020 not applied — log ONCE, drop the band, keep the session.
+      sessionsBandColumnMissing = true;
+      console.warn(
+        "[db] sessions.difficulty_band missing (migration 0020 not applied) — session persisted without band",
+      );
+      ({ error } = await insertRow(false));
+    }
 
     if (error) console.error("[db] persistSessionCreated failed", error.message);
   } catch (err) {
     console.error("[db] persistSessionCreated unexpected error", err);
   }
+}
+
+// ── P5.1: sessions.difficulty_band pre-migration tolerance ──────────────────
+// 42703 = undefined column (SELECT); PGRST204 = unknown column in an
+// INSERT/UPDATE payload. Latched so the warn logs once per process.
+let sessionsBandColumnMissing = false;
+
+function isMissingBandColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  const mentionsBand = /difficulty_band/i.test(err.message ?? "");
+  return (err.code === "42703" || err.code === "PGRST204") && mentionsBand;
 }
 
 /** Source-of-truth read for the orphan-teardown path. When the in-memory

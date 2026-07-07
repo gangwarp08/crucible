@@ -89,7 +89,7 @@ crucible/
 │  ├─ fde-db-triage/     scenario.json, schema.sql, seed.sql, ground_truth.json
 │  ├─ fde-db-triage-iso/ isomorph (same construct, different numbers)
 │  └─ fde-db-triage-pro/ harder cross-band variant
-├─ supabase/migrations/  0001 → 0016 schema evolution
+├─ supabase/migrations/  0001 → 0022 schema evolution
 └─ docs/         architecture + scenario guides + this report
 ```
 
@@ -146,15 +146,19 @@ and persists to the DB.
 | `deliverable.ts` | `GET/POST /api/sessions/:id/deliverable` | Draft (iterate) vs Submit (locks the workspace RD1, then **ends + scores the session** — submit is final). |
 | `messages.ts` | `WS /messages/:id`, `GET .../messages` | Persona (client/team) + verifier channels. |
 | `docs.ts` | `GET/POST .../docs` | Scenario reference docs + `doc.view` telemetry. |
+| `integrity.ts` | `POST /sessions/:id/integrity` | Passive proctoring signals from the browser (batched `integrity.*` events). Session-JWT, Zod-strict, per-session rate caps (60/min total, 40/min low-signal) with a server-authored `rate_capped` marker. |
 | `scenarios.ts` | `GET /api/scenarios[/:slug]` | Public catalog (excludes isomorphs + `-fork` dev clones) + invite-gated detail. |
-| `review.ts` | `GET/POST /api/review/*` | Recruiter tool: list/detail sessions, re-evaluate, reinterpret, confirm/override verification cap, session-links + outcome-invites admin. |
+| `review.ts` | `GET/POST /api/review/*` | Recruiter tool: list/detail sessions, re-evaluate, reinterpret, confirm/override verification cap, session-links + outcome-invites admin, suspicion breakdown (`GET .../sessions/:id/suspicion`), cohort dashboard (`GET .../cohorts/:scenarioId`), report-share mint/list/revoke, equating readout (`GET .../equating/:familyId`). Org-authenticated + org-scoped (§13.2). |
+| `report.ts` | `GET /api/report/:token` | **Public** shareable candidate report — a strict Zod allowlist (no cost/model/sandbox/transcript data; suspicion **score** only, factors are recruiter-only). |
 | `outcomes.ts` | `POST /api/outcomes`, invite resolve/submit | Partner outcome webhook + token-gated feedback links. |
 | `health.ts` | `GET /health` | Deployed commit SHA + latest migration + feature-flag states. |
 
 Auth: candidate routes require the **per-session JWT** (`session-token.ts`,
 HS256, `{sessionId, iat, exp}` with `exp` capped at 90 min). HTTP uses
 `Authorization: Bearer <jwt>`; WebSockets pass `bearer.<jwt>` as a subprotocol.
-Review routes are an internal service-role tool.
+Review routes authenticate the calling **org** via an `X-Org-Key` API key —
+enforced when `ORG_AUTH_REQUIRED` is on, with a default-org fallback while it's
+off (§13.2).
 
 ### 4.3 The live assessment loop (session start → score)
 
@@ -210,7 +214,8 @@ Secrets (server-only): `LITELLM_MASTER_KEY`, `E2B_API_KEY`,
 `SESSION_TIMEOUT_MIN`, `GLOBAL_DAILY_SPEND_CEILING_USD` (fail-closed breaker).
 Flags: `VERIFICATION_ENABLED`, `PILOT_VERIFICATION_ADVISORY`,
 `SESSION_LINK_REQUIRED`, `INVITE_CODE`, `OUTCOMES_WEBHOOK_SECRET`,
-`GIT_COMMIT_SHA` (for `/health` drift detection).
+`GIT_COMMIT_SHA` (for `/health` drift detection), and `ORG_AUTH_REQUIRED`
+(org API-key auth on `/api/review/*` — default off; see §13.2 and §15).
 
 ---
 
@@ -314,6 +319,11 @@ the canonical model. Per-scenario **anchors** override the global 1–5 bands.
   `_shortcut_taken` / `_reasoning_present` (feed `design_under_constraints`).
 - *Verification* detectors: `defense_weak` per competency.
 
+**Never `integrity.*` events:** the extractor filters proctoring signals out of
+the event stream *before* any detector runs, so integrity telemetry can never
+influence evidence units or scores (asserted by `verify-suspicion-score.ts` —
+see §13.1).
+
 Units are DELETE-then-INSERT per session (never stale) and carry a
 `detector_version`. Because the judge scores *from these units*, a candidate
 cannot "talk it out of" what the code counted.
@@ -361,7 +371,11 @@ them to scores so the instrument's predictive validity can be measured.
 
 Every evaluation stamps four versions —
 `competency_model_version, detector_version, judge_prompt_version,
-scenario_version`. When any changes, a held-out **anchor set** is re-scored and
+scenario_version`. Two further version namespaces live *outside* evaluations
+and evolve independently: `suspicion_detector_version` (=1, stamped on
+suspicion-score computations, §13.1) and `difficulty_stats_version` (=1,
+stamped on calibration-stat rows, §13.4). When any changes, a held-out
+**anchor set** is re-scored and
 `drift.ts` flags per-competency deltas. `verify-discrimination / gradient /
 anchor-tuning / isomorph-equivalence` prove the judge cleanly separates a strong
 from a weak run (spread ≥ 1.5, no inversions, a real gradient in the middle, and
@@ -381,13 +395,19 @@ extraction reproducible and prevents seq-hallucination.
 | **Telemetry (append-only)** | `events`, `transcript`, `cost_ledger`, `file_snapshots` | `events` = every interaction (monotonic seq). `transcript` = AI turns + tokens/cost. `cost_ledger` = per-call spend audit. `file_snapshots` = code timeline (SHA-dedup). |
 | **Scenarios** | `scenarios`, `scenario_families`, `scenario_stats` | Immutable definitions (rubric binding, personas, curveballs, constraints, ground-truth ref); families group isomorphs; stats are running per-competency aggregates. |
 | **Scoring** | `competency_model_versions`, `competencies`, `evidence_units`, `evaluations`, `evaluation_items` | The versioned rubric, deterministic Stage-A units (seq-pinned), and the judge's verdict (`assessed` flag from 0015 distinguishes not-assessed from scored-low). |
-| **Partner loop** | `outcomes`, `outcome_invites`, `session_links` | Real-world outcomes + single-use expiring links (only token hashes stored). |
+| **Partner loop** | `outcomes`, `outcome_invites`, `session_links` | Real-world outcomes + single-use expiring links (only token hashes stored). `session_links.difficulty_band` (0022) requests a band at mint time. |
+| **Tenancy** | `orgs` (+ `org_id NOT NULL` on `sessions`, `session_links`, `outcomes`, `outcome_invites`) | One row per partner org (role `admin` \| `partner`); API key + webhook secret stored as sha256 hashes. v1 data backfilled to the default asaya org. Scenarios remain global. |
+| **Reports** | `report_shares` | Expiring share tokens (hash-only) for the public candidate report. |
+| **Difficulty** | `competency_difficulty_stats` (+ `sessions.difficulty_band`) | Per scenario/band/competency calibration aggregates over **scorable sessions only**, stamped `difficulty_stats_version`. |
 
 Migration highlights: `0001` core telemetry · `0003` FDE scenarios + evaluations
 · `0007/0008` competency model + rubric rebind · `0009` evidence units · `0010`
 outcomes · `0011` scenario families · `0012` version stamps + scenario_stats ·
 `0013` outcome invites · `0014` lifecycle columns · `0015` `evaluation_items.assessed`
-· `0016` session links.
+· `0016` session links · `0017` review counts · `0018/0019` orgs + deny-all RLS
+posture · `0020` `sessions.difficulty_band` + `competency_difficulty_stats` ·
+`0021` report shares · `0022` `session_links.difficulty_band`. Migrations
+0018–0022 are **applied to the live DB** (2026-07-07).
 
 *One important distinction:* `scenarios.constraints` is the **in-fiction**
 budget (compute-minutes, tokens, memory the candidate "spends") — pedagogical.
@@ -399,9 +419,12 @@ control. They are independent.
 ## 9. The frontend (apps/web)
 
 Next.js app-router. Pages: `/` (landing), `/scenarios` (catalog),
-`/start/[slug]` (session start), `/session/[id]` (the **workspace**),
-`/review` + `/review/[id]` (recruiter), `/feedback/[token]` (partner outcome
-form).
+`/start/[slug]` (session start — consumes a single-use session-link token via
+`?link=` and shows the proctoring disclosure), `/session/[id]` (the
+**workspace**), `/review` + `/review/[id]` (recruiter),
+`/review/cohorts/[scenarioId]` (cohort dashboard), `/report/[token]` (public
+shared candidate report with print-CSS PDF export), `/feedback/[token]`
+(partner outcome form).
 
 ### The candidate workspace (`components/workspace/*`)
 
@@ -428,8 +451,15 @@ go through
 that jump to the timeline, the RD2 advisory-cap confirm/override banner — dormant
 now that defense is removed, and the RD3 "excluded" banner), **Timeline**,
 **TranscriptPanel**, **TerminalReplay**,
-**FilesDiffPanel**, **CostPanel**, and outcome-invite management. `SessionsTable`
-is the list view.
+**FilesDiffPanel**, **CostPanel**, **SuspicionPanel** (the 0–100 integrity
+signal + factors — "informational, not scored"), **ShareReportModal**
+(mint/list/revoke public report links), and outcome-invite management.
+`SessionsTable` is the list view (now with difficulty band + suspicion flag);
+`SessionLinkMintPanel` mints candidate links with an optional difficulty-band
+select, and `OrgKeyInput` holds the recruiter's `X-Org-Key` in
+`sessionStorage` only (never bundled). The workspace additionally mounts the
+`useIntegrityMonitor` hook (`lib/integrity.ts`) that batches passive
+`integrity.*` events to the server (§13.1).
 
 ### Design system
 
@@ -455,6 +485,10 @@ The **hard rules** are enforced structurally, not by convention:
 6. **Secrets never committed**; RLS-protected data paths.
 7. **Single-use candidate links** (RD6) bind the scored person to the session so
    the outcome loop is meaningful.
+8. **Org tenancy** (§13.2): org API keys + webhook secrets are sha256-hashed at
+   rest; every review/outcomes read and write is org-scoped; cross-tenant
+   probes return a uniform 404 (no existence oracle); the RLS posture on
+   tenant tables is deny-all.
 
 Layered defenses worth calling out: the **RD5 judge fence** + the **assistant
 guard** (prompt injection), **hallucination filtering** (the judge can only cite
@@ -502,7 +536,78 @@ scenario is a deliberate, checkpointed step.
 
 ---
 
-## 13. Verification & regression system
+## 13. v-next: proctoring, multi-tenant orgs, reports & difficulty routing
+
+Four partner-facing capabilities landed after the v1 hardening pass (PR #24).
+Each keeps the v1 invariants: deterministic where it counts, versioned,
+verified against real infra.
+
+### 13.1 Passive proctoring + Suspicion Score (measurement-neutral)
+
+The browser hook `apps/web/src/lib/integrity.ts` (mounted in the Workspace)
+emits a shared Zod taxonomy of eight `integrity.*` event types — tab
+blur/focus, window blur, paste bursts, idle gaps, devtools, copy, fullscreen
+exit (`packages/shared/src/schemas/telemetry.ts`) — debounced and batched to
+`POST /sessions/:id/integrity` (rate-capped server-side).
+`services/suspicion-score.ts` folds them into a deterministic **0–100
+Suspicion Score + factors** (`suspicion_detector_version=1`, pure like
+`scorability.ts`). The hard rule: **integrity signals never touch scoring** —
+the evidence extractor filters `integrity.*` before any detector runs, so the
+score is an informational flag beside the scorecard (the SuspicionPanel is
+labelled "integrity signal — informational, not scored"), never part of it.
+Candidates see a monitoring disclosure on the start screen; the public shared
+report exposes the score **only** — factor details (kinds, weights,
+contributions) are recruiter-only so link-holders can't learn the detector
+taxonomy.
+
+### 13.2 Multi-tenant orgs (migrations 0018/0019)
+
+Partners are `orgs` rows (role `admin` | `partner`) with an **API key** and a
+**webhook secret**, both stored sha256-hashed — the raw values are shown once
+at mint (`scripts/mint-org-key.ts`). `org_id` is `NOT NULL` on sessions,
+session links, outcomes, and outcome invites (v1 data backfilled to the
+default asaya org). The posture is **deny-all RLS + app-level scoping**
+(`services/orgs.ts`): the server resolves the caller's org from the
+`X-Org-Key` header and scopes every `/api/review/*` and outcomes query; the
+admin org sees all; cross-tenant probes get a uniform 404 (no existence
+oracle); the outcomes webhook verifies the **per-org** secret and the
+correlation endpoint is authenticated + org-scoped. Enforcement is gated by
+`ORG_AUTH_REQUIRED` (default off → default-org fallback), so the flag flips
+only after keys are minted. Sessions inherit their org from the session link
+(else the default org), and session creation **fails closed** pre-sandbox if
+org resolution breaks. Scenarios remain global (shared content, tenant data).
+`verify-tenant-isolation.ts` is the gate.
+
+### 13.3 Partner reports (cohorts + shareable candidate report)
+
+`GET /api/review/cohorts/:scenarioId` + the **CohortDashboard** rank an org's
+candidates for one scenario — per-competency scores, scorable/excluded split,
+suspicion flags, aggregates (`services/cohort.ts`). A recruiter can mint an
+expiring **share link** (`report_shares`, token hash only; mint/list/revoke
+org-gated) whose public `GET /api/report/:token` passes a **strict Zod
+allowlist** (`services/shared-report.ts`) — no cost, model, sandbox,
+transcript, or other-candidate data — rendered at `/report/[token]` with
+print-CSS PDF export. The **AI-Fluency placement** is a *presentation-only*
+mapping of the `ai_orchestration` score (`services/ai-fluency.ts`: <2.5
+Dependent · 2.5–3.9 Augmented · ≥4 Orchestrator) — no new measurement.
+
+### 13.4 Difficulty routing, calibration stats & equating (0020/0022)
+
+Session links carry an optional `difficulty_band`. At session **creation
+only**, `services/difficulty-routing.ts` routes the band to a sibling scenario
+within the family and stamps the effective band on the session — **a running
+session is never re-routed** (the safety rule). `services/difficulty-stats.ts`
+accumulates per scenario/band/competency aggregates over **scorable sessions
+only** (`competency_difficulty_stats`, `difficulty_stats_version=1`; a
+fire-and-forget call beside `updateScenarioStats`), and `services/equating.ts`
++ `GET /api/review/equating/:familyId` (admin) compare bands within a family.
+The candidate link token is consumed end-to-end from `/start/[slug]?link=…`,
+so org inheritance, single-use enforcement, and routing all operate through
+the real UI.
+
+---
+
+## 14. Verification & regression system
 
 The project's quality bar is a suite of **`verify-*.ts`** scripts (in
 `apps/server/scripts/`, orchestrated by `regression.ts`) that run against real
@@ -510,12 +615,16 @@ infra. They split into: deterministic checks (scorability, competency-gating,
 defense classification, fail-modes, the reaper), server-backed checks
 (submit-lock, session-links, verification-cap, candidate surfaces), and
 LLM-behavioral checks (discrimination, gradient, anchor-tuning, isomorph
-equivalence, the injection canaries, product-sense fork). This is how a change is
+equivalence, the injection canaries, product-sense fork). The v-next work
+(§13) added nine more — integrity events, suspicion score, orgs schema,
+**tenant isolation (the multi-tenancy gate)**, cohort dashboard, candidate
+report, report shares, difficulty routing + stats, and the equating hook —
+bringing the suite to ~49 scripts. This is how a change is
 proven not to regress scoring, security, or the candidate experience.
 
 ---
 
-## 14. Deployment & operations
+## 15. Deployment & operations
 
 - **Server** → Railway. `/health` reports the deployed commit SHA (via
   `RAILWAY_GIT_COMMIT_SHA` or a `GIT_COMMIT_SHA` fallback), the latest migration,
@@ -523,7 +632,14 @@ proven not to regress scoring, security, or the candidate experience.
   miss.
 - **Web** → Vercel, auto-deploying from `main`.
 - **DB** → a single shared Supabase (dev + prod), so scenario-content changes are
-  staged on throwaway clones before touching the live scenario.
+  staged on throwaway clones before touching the live scenario. Migrations
+  0018–0022 (orgs, RLS posture, difficulty, report shares, link bands) are
+  applied to the live DB as of 2026-07-07.
+- **Org-auth rollout order:** mint each partner org's API key with
+  `scripts/mint-org-key.ts` (the raw key is shown once — distribute it out of
+  band), *then* flip `ORG_AUTH_REQUIRED=true` on the server. Until the flip,
+  `/api/review/*` falls back to the default asaya org, so nothing breaks while
+  keys are being handed out.
 - **Operational lesson (from the first dry run):** deploying **during** a live
   candidate session restarts the server, which loses in-memory timers and drops
   WebSockets. The deadline reaper + server-verified session-end make the system
@@ -532,7 +648,7 @@ proven not to regress scoring, security, or the candidate experience.
 
 ---
 
-## 15. Design principles that recur
+## 16. Design principles that recur
 
 1. **Deterministic where it counts.** The load-bearing scoring signal is
    code-computed evidence units; the LLM judge interprets them under a fenced,

@@ -12,6 +12,7 @@ import BriefPanel from "./BriefPanel";
 import EndScreen from "./EndScreen";
 import WorkspaceTour, { tourHasBeenSeen } from "./WorkspaceTour";
 import { readFile, getSession, getAssistantHistory } from "@/lib/api";
+import { useIntegrityMonitor } from "@/lib/integrity";
 import { useSessionStore } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
 import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
@@ -80,6 +81,11 @@ export default function Workspace({ sessionId }: Props) {
   // still hydrating. `hydrated` flips true once the store matches the route.
   const storeSessionId = useSessionStore((s) => s.sessionId);
   const hydrated = storeSessionId === sessionId;
+
+  // Passive integrity signals (Proctoring v1) — informational only, never
+  // scored. Armed only while the candidate is actually working (active, or
+  // token_exhausted where work continues without the assistant).
+  useIntegrityMonitor(sessionId, hydrated && (status === "active" || status === "token_exhausted"));
 
   // Hydrate panel layout once on mount so the PanelGroup mounts with the
   // persisted sizes, not the defaults.
@@ -317,7 +323,7 @@ export default function Workspace({ sessionId }: Props) {
             </Panel>
             <PanelResizeHandle />
             <Panel defaultSize={layout[1]} minSize={25}>
-              <div style={{ height: "100%", display: "flex", overflow: "hidden" }}>
+              <div data-integrity-panel="editor" style={{ height: "100%", display: "flex", overflow: "hidden" }}>
                 <Editor
                   sessionId={sessionId}
                   path={selectedPath}
@@ -344,13 +350,13 @@ export default function Workspace({ sessionId }: Props) {
                   variant="underline"
                 />
                 <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-                  <div style={{ position: "absolute", inset: 0, display: rightTab === "brief" ? "block" : "none" }}>
+                  <div data-integrity-panel="brief" style={{ position: "absolute", inset: 0, display: rightTab === "brief" ? "block" : "none" }}>
                     <BriefPanel />
                   </div>
-                  <div style={{ position: "absolute", inset: 0, display: rightTab === "docs" ? "block" : "none" }}>
+                  <div data-integrity-panel="docs" style={{ position: "absolute", inset: 0, display: rightTab === "docs" ? "block" : "none" }}>
                     <DocsViewer sessionId={sessionId} />
                   </div>
-                  <div style={{ position: "absolute", inset: 0, display: rightTab === "messages" ? "block" : "none" }}>
+                  <div data-integrity-panel="message" style={{ position: "absolute", inset: 0, display: rightTab === "messages" ? "block" : "none" }}>
                     <Messages sessionId={sessionId} />
                   </div>
                   <div style={{ position: "absolute", inset: 0, display: rightTab === "data" ? "block" : "none" }}>
@@ -359,7 +365,7 @@ export default function Workspace({ sessionId }: Props) {
                   <div style={{ position: "absolute", inset: 0, display: rightTab === "terminal" ? "block" : "none" }}>
                     <Terminal sessionId={sessionId} onSessionEnd={handleSessionEnd} />
                   </div>
-                  <div style={{ position: "absolute", inset: 0, display: rightTab === "assistant" ? "block" : "none" }}>
+                  <div data-integrity-panel="chat" style={{ position: "absolute", inset: 0, display: rightTab === "assistant" ? "block" : "none" }}>
                     <ChatHUD />
                   </div>
                   <div style={{ position: "absolute", inset: 0, display: rightTab === "deliverable" ? "block" : "none" }}>

@@ -111,6 +111,18 @@ export default function SessionsTable() {
     else { setSortKey(k); setSortDir(k === "created_at" ? "desc" : "desc"); }
   }
 
+  // P4.1: distinct scenarios present in the visible sessions → cohort links.
+  const cohorts = useMemo(() => {
+    if (!sessions) return [];
+    const seen = new Map<string, string>();
+    for (const s of sessions) {
+      if (s.scenario_id && !seen.has(s.scenario_id)) {
+        seen.set(s.scenario_id, s.scenario_title ?? `${s.scenario_id.slice(0, 8)}…`);
+      }
+    }
+    return [...seen.entries()].map(([id, title]) => ({ id, title }));
+  }, [sessions]);
+
   const filteredSorted = useMemo(() => {
     if (!sessions) return [];
     const filtered =
@@ -218,6 +230,30 @@ export default function SessionsTable() {
         }}
       >
         <span>{filteredSorted.length} of {sessions.length} sessions</span>
+        {/* P4.1: jump to the per-scenario cohort dashboard */}
+        {cohorts.length > 0 && (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ color: color.text.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Cohorts
+            </span>
+            {cohorts.map((c) => (
+              <Link
+                key={c.id}
+                href={`/review/cohorts/${c.id}`}
+                style={{
+                  color: color.accent.base,
+                  textDecoration: "none",
+                  fontSize: 12,
+                  border: `1px solid ${color.border.default}`,
+                  borderRadius: radius.lg,
+                  padding: "3px 10px",
+                }}
+              >
+                {c.title} →
+              </Link>
+            ))}
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
           Status
@@ -279,6 +315,10 @@ export default function SessionsTable() {
                   Status
                 </th>
                 <SortHeader label="Overall"  sortKey="overall_score" currentKey={sortKey} currentDir={sortDir} align="right" onSort={handleSort} />
+                {/* P5.1: effective difficulty band stamped at creation */}
+                <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
+                  Band
+                </th>
                 <SortHeader label="Created"  sortKey="created_at"  currentKey={sortKey} currentDir={sortDir} align="left"  onSort={handleSort} />
                 <th style={{ textAlign: "left", padding: "10px 14px", fontSize: 11, fontWeight: 600, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: `1px solid ${color.border.default}` }}>
                   Ended
@@ -359,6 +399,16 @@ function Row({ session: s }: { session: ReviewSession }) {
             title="Evaluation errored; open the session to re-run"
           >
             ERR
+          </span>
+        ) : (
+          <span style={{ color: color.text.muted }}>—</span>
+        )}
+      </td>
+      {/* P5.1: effective difficulty band (— for pre-routing sessions) */}
+      <td style={{ ...cell, fontSize: 12 }}>
+        {s.difficulty_band ? (
+          <span style={{ fontFamily: font.mono, color: color.text.secondary, textTransform: "uppercase", letterSpacing: "0.04em", fontSize: 11 }}>
+            {s.difficulty_band}
           </span>
         ) : (
           <span style={{ color: color.text.muted }}>—</span>

@@ -59,11 +59,15 @@ export interface CreateSessionResult {
 }
 
 export async function createSession(
-  opts?: { scenarioId?: string; inviteCode?: string },
+  opts?: { scenarioId?: string; inviteCode?: string; linkToken?: string },
 ): Promise<CreateSessionResult> {
   const body: Record<string, string> = {};
   if (opts?.scenarioId) body["scenarioId"] = opts.scenarioId;
   if (opts?.inviteCode) body["inviteCode"] = opts.inviteCode;
+  // RD6/P5.1: single-use candidate session link — validated + consumed
+  // server-side; the server rejects dead links with 401/409 and a
+  // human-readable message we surface below.
+  if (opts?.linkToken) body["linkToken"] = opts.linkToken;
   const init: ApiFetchOpts = { method: "POST" };
   if (Object.keys(body).length > 0) {
     init.body = JSON.stringify(body);
@@ -73,8 +77,25 @@ export async function createSession(
     storeSessionToken(result.sessionId, result.token);
     return result;
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("API error 401")) {
-      throw new Error("Invalid invite code");
+    if (err instanceof Error) {
+      // [\s\S] instead of the dotAll flag — tsconfig targets pre-es2018.
+      const m = /^API error (401|409): ([\s\S]*)$/.exec(err.message);
+      if (m) {
+        // Session-link rejections (invalid / expired / consumed / revoked)
+        // carry { error: "session_link_*", message } — show the server's
+        // message verbatim so the candidate knows what happened.
+        let parsed: { error?: unknown; message?: unknown } | null = null;
+        try { parsed = JSON.parse(m[2]!) as { error?: unknown; message?: unknown }; } catch { /* not JSON */ }
+        if (
+          parsed &&
+          typeof parsed.error === "string" &&
+          parsed.error.startsWith("session_link_") &&
+          typeof parsed.message === "string"
+        ) {
+          throw new Error(parsed.message);
+        }
+        if (m[1] === "401") throw new Error("Invalid invite code");
+      }
     }
     throw err;
   }
@@ -220,6 +241,33 @@ export function storeInviteCode(code: string): void {
 export function getStoredInviteCode(): string | null {
   if (typeof window === "undefined") return null;
   try { return window.sessionStorage.getItem(INVITE_CODE_KEY); } catch { return null; }
+}
+
+// ── Org API key (P2, review surface) ─────────────────────────────────────────
+// NEVER a NEXT_PUBLIC_ env var — org keys must not be baked into the browser
+// bundle. The reviewer pastes their key once per tab (OrgKeyInput on /review);
+// it lives in sessionStorage and is attached as X-Org-Key on /api/review/*
+// calls. While the server's ORG_AUTH_REQUIRED flag is off, a missing key falls
+// back to the default org server-side, so the current UX keeps working.
+const ORG_KEY_STORAGE = "crucible.org.key";
+
+export function storeOrgKey(key: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (key) window.sessionStorage.setItem(ORG_KEY_STORAGE, key);
+    else window.sessionStorage.removeItem(ORG_KEY_STORAGE);
+  } catch { /* ignore */ }
+}
+
+export function getStoredOrgKey(): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(ORG_KEY_STORAGE); } catch { return null; }
+}
+
+/** X-Org-Key header for /api/review/* calls; empty object when no key is set. */
+function orgKeyHeader(): Record<string, string> {
+  const key = getStoredOrgKey();
+  return key ? { "X-Org-Key": key } : {};
 }
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {
@@ -418,6 +466,94 @@ export async function saveDeliverable(
   return res.deliverable;
 }
 
+// ── Passive integrity signals (Proctoring v1) ───────────────────────────────
+
+export interface IntegrityEventInput {
+  /** e.g. "integrity.tab_blur" — full taxonomy in lib/integrity.ts, validated
+   *  server-side against the shared IntegrityEventSchema. */
+  type: string;
+  /** Client-clock epoch ms of the detection (informational; the server stamps
+   *  its own ts of record). */
+  ts?: number;
+  /** Omitted for signal-only events (the server schema is strict-empty for
+   *  those); required for paste_burst / idle_gap / copy. */
+  payload?: Record<string, unknown>;
+}
+
+/** Batch-post integrity events for a live session. Fire-and-forget: NEVER
+ *  throws — telemetry must not disturb the candidate, and older server
+ *  deploys without the route should be a silent no-op. */
+export async function postIntegrityEvents(
+  sessionId: string,
+  events: IntegrityEventInput[],
+): Promise<void> {
+  if (events.length === 0) return;
+  try {
+    await fetch(`${SERVER_URL}/sessions/${sessionId}/integrity`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader(sessionId),
+      },
+      body: JSON.stringify({ events }),
+    });
+  } catch { /* swallow — integrity telemetry never throws */ }
+}
+
+// ── Suspicion report (review page; informational, not scored) ───────────────
+
+export interface SuspicionFactor {
+  kind: string;
+  count: number;
+  weight: number;
+  contribution: number;
+}
+
+/** Integrity-event row subset the suspicion route returns for the timeline. */
+export interface IntegrityTimelineEvent {
+  seq: number;
+  type: string;
+  ts: string;
+  payload: Record<string, unknown> | null;
+}
+
+export interface SuspicionReport {
+  /** 0–100; deterministic aggregation of integrity events (suspicion-score.ts).
+   *  min(100, sum of factor contributions). */
+  score: number;
+  factors: SuspicionFactor[];
+  /** suspicion_detector_version — separate namespace from detector_version. */
+  version: string;
+  /** The session's integrity.* events, seq-ordered (mini-timeline source). */
+  events: IntegrityTimelineEvent[];
+}
+
+/** Fetch the server-computed Suspicion Score for a session
+ *  (GET /api/review/sessions/:id/suspicion → { suspicion, events }).
+ *  Returns null on ANY failure — including 404 from older deploys without the
+ *  route — so the review panel can quietly not render. */
+export async function getSuspicionReport(sessionId: string): Promise<SuspicionReport | null> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/suspicion`, {
+      headers: orgKeyHeader(),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      suspicion?: { score?: unknown; factors?: SuspicionFactor[]; version?: unknown };
+      events?: IntegrityTimelineEvent[];
+    };
+    if (typeof body.suspicion?.score !== "number") return null;
+    return {
+      score: body.suspicion.score,
+      factors: body.suspicion.factors ?? [],
+      version: typeof body.suspicion.version === "string" ? body.suspicion.version : "?",
+      events: body.events ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Recruiter review ────────────────────────────────────────────────────────
 
 export interface ReviewSession {
@@ -429,6 +565,12 @@ export interface ReviewSession {
   ended_at: string | null;
   duration_ms: number | null;
   spend_usd: number | string;
+  // P4.1: cohort links — null when the session has no scenario (legacy mode).
+  scenario_id: string | null;
+  scenario_title: string | null;
+  // P5.1: effective difficulty band the session was routed to at creation
+  // (easy | mid | hard); null pre-routing / pre-migration-0020.
+  difficulty_band?: string | null;
   event_count: number;
   messages: number;
   file_saves: number;
@@ -438,8 +580,50 @@ export interface ReviewSession {
 }
 
 export async function listReviewSessions(): Promise<ReviewSession[]> {
-  const data = await apiFetch<{ sessions: ReviewSession[] }>("/api/review/sessions");
+  const data = await apiFetch<{ sessions: ReviewSession[] }>("/api/review/sessions", {
+    headers: orgKeyHeader(),
+  });
   return data.sessions;
+}
+
+// ─── Candidate session links (RD6 admin side + P5.1 band routing) ────────────
+// Mint a single-use start link for a candidate. The RAW token is returned
+// exactly once; the recruiter hands the candidate <origin>/start/<slug> plus
+// the link token. difficultyBand (P5.1) requests band routing at session
+// creation: the canonical scenario is swapped for its family sibling in that
+// band. Omit for no routing.
+
+export type SessionLinkDifficultyBand = "easy" | "mid" | "hard";
+
+export interface SessionLinkSummary {
+  id: string;
+  candidate_label: string;
+  scenario_id: string | null;
+  expires_at: string;
+  consumed_at: string | null;
+  session_id: string | null;
+  status: "active" | "consumed" | "expired" | "revoked";
+  difficulty_band: SessionLinkDifficultyBand | null;
+}
+
+export async function createReviewSessionLink(opts: {
+  candidateLabel: string;
+  scenarioId?: string;
+  ttlMinutes?: number;
+  difficultyBand?: SessionLinkDifficultyBand | null;
+}): Promise<{ token: string; link: SessionLinkSummary }> {
+  const res = await fetch(`${SERVER_URL}/api/review/session-links`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
+    body: JSON.stringify({
+      candidateLabel: opts.candidateLabel,
+      ...(opts.scenarioId ? { scenarioId: opts.scenarioId } : {}),
+      ...(opts.ttlMinutes !== undefined ? { ttlMinutes: opts.ttlMinutes } : {}),
+      ...(opts.difficultyBand ? { difficultyBand: opts.difficultyBand } : {}),
+    }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<{ token: string; link: SessionLinkSummary }>;
 }
 
 // ── Session detail bundle ───────────────────────────────────────────────────
@@ -466,6 +650,8 @@ export interface ReviewSessionFull {
   verification_cap_status?: string | null;  // none | applied | advisory_pending | confirmed | overridden
   scorable?: boolean | null;                // RD3: in the validity dataset?
   exclusion_reason?: string | null;         // excluded_infra | excluded_abandoned | ...
+  // P5.1: effective difficulty band stamped at creation. Present once 0020 ran.
+  difficulty_band?: string | null;          // easy | mid | hard | null
 }
 
 export interface ReviewEvent {
@@ -556,7 +742,7 @@ export async function postEvaluate(sessionId: string): Promise<unknown> {
   // send "{}" explicitly. The route ignores the body.
   const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/evaluate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
     body: "{}",
   });
   if (!res.ok) {
@@ -574,7 +760,7 @@ export async function postVerificationCap(
 ): Promise<{ verification_cap_status: string; execution_score?: number; overall_score?: number }> {
   const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/verification-cap`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
     body: JSON.stringify({ decision }),
   });
   if (!res.ok) {
@@ -592,7 +778,7 @@ export class NotFoundError extends Error {
 }
 
 export async function getReviewSessionDetail(id: string): Promise<ReviewSessionDetail> {
-  const res = await fetch(`${SERVER_URL}/api/review/sessions/${id}`);
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${id}`, { headers: orgKeyHeader() });
   if (res.status === 404) throw new NotFoundError("Session not found");
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json() as Promise<ReviewSessionDetail>;
@@ -619,7 +805,7 @@ export async function generateOutcomeInvite(
 ): Promise<{ token: string; invite: OutcomeInviteSummary }> {
   const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invite`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
     body: JSON.stringify(outcomeTypes ? { outcome_types: outcomeTypes } : {}),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
@@ -627,7 +813,9 @@ export async function generateOutcomeInvite(
 }
 
 export async function listOutcomeInvites(sessionId: string): Promise<OutcomeInviteSummary[]> {
-  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invites`);
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcome-invites`, {
+    headers: orgKeyHeader(),
+  });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { invites: OutcomeInviteSummary[] };
   return json.invites;
@@ -636,6 +824,7 @@ export async function listOutcomeInvites(sessionId: string): Promise<OutcomeInvi
 export async function revokeOutcomeInvite(inviteId: string): Promise<OutcomeInviteSummary> {
   const res = await fetch(`${SERVER_URL}/api/review/outcome-invites/${inviteId}/revoke`, {
     method: "POST",
+    headers: orgKeyHeader(),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as { invite: OutcomeInviteSummary };
@@ -734,8 +923,164 @@ export interface SessionOutcome {
 }
 
 export async function listSessionOutcomes(sessionId: string): Promise<SessionOutcome[]> {
-  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcomes`);
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/outcomes`, {
+    headers: orgKeyHeader(),
+  });
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   const body = (await res.json()) as { outcomes: SessionOutcome[] };
   return body.outcomes;
+}
+
+// ─── Cohort dashboard (P4.1) ─────────────────────────────────────────────────
+
+/** Presentation-only mapping of the ai_orchestration score (see lib/ai-fluency). */
+export type AiFluencyPlacement = "ai_dependent" | "ai_augmented" | "ai_orchestrator";
+
+export interface CohortCompetencyCell {
+  key: string;
+  score: number | null;
+  assessed: boolean;
+}
+
+export interface CohortSessionRow {
+  session_id: string;
+  candidate_label: string | null;
+  status: string | null;
+  end_reason: string | null;
+  created_at: string;
+  ended_at: string | null;
+  duration_ms: number | null;
+  difficulty_band: string | null; // easy | mid | hard | null
+  scorable: boolean | null;
+  exclusion_reason: string | null;
+  defense_outcome: string | null;
+  overall_score: number | null;
+  evaluation_status: "complete" | "error" | null;
+  competencies: CohortCompetencyCell[];
+  ai_fluency: AiFluencyPlacement | null;
+  /** Informational (P1) — never part of the score. */
+  suspicion: { score: number; version: string };
+  rank: number | null;
+}
+
+export interface CohortAggregates {
+  n: number;
+  scorable_count: number;
+  excluded_count: number;
+  mean: number | null;
+  stddev: number | null;
+  scored_count: number;
+}
+
+export interface CohortResponse {
+  scenario: { id: string; title: string; role: string };
+  rows: CohortSessionRow[];
+  aggregates: CohortAggregates;
+}
+
+export async function getCohort(scenarioId: string): Promise<CohortResponse> {
+  const res = await fetch(`${SERVER_URL}/api/review/cohorts/${scenarioId}`, {
+    headers: orgKeyHeader(),
+  });
+  if (res.status === 404) throw new NotFoundError("Scenario not found");
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<CohortResponse>;
+}
+
+// ─── Shareable report links (P4.3) ───────────────────────────────────────────
+// Admin/partner mints a tokenized link (raw token shown ONCE); anyone holding
+// <site origin>/report/<token> can read the external-safe report until the
+// link expires or is revoked.
+
+export type ReportShareStatus = "active" | "expired" | "revoked";
+
+export interface ReportShareSummary {
+  id: string;
+  session_id: string;
+  expires_at: string;
+  created_at: string;
+  status: ReportShareStatus;
+}
+
+export async function mintReportShare(
+  sessionId: string,
+  ttlHours?: number,
+): Promise<{ token: string; share: ReportShareSummary }> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/share`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...orgKeyHeader() },
+    body: JSON.stringify(ttlHours !== undefined ? { ttlHours } : {}),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<{ token: string; share: ReportShareSummary }>;
+}
+
+export async function listReportShares(sessionId: string): Promise<ReportShareSummary[]> {
+  const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/shares`, {
+    headers: orgKeyHeader(),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  const body = (await res.json()) as { shares: ReportShareSummary[] };
+  return body.shares;
+}
+
+export async function revokeReportShare(shareId: string): Promise<ReportShareSummary> {
+  const res = await fetch(`${SERVER_URL}/api/review/report-shares/${shareId}/revoke`, {
+    method: "POST",
+    headers: orgKeyHeader(),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  const body = (await res.json()) as { share: ReportShareSummary };
+  return body.share;
+}
+
+// ─── Public shared report (P4.2/P4.3) ────────────────────────────────────────
+// NO org key — the token in the URL is the entire auth. The server returns
+// the Zod-allowlisted external-safe subset only.
+
+export interface SharedReportCompetency {
+  key: string;
+  score: number | null;
+  assessed: boolean;
+  rationale: string;
+  evidence: Array<{ event_seq: number; note: string }>;
+}
+
+export interface SharedReport {
+  scenario: { title: string; role: string };
+  candidate_label: string | null;
+  difficulty_band: string | null;
+  created_at: string;
+  ended_at: string | null;
+  overall_score: number | null;
+  scorable: boolean | null;
+  exclusion_reason: string | null;
+  verification: { defense_outcome: string | null; cap_status: string | null };
+  competencies: SharedReportCompetency[];
+  ai_fluency: { placement: AiFluencyPlacement | null; informational: true };
+  // Score + version only — factor details are recruiter-facing (SuspicionPanel)
+  // and never appear in the public shared report.
+  suspicion: { score: number; version: string; informational: true };
+  share: { expires_at: string };
+}
+
+/** Thrown when a share link exists but is no longer usable (410). */
+export class ReportGoneError extends Error {
+  reason: "expired" | "revoked";
+  constructor(reason: "expired" | "revoked") {
+    super(`This report link is ${reason}`);
+    this.name = "ReportGoneError";
+    this.reason = reason;
+  }
+}
+
+export async function getSharedReport(token: string): Promise<SharedReport> {
+  const res = await fetch(`${SERVER_URL}/api/report/${encodeURIComponent(token)}`);
+  if (res.status === 404) throw new NotFoundError("This report link is invalid or no longer exists.");
+  if (res.status === 410) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new ReportGoneError(body.error === "revoked" ? "revoked" : "expired");
+  }
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<SharedReport>;
 }

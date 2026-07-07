@@ -12,6 +12,7 @@
 
 import { randomBytes, createHash } from "node:crypto";
 import { supabase } from "./supabase.js";
+import { scopeToOrg, type OrgRow } from "./orgs.js";
 import {
   OutcomeInputSchema,
   OUTCOME_TYPES,
@@ -40,7 +41,12 @@ export interface InviteRow {
   submitted_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  // P2: owning tenant. Outcomes submitted through this invite inherit it.
+  org_id: string | null;
 }
+
+const INVITE_COLS =
+  "id, session_id, scenario_id, outcome_types, expires_at, submitted_at, revoked_at, created_at, org_id";
 
 export interface InviteSummary {
   id: string;
@@ -79,7 +85,7 @@ function toSummary(row: InviteRow): InviteSummary {
  *  builds the URL + shows it once); only the hash is persisted. */
 export async function createInvite(
   sessionId: string,
-  opts: { outcomeTypes?: OutcomeType[] } = {},
+  opts: { outcomeTypes?: OutcomeType[]; orgId?: string | null } = {},
 ): Promise<{ token: string; invite: InviteSummary }> {
   if (!supabase) throw new OutcomeInviteError("Supabase service-role client unavailable");
 
@@ -107,6 +113,10 @@ export async function createInvite(
       scenario_id: scenarioId,
       outcome_types: types,
       expires_at: expiresAt,
+      // P2: invite belongs to the requesting org; partner_form outcomes
+      // submitted through it inherit this org_id. Omitted only on the
+      // pre-0018 back-compat path.
+      ...(opts.orgId ? { org_id: opts.orgId } : {}),
     })
     .select()
     .single();
@@ -114,36 +124,39 @@ export async function createInvite(
   return { token, invite: toSummary(inserted.data as unknown as InviteRow) };
 }
 
-/** List invites for a session, newest first, with derived status. */
-export async function listInvites(sessionId: string): Promise<InviteSummary[]> {
+/** List invites for a session, newest first, with derived status.
+ *  P2: partner orgs see only their own invites. */
+export async function listInvites(sessionId: string, org?: OrgRow): Promise<InviteSummary[]> {
   if (!supabase) throw new OutcomeInviteError("Supabase service-role client unavailable");
-  const { data, error } = await supabase
-    .from("outcome_invites")
-    .select("id, session_id, scenario_id, outcome_types, expires_at, submitted_at, revoked_at, created_at")
-    .eq("session_id", sessionId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await scopeToOrg(
+    supabase.from("outcome_invites").select(INVITE_COLS).eq("session_id", sessionId),
+    org,
+  ).order("created_at", { ascending: false });
   if (error) throw new OutcomeInviteError(`invites read failed: ${error.message}`);
   return ((data ?? []) as unknown as InviteRow[]).map(toSummary);
 }
 
-/** Revoke an invite (idempotent — already-revoked stays revoked). */
-export async function revokeInvite(inviteId: string): Promise<InviteSummary> {
+/** Revoke an invite (idempotent — already-revoked stays revoked).
+ *  P2: partner orgs can only revoke their own invites (foreign → not found). */
+export async function revokeInvite(inviteId: string, org?: OrgRow): Promise<InviteSummary> {
   if (!supabase) throw new OutcomeInviteError("Supabase service-role client unavailable");
-  const updated = await supabase
-    .from("outcome_invites")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("id", inviteId)
-    .is("revoked_at", null)
+  const updated = await scopeToOrg(
+    supabase
+      .from("outcome_invites")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", inviteId)
+      .is("revoked_at", null),
+    org,
+  )
     .select()
     .maybeSingle();
   if (updated.error) throw new OutcomeInviteError(`invite revoke failed: ${updated.error.message}`);
   if (!updated.data) {
     // Either unknown id or already revoked — return current state if it exists.
-    const { data: cur } = await supabase
-      .from("outcome_invites")
-      .select("id, session_id, scenario_id, outcome_types, expires_at, submitted_at, revoked_at, created_at")
-      .eq("id", inviteId)
-      .maybeSingle();
+    const { data: cur } = await scopeToOrg(
+      supabase.from("outcome_invites").select(INVITE_COLS).eq("id", inviteId),
+      org,
+    ).maybeSingle();
     if (!cur) throw new OutcomeInviteError(`invite ${inviteId} not found`);
     return toSummary(cur as unknown as InviteRow);
   }
@@ -164,7 +177,7 @@ async function loadByToken(rawToken: string): Promise<InviteRow | null> {
   if (!supabase) throw new OutcomeInviteError("Supabase service-role client unavailable");
   const { data, error } = await supabase
     .from("outcome_invites")
-    .select("id, session_id, scenario_id, outcome_types, expires_at, submitted_at, revoked_at, created_at")
+    .select(INVITE_COLS)
     .eq("token_hash", hashToken(rawToken))
     .maybeSingle();
   if (error) throw new OutcomeInviteError(`invite read failed: ${error.message}`);
@@ -253,7 +266,9 @@ export async function submitInvite(
 
   const written: string[] = [];
   for (const input of toWrite) {
-    await insertOutcome(input, "partner_form");
+    // P2: partner_form outcomes inherit the INVITE's org — the invite row is
+    // the tenant authority for this submission, not any ambient default.
+    await insertOutcome(input, "partner_form", row.org_id);
     written.push(input.outcome_type);
   }
 

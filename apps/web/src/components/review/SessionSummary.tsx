@@ -100,6 +100,8 @@ export default function SessionSummary({ detail }: Props) {
       >
         <Stat label="Created"     value={formatDateTime(session.created_at)} />
         <Stat label="Ended"       value={formatDateTime(session.ended_at)} />
+        {/* P5.1: effective difficulty band stamped at creation */}
+        <Stat label="Band"        value={session.difficulty_band ?? "—"} mono />
         <Stat label="Duration"    value={formatDuration(session.duration_ms)} mono />
         <Stat label="End reason"  value={session.end_reason ?? "—"} />
         <Stat label="Model"       value={session.model ?? "—"} mono />

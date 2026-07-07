@@ -15,7 +15,12 @@ import SectionLabel from "@/components/ui/SectionLabel";
 import Stat from "@/components/ui/Stat";
 import Wordmark from "@/components/ui/Wordmark";
 
-interface Props { slug: string; }
+interface Props {
+  slug: string;
+  /** RD6/P5.1 single-use session link token from ?link=… (read server-side in
+   *  app/start/[slug]/page.tsx). null when the candidate arrived without one. */
+  linkToken?: string | null;
+}
 
 type Phase =
   | { kind: "loading" }
@@ -39,7 +44,7 @@ function fmtNum(n: number | null): string {
   return n.toLocaleString("en-US");
 }
 
-export default function StartScreen({ slug }: Props) {
+export default function StartScreen({ slug, linkToken }: Props) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [inviteCode, setInviteCode] = useState("");
@@ -111,6 +116,10 @@ export default function StartScreen({ slug }: Props) {
       const { sessionId } = await createSession({
         scenarioId: scenario.id,
         ...(trimmedCode ? { inviteCode: trimmedCode } : {}),
+        // Single-use session link — the server validates + consumes it; a dead
+        // link (expired/consumed/revoked) rejects with a message we surface
+        // via the starting-failed phase below.
+        ...(linkToken ? { linkToken } : {}),
       });
       router.push(`/session/${sessionId}`);
     } catch (err) {
@@ -403,6 +412,17 @@ function ScenarioBody({
           </ul>
         </section>
       )}
+
+      <section style={{ marginBottom: 32 }}>
+        <SectionLabel>Session integrity</SectionLabel>
+        <p style={{ color: color.text.muted, fontSize: 12, margin: "8px 0 0", lineHeight: 1.6 }}>
+          During the session we record passive integrity signals from this
+          browser tab — tab focus changes, large paste bursts, long idle gaps,
+          and copy events from the brief and docs. Reviewers see these as
+          informational signals only; they never change your competency score.
+          No webcam, no biometrics.
+        </p>
+      </section>
 
       <div style={{
         display: "flex", flexDirection: "column",

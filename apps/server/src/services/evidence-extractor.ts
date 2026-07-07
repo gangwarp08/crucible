@@ -447,6 +447,15 @@ export function runDetectors(
   events: EventRow[],
   groundTruth: Record<string, unknown>,
 ): EvidenceUnit[] {
+  // P1 isolation rule (asaya v-next spec, Priority 1): the integrity channel
+  // (browser-reported integrity.* events → suspicion score) is informational
+  // only. It MUST NOT feed evidence extraction, evidence_units, or
+  // evaluations. Hard-filter it out of ALL detector input here — the single
+  // entry point every extraction path flows through. Integrity events never
+  // reached detectors before this channel existed, so detector behavior is
+  // unchanged and DETECTOR_VERSION stays at "2".
+  events = events.filter((e) => !e.type.startsWith("integrity."));
+
   const units = agnosticDetectors(events);
   units.push(...verificationDetectors(events));
   if (slug.startsWith("fde-db-triage")) {

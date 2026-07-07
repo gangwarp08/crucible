@@ -2,9 +2,24 @@
 // These power the post-session review UI. They MUST work for ended sessions
 // no longer in the in-memory registry, so all data comes from Supabase via
 // the server-only service-role client. Browser never queries Supabase directly.
+//
+// P2 TENANT AUTH: every route in this plugin runs behind requireOrg — a valid
+// X-Org-Key header resolves the calling org; with ORG_AUTH_REQUIRED off (the
+// rollout default) a key-less request falls back to the default 'asaya' admin
+// org so the existing review UI keeps working. Every session-shaped query is
+// then scoped to the caller's org (role 'admin' sees all); foreign sessions
+// read as 404 so existence never leaks across tenants. The service role
+// bypasses RLS, so THIS app-layer scoping is the isolation mechanism (the
+// deny-all RLS posture is the DB backstop — see migration 0019).
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { supabase } from "../services/supabase.js";
+import {
+  requireOrg,
+  orgCanAccess,
+  scopeToOrg,
+  type OrgRow,
+} from "../services/orgs.js";
 import { runAnalysisAgent, reinterpretEvaluation, AnalysisError } from "../services/analysis-agent.js";
 import {
   createInvite,
@@ -20,8 +35,21 @@ import {
   SessionLinkError,
 } from "../services/session-link.js";
 import { persistSessionUpdate } from "../services/db.js";
+// P5.1/P5.3 — difficulty routing band + equating hook.
+import { DIFFICULTY_BANDS } from "../services/difficulty-routing.js";
+import { checkBandEquating } from "../services/equating.js";
+import { DIFFICULTY_STATS_VERSION } from "../services/difficulty-stats.js";
 import { appendEvent } from "../services/events-direct.js";
 import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
+import { computeSuspicionScore, type SuspicionEventInput } from "../services/suspicion-score.js";
+import { buildCohort, CohortError } from "../services/cohort.js";
+import {
+  createReportShare,
+  listReportShares,
+  revokeReportShare,
+  ReportShareError,
+  MAX_SHARE_TTL_HOURS,
+} from "../services/report-share.js";
 
 const LIST_LIMIT = 100;
 
@@ -36,26 +64,93 @@ interface SessionRow {
   ended_at: string | null;
   duration_ms: number | null;
   spend_usd: number | string;
+  scenario_id: string | null;
+  // P5.1: band the session was routed to at creation (migration 0020).
+  // Absent on a pre-0020 database — see the band-column fallback in the list.
+  difficulty_band?: string | null;
 }
+
+// ── P5.1: sessions.difficulty_band may not exist yet (0020 unapplied) ───────
+// The list selects it optimistically; the first 42703 flips this latch and the
+// query retries (and keeps running) without the column.
+const SESSION_LIST_COLS =
+  "id, status, end_reason, model, created_at, ended_at, duration_ms, spend_usd, scenario_id";
+let listBandColumnMissing = false;
 
 export async function reviewRoutes(server: FastifyInstance) {
   if (!supabase) {
     server.log.warn("[review] supabase client unavailable — /api/review routes will 503");
   }
 
+  // P2: org auth on EVERY /api/review route (see module header).
+  server.addHook("preHandler", requireOrg);
+
+  /** Tenant gate for session-scoped endpoints: does the caller's org own this
+   *  session (admin sees all)? Foreign/missing sessions are indistinguishable
+   *  ("not_found") so a partner can't probe another org's session ids.
+   *  On "ok" the SESSION's org_id rides along so writes derived from the
+   *  session (e.g. outcome invites) can be stamped with the owning tenant
+   *  rather than the requesting org — an admin acting on a partner's session
+   *  must not pull the artifact into the admin org. */
+  type OrgGateResult =
+    | { status: "ok"; sessionOrgId: string | null }
+    | { status: "not_found" }
+    | { status: "error" };
+  async function sessionOrgGate(
+    sessionId: string,
+    org: OrgRow | undefined,
+  ): Promise<OrgGateResult> {
+    if (!supabase) return { status: "error" };
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("id, org_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (error) return { status: "error" };
+    if (!data) return { status: "not_found" };
+    const sessionOrgId = (data as { org_id: string | null }).org_id;
+    return orgCanAccess(org, sessionOrgId)
+      ? { status: "ok", sessionOrgId }
+      : { status: "not_found" };
+  }
+
   // ─── List ────────────────────────────────────────────────────────────────
-  server.get("/sessions", async (_request, reply) => {
+  server.get("/sessions", async (request, reply) => {
     if (!supabase) {
       return reply.status(503).send({ error: "Supabase unavailable" });
     }
 
-    const { data: sessions, error: sessErr } = await supabase
-      .from("sessions")
-      .select(
-        "id, status, end_reason, model, created_at, ended_at, duration_ms, spend_usd",
+    // P2: partner orgs list only their own sessions; admin (asaya) sees all.
+    // P5.1: difficulty_band rides along when migration 0020 is applied; on the
+    // first missing-column error the query retries without it (band → null).
+    const listSessions = async (withBand: boolean) => {
+      const res = await scopeToOrg(
+        supabase!
+          .from("sessions")
+          .select(withBand ? `${SESSION_LIST_COLS}, difficulty_band` : SESSION_LIST_COLS),
+        request.org,
       )
-      .order("created_at", { ascending: false })
-      .limit(LIST_LIMIT);
+        .order("created_at", { ascending: false })
+        .limit(LIST_LIMIT);
+      // Dynamic select string defeats supabase-js's literal-type parser —
+      // the projection above is what defines the runtime shape.
+      return { data: res.data as unknown as SessionRow[] | null, error: res.error };
+    };
+
+    let listRes = await listSessions(!listBandColumnMissing);
+    if (
+      listRes.error &&
+      !listBandColumnMissing &&
+      listRes.error.code === "42703" &&
+      /difficulty_band/i.test(listRes.error.message)
+    ) {
+      listBandColumnMissing = true;
+      server.log.warn(
+        "[review] sessions.difficulty_band missing (migration 0020 not applied) — listing without band",
+      );
+      listRes = await listSessions(false);
+    }
+    const { data: sessions, error: sessErr } = listRes;
 
     if (sessErr) {
       server.log.error({ err: sessErr }, "[review] sessions list failed");
@@ -72,16 +167,30 @@ export async function reviewRoutes(server: FastifyInstance) {
     // latest evaluation per session (DISTINCT ON). Aggregation happens in
     // the database, so only ~LIST_LIMIT rows cross the network instead of
     // up to 100k raw child rows per table.
-    const [countsRes, evalsRes] = await Promise.all([
+    // Scenario titles for the cohort links (P4.1) — distinct ids only, so
+    // this stays a handful of rows regardless of session count.
+    const scenarioIds = [
+      ...new Set((sessions as SessionRow[]).map((s) => s.scenario_id).filter((x): x is string => !!x)),
+    ];
+
+    const [countsRes, evalsRes, scenariosRes] = await Promise.all([
       supabase.rpc("review_session_counts", { ids }),
       supabase.rpc("review_latest_evaluations", { ids }),
+      scenarioIds.length > 0
+        ? supabase.from("scenarios").select("id, title").in("id", scenarioIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    for (const res of [countsRes, evalsRes]) {
+    for (const res of [countsRes, evalsRes, scenariosRes]) {
       if (res.error) {
         server.log.error({ err: res.error }, "[review] count query failed");
         return reply.status(500).send({ error: "Failed to load session counts" });
       }
+    }
+
+    const scenarioTitles = new Map<string, string>();
+    for (const s of (scenariosRes.data ?? []) as Array<{ id: string; title: string }>) {
+      scenarioTitles.set(s.id, s.title);
     }
 
     interface CountRow {
@@ -123,6 +232,10 @@ export async function reviewRoutes(server: FastifyInstance) {
         ended_at: s.ended_at,
         duration_ms: s.duration_ms,
         spend_usd: s.spend_usd,
+        scenario_id: s.scenario_id,
+        scenario_title: s.scenario_id ? (scenarioTitles.get(s.scenario_id) ?? null) : null,
+        // P5.1: effective band the session ran at (null pre-routing/pre-0020).
+        difficulty_band: s.difficulty_band ?? null,
         event_count: eventCounts.get(s.id) ?? 0,
         messages:    msgCounts.get(s.id) ?? 0,
         file_saves:  fileCounts.get(s.id) ?? 0,
@@ -186,7 +299,11 @@ export async function reviewRoutes(server: FastifyInstance) {
       server.log.error({ err: sessRes.error, id }, "[review] session lookup failed");
       return reply.status(500).send({ error: "Failed to load session" });
     }
-    if (!sessRes.data) {
+    // P2: a foreign org's session is a 404, not a 403 — no existence leak.
+    if (
+      !sessRes.data ||
+      !orgCanAccess(request.org, (sessRes.data as { org_id?: string | null }).org_id)
+    ) {
       return reply.status(404).send({ error: "Session not found" });
     }
 
@@ -224,6 +341,61 @@ export async function reviewRoutes(server: FastifyInstance) {
     });
   });
 
+  // ─── Suspicion score (P1 — proctoring v1, informational) ────────────────
+  // Recomputes the deterministic suspicion score on demand from the session's
+  // integrity.* events and returns it with the raw integrity timeline. This
+  // channel is INFORMATIONAL ONLY — it never touches evidence/evaluations
+  // (isolation enforced in evidence-extractor / analysis-input). Additive:
+  // no existing review endpoint changes.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/suspicion",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const [sessRes, eventsRes] = await Promise.all([
+        supabase.from("sessions").select("id, org_id").eq("id", id).maybeSingle(),
+        supabase
+          .from("events")
+          .select("seq, type, ts, payload")
+          .eq("session_id", id)
+          .like("type", "integrity.%")
+          .order("seq", { ascending: true })
+          .limit(1000),
+      ]);
+
+      if (sessRes.error) {
+        server.log.error({ err: sessRes.error, id }, "[review] suspicion: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (
+        !sessRes.data ||
+        !orgCanAccess(request.org, (sessRes.data as { org_id?: string | null }).org_id)
+      ) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (eventsRes.error) {
+        server.log.error({ err: eventsRes.error, id }, "[review] suspicion: events load failed");
+        return reply.status(500).send({ error: "Failed to load integrity events" });
+      }
+
+      const events = (eventsRes.data ?? []) as unknown as SuspicionEventInput[];
+      return reply.send({
+        suspicion: computeSuspicionScore(events),
+        events,
+        // Explicit .limit(1000) above — at exactly 1000 rows the timeline (and
+        // therefore the recomputed score) may be missing later events.
+        truncated: events.length === 1000,
+      });
+    },
+  );
+
   // ─── Manual evaluation trigger (calibration / rubric iteration) ─────────
   // Runs the Analysis Agent against any completed session. Replaces any prior
   // evaluation for the same session_id (delete + insert, items cascade).
@@ -239,6 +411,10 @@ export async function reviewRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: "Invalid session id" });
       }
       const sessionId = idParse.data.id;
+      // P2: only the owning org (or admin) may trigger an evaluation.
+      const gate = await sessionOrgGate(sessionId, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
         const result = await runAnalysisAgent(sessionId);
         return reply.send(result);
@@ -273,6 +449,10 @@ export async function reviewRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: "Invalid session id" });
       }
       const sessionId = idParse.data.id;
+      // P2: only the owning org (or admin) may re-judge stored evidence.
+      const gate = await sessionOrgGate(sessionId, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
         const result = await reinterpretEvaluation(sessionId);
         return reply.send(result);
@@ -315,14 +495,17 @@ export async function reviewRoutes(server: FastifyInstance) {
 
       const { data: sess, error: sessErr } = await supabase
         .from("sessions")
-        .select("id, verification_cap_status, defense_outcome")
+        .select("id, verification_cap_status, defense_outcome, org_id")
         .eq("id", sessionId)
         .maybeSingle();
       if (sessErr) {
         server.log.error({ err: sessErr, sessionId }, "[review] cap: session lookup failed");
         return reply.status(500).send({ error: "Failed to load session" });
       }
-      if (!sess) return reply.status(404).send({ error: "Session not found" });
+      // P2: foreign org's session → 404 (no existence leak).
+      if (!sess || !orgCanAccess(request.org, (sess as { org_id?: string | null }).org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
       if (sess.verification_cap_status !== "advisory_pending") {
         return reply.status(409).send({
           error: "no_pending_cap",
@@ -425,6 +608,9 @@ export async function reviewRoutes(server: FastifyInstance) {
     candidateLabel: z.string().min(1).max(200),
     scenarioId: z.string().uuid().optional(),
     ttlMinutes: z.number().int().positive().max(1440).optional(),
+    // P5.1: requested difficulty band (manual per-invite banding). Omitted /
+    // null = no routing — the scenario starts exactly as published.
+    difficultyBand: z.enum(DIFFICULTY_BANDS).nullish(),
   });
   server.post("/session-links", async (request, reply) => {
     const parse = CreateLinkSchema.safeParse(request.body);
@@ -436,6 +622,11 @@ export async function reviewRoutes(server: FastifyInstance) {
         candidateLabel: parse.data.candidateLabel,
         scenarioId: parse.data.scenarioId ?? null,
         ...(parse.data.ttlMinutes !== undefined ? { ttlMinutes: parse.data.ttlMinutes } : {}),
+        // P2: the link belongs to the REQUESTING org; the session started from
+        // it inherits this org_id (routes/sessions.ts).
+        orgId: request.org?.id ?? null,
+        // P5.1: band consumed once, at session creation (difficulty routing).
+        difficultyBand: parse.data.difficultyBand ?? null,
       });
       return reply.status(201).send({ token, link });
     } catch (err) {
@@ -445,9 +636,9 @@ export async function reviewRoutes(server: FastifyInstance) {
     }
   });
 
-  server.get("/session-links", async (_request, reply) => {
+  server.get("/session-links", async (request, reply) => {
     try {
-      return reply.send({ links: await listSessionLinks() });
+      return reply.send({ links: await listSessionLinks(request.org) });
     } catch (err) {
       server.log.error({ err }, "session-links list failed");
       return reply.status(500).send({ error: "session_links list failed" });
@@ -458,7 +649,7 @@ export async function reviewRoutes(server: FastifyInstance) {
     const idParse = z.object({ id: z.string().uuid() }).safeParse(request.params);
     if (!idParse.success) return reply.status(400).send({ error: "Invalid link id" });
     try {
-      return reply.send({ link: await revokeSessionLink(idParse.data.id) });
+      return reply.send({ link: await revokeSessionLink(idParse.data.id, request.org) });
     } catch (err) {
       if (err instanceof SessionLinkError) return reply.status(404).send({ error: err.code, message: err.message });
       server.log.error({ err }, "session-link revoke failed");
@@ -483,11 +674,18 @@ export async function reviewRoutes(server: FastifyInstance) {
               typeof t === "string" && (OUTCOME_TYPES as readonly string[]).includes(t),
           )
         : undefined;
+      // P2: only the owning org (or admin) may mint an invite for a session;
+      // the invite carries the SESSION's org (not the requesting org) so
+      // partner_form outcomes inherit the owning tenant — an admin minting an
+      // invite for a partner's session must not pull it into the admin org.
+      const gate = await sessionOrgGate(idParse.data.id, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
-        const { token, invite } = await createInvite(
-          idParse.data.id,
-          requested ? { outcomeTypes: requested } : {},
-        );
+        const { token, invite } = await createInvite(idParse.data.id, {
+          ...(requested ? { outcomeTypes: requested } : {}),
+          orgId: gate.sessionOrgId ?? request.org?.id ?? null,
+        });
         return reply.status(201).send({ token, invite });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -505,8 +703,11 @@ export async function reviewRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const idParse = ParamsSchema.safeParse(request.params);
       if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const gate = await sessionOrgGate(idParse.data.id, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
-        const invites = await listInvites(idParse.data.id);
+        const invites = await listInvites(idParse.data.id, request.org);
         return reply.send({ invites });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -522,7 +723,8 @@ export async function reviewRoutes(server: FastifyInstance) {
       const idParse = z.object({ inviteId: z.string().uuid() }).safeParse(request.params);
       if (!idParse.success) return reply.status(400).send({ error: "Invalid invite id" });
       try {
-        const invite = await revokeInvite(idParse.data.inviteId);
+        // P2: revokeInvite is org-scoped — a foreign invite reads as not found.
+        const invite = await revokeInvite(idParse.data.inviteId, request.org);
         return reply.send({ invite });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -543,8 +745,12 @@ export async function reviewRoutes(server: FastifyInstance) {
     async (request, reply) => {
       const idParse = ParamsSchema.safeParse(request.params);
       if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+      const gate = await sessionOrgGate(idParse.data.id, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
       try {
-        const outcomes = await listSessionOutcomes(idParse.data.id);
+        // P2: partner orgs see only outcomes stamped with their org.
+        const outcomes = await listSessionOutcomes(idParse.data.id, request.org);
         return reply.send({ outcomes });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -553,4 +759,130 @@ export async function reviewRoutes(server: FastifyInstance) {
       }
     },
   );
+
+  // ─── Cohort dashboard (P4.1) ──────────────────────────────────────────────
+  // All sessions routed to one scenario, ranked by overall score, with
+  // per-competency cells, scorable/exclusion status, difficulty band,
+  // AI-Fluency placement, and the informational suspicion score. Org-scoped
+  // like everything else here (partner = own sessions; admin = all); the
+  // assembly lives in services/cohort.ts so verify-cohort-dashboard.ts can
+  // exercise it without HTTP.
+  server.get<{ Params: { scenarioId: string } }>(
+    "/cohorts/:scenarioId",
+    async (request, reply) => {
+      const idParse = z.object({ scenarioId: z.string().uuid() }).safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid scenario id (must be uuid)" });
+      }
+      if (!supabase) return reply.status(503).send({ error: "Supabase unavailable" });
+      try {
+        const cohort = await buildCohort(idParse.data.scenarioId, request.org);
+        if (!cohort) return reply.status(404).send({ error: "Scenario not found" });
+        return reply.send(cohort);
+      } catch (err) {
+        if (err instanceof CohortError) {
+          server.log.error({ err }, "[review] cohort build failed");
+          return reply.status(500).send({ error: "Failed to build cohort" });
+        }
+        throw err;
+      }
+    },
+  );
+
+  // ─── Shareable report links (P4.3) ────────────────────────────────────────
+  // Mint / list / revoke report_shares for a session. The RAW token is
+  // returned exactly once at mint; the browser builds <site origin>/report/
+  // <token>. The public consumer is GET /api/report/:token (routes/report.ts
+  // — token-gated, NOT behind this plugin's org auth).
+  const ShareBodySchema = z.object({
+    ttlHours: z.number().int().positive().max(MAX_SHARE_TTL_HOURS).optional(),
+  });
+  server.post<{ Params: { id: string } }>("/sessions/:id/share", async (request, reply) => {
+    const idParse = ParamsSchema.safeParse(request.params);
+    if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+    const bodyParse = ShareBodySchema.safeParse(request.body ?? {});
+    if (!bodyParse.success) {
+      return reply
+        .status(400)
+        .send({ error: "Invalid body", details: bodyParse.error.flatten().fieldErrors });
+    }
+    // P2: only the owning org (or admin) may share a session's report. The
+    // share is stamped with the SESSION's org — an admin sharing a partner's
+    // session must not pull the artifact into the admin org.
+    const gate = await sessionOrgGate(idParse.data.id, request.org);
+    if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+    if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
+    try {
+      const { token, share } = await createReportShare({
+        sessionId: idParse.data.id,
+        orgId: gate.sessionOrgId ?? request.org?.id ?? null,
+        ...(bodyParse.data.ttlHours !== undefined ? { ttlHours: bodyParse.data.ttlHours } : {}),
+      });
+      return reply.status(201).send({ token, share });
+    } catch (err) {
+      if (err instanceof ReportShareError && err.code === "invalid") {
+        return reply.status(400).send({ error: err.code, message: err.message });
+      }
+      server.log.error({ err }, "report-share create failed");
+      return reply.status(500).send({ error: "report_share create failed" });
+    }
+  });
+
+  server.get<{ Params: { id: string } }>("/sessions/:id/shares", async (request, reply) => {
+    const idParse = ParamsSchema.safeParse(request.params);
+    if (!idParse.success) return reply.status(400).send({ error: "Invalid session id" });
+    const gate = await sessionOrgGate(idParse.data.id, request.org);
+    if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+    if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
+    try {
+      return reply.send({ shares: await listReportShares(idParse.data.id, request.org) });
+    } catch (err) {
+      server.log.error({ err }, "report-shares list failed");
+      return reply.status(500).send({ error: "report_shares list failed" });
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/report-shares/:id/revoke", async (request, reply) => {
+    const idParse = ParamsSchema.safeParse(request.params);
+    if (!idParse.success) return reply.status(400).send({ error: "Invalid share id" });
+    try {
+      // Org-scoped inside the service — a foreign org's share reads as 404.
+      return reply.send({ share: await revokeReportShare(idParse.data.id, request.org) });
+    } catch (err) {
+      if (err instanceof ReportShareError && err.code === "not_found") {
+        return reply.status(404).send({ error: err.code, message: err.message });
+      }
+      server.log.error({ err }, "report-share revoke failed");
+      return reply.status(500).send({ error: "report_share revoke failed" });
+    }
+  });
+
+  // ─── P5.3: band equating check (ADMIN ONLY, read-only) ───────────────────
+  // Are band-matched members of a scenario family on the same score scale?
+  // Compares mean_score per competency across family members that share a
+  // band, over competency_difficulty_stats rows with n >= 5 (services/
+  // equating.ts). Calibration internals — partner orgs get a 403; scenarios
+  // are global asaya IP, so there is nothing org-scoped to leak-protect
+  // beyond hiding it from partners entirely.
+  server.get<{ Params: { familyId: string } }>("/equating/:familyId", async (request, reply) => {
+    if (request.org && request.org.role !== "admin") {
+      return reply.status(403).send({ error: "admin_only", message: "Equating is an internal calibration surface." });
+    }
+    const familyId = (request.params.familyId ?? "").trim();
+    if (!familyId || familyId.length > 200) {
+      return reply.status(400).send({ error: "Invalid family id" });
+    }
+    if (!supabase) return reply.status(503).send({ error: "Supabase unavailable" });
+    try {
+      const comparisons = await checkBandEquating(familyId);
+      return reply.send({
+        family: familyId,
+        stats_version: DIFFICULTY_STATS_VERSION,
+        comparisons,
+      });
+    } catch (err) {
+      server.log.error({ err, familyId }, "[review] equating check failed");
+      return reply.status(500).send({ error: "equating check failed" });
+    }
+  });
 }
