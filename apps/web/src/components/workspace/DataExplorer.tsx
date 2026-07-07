@@ -1,6 +1,6 @@
 "use client";
-import { useState, useRef } from "react";
-import { runQuery, type QueryResult } from "@/lib/api";
+import { memo, useState, useRef } from "react";
+import { runQuery, type QueryOk, type QueryResult } from "@/lib/api";
 import { color, font, radius } from "@/styles/tokens";
 import Button from "@/components/ui/Button";
 import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
@@ -105,73 +105,7 @@ export default function DataExplorer({ sessionId }: Props) {
 
       <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
         {result?.status === "ok" ? (
-          result.rows.length === 0 ? (
-            <Empty>Query returned 0 rows.</Empty>
-          ) : (
-            <div style={{
-              background: color.bg.panel,
-              border: `1px solid ${color.border.subtle}`,
-              borderRadius: radius.md,
-              overflow: "hidden",
-            }}>
-              <table style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: 12,
-                fontFamily: font.mono,
-                fontVariantNumeric: "tabular-nums",
-              }}>
-                <thead>
-                  <tr style={{ background: color.bg.elevated }}>
-                    {result.columns.map((col) => (
-                      <th
-                        key={col}
-                        style={{
-                          padding: "10px 14px",
-                          textAlign: "left",
-                          fontSize: 10,
-                          color: color.text.muted,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.08em",
-                          fontWeight: 600,
-                          borderBottom: `1px solid ${color.border.subtle}`,
-                          whiteSpace: "nowrap",
-                          fontFamily: font.sans,
-                        }}
-                      >
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.rows.map((row, ri) => (
-                    <tr
-                      key={ri}
-                      style={{
-                        borderBottom: ri < result.rows.length - 1 ? `1px solid ${color.border.subtle}` : "none",
-                        background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
-                      }}
-                    >
-                      {result.columns.map((_, ci) => (
-                        <td
-                          key={ci}
-                          style={{
-                            padding: "8px 14px",
-                            color: color.text.primary,
-                            whiteSpace: "nowrap",
-                            verticalAlign: "top",
-                          }}
-                        >
-                          {renderCell(row[ci])}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
+          <ResultTable result={result} />
         ) : !result && !transportError ? (
           <Empty>
             Run a query to explore the read-only customer database.
@@ -184,6 +118,78 @@ export default function DataExplorer({ sessionId }: Props) {
     </div>
   );
 }
+
+// Memoized so keystrokes in the SQL textarea don't re-render up to 500 rows;
+// setResult always replaces the object wholesale, so shallow equality is exact.
+const ResultTable = memo(function ResultTable({ result }: { result: QueryOk }) {
+  return result.rows.length === 0 ? (
+    <Empty>Query returned 0 rows.</Empty>
+  ) : (
+    <div style={{
+      background: color.bg.panel,
+      border: `1px solid ${color.border.subtle}`,
+      borderRadius: radius.md,
+      overflow: "hidden",
+    }}>
+      <table style={{
+        width: "100%",
+        borderCollapse: "collapse",
+        fontSize: 12,
+        fontFamily: font.mono,
+        fontVariantNumeric: "tabular-nums",
+      }}>
+        <thead>
+          <tr style={{ background: color.bg.elevated }}>
+            {result.columns.map((col) => (
+              <th
+                key={col}
+                style={{
+                  padding: "10px 14px",
+                  textAlign: "left",
+                  fontSize: 10,
+                  color: color.text.muted,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  fontWeight: 600,
+                  borderBottom: `1px solid ${color.border.subtle}`,
+                  whiteSpace: "nowrap",
+                  fontFamily: font.sans,
+                }}
+              >
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {result.rows.map((row, ri) => (
+            <tr
+              key={ri}
+              style={{
+                borderBottom: ri < result.rows.length - 1 ? `1px solid ${color.border.subtle}` : "none",
+                background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
+              }}
+            >
+              {result.columns.map((_, ci) => (
+                <td
+                  key={ci}
+                  style={{
+                    padding: "8px 14px",
+                    color: color.text.primary,
+                    whiteSpace: "nowrap",
+                    verticalAlign: "top",
+                  }}
+                >
+                  {renderCell(row[ci])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
 
 function Banner({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
   return (

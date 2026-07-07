@@ -86,14 +86,35 @@ async function getAccessToken(creds: GoogleCreds): Promise<string> {
 
 // ─── Timezone math (no deps — resolve the tz offset per-instant via Intl) ────
 
+// Intl.DateTimeFormat construction is expensive and candidateSlots() calls the
+// helpers below hundreds of times per request, so formatters are cached per
+// (kind, timeZone). Built lazily at the original call sites: a constructor
+// throw (invalid tz) still surfaces per-call as before and is never cached.
+// Bounded in practice — only CONTACT_TIMEZONE is ever passed (2 entries).
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+
+function getDtf(timeZone: string, kind: "offset" | "date"): Intl.DateTimeFormat {
+  const key = kind + "\0" + timeZone;
+  let dtf = dtfCache.get(key);
+  if (!dtf) {
+    dtf = kind === "offset"
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          hourCycle: "h23",
+          year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit",
+        })
+      : new Intl.DateTimeFormat("en-CA", {
+          timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+        });
+    dtfCache.set(key, dtf);
+  }
+  return dtf;
+}
+
 /** Offset (tz-local minus UTC) in ms at a given instant, for a given IANA tz. */
 function tzOffsetMs(instant: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(instant);
+  const parts = getDtf(timeZone, "offset").formatToParts(instant);
   const get = (type: string): number =>
     Number(parts.find((p) => p.type === type)?.value ?? "0");
   const asIfUtc = Date.UTC(
@@ -116,9 +137,7 @@ function zonedTimeToUtc(
 
 /** Calendar date (y/m/d) of `instant` as seen in `timeZone`. */
 function calendarDateInTz(instant: Date, timeZone: string): { y: number; m: number; d: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(instant);
+  const parts = getDtf(timeZone, "date").formatToParts(instant);
   const get = (type: string): number =>
     Number(parts.find((p) => p.type === type)?.value ?? "0");
   return { y: get("year"), m: get("month"), d: get("day") };

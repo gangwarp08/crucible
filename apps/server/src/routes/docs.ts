@@ -11,7 +11,7 @@ import type { FastifyInstance } from "fastify";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
 import { requireSessionToken } from "../services/session-token.js";
-import { loadScenarioById } from "../services/scenarios.js";
+import { supabase } from "../services/supabase.js";
 import { logEvent } from "../services/telemetry.js";
 
 interface ScenarioDoc {
@@ -22,12 +22,30 @@ interface ScenarioDoc {
 
 const DocViewBody = z.object({}).optional();
 
+/** Fetch ONLY scenarios.docs — the full scenario row (rubric, personas,
+ *  curveballs jsonb) is several times the payload and unused here. Same
+ *  error handling as loadScenarioById: null on error or missing row; a null
+ *  docs column collapses to [] (matching the old `scenario.docs ?? []`). */
+async function loadScenarioDocs(id: string): Promise<unknown[] | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("scenarios")
+    .select("docs")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.error("[scenarios] load by id failed", error.message);
+    return null;
+  }
+  if (!data) return null;
+  return ((data as unknown as { docs: unknown[] | null }).docs ?? []) as unknown[];
+}
+
 async function loadDocs(sessionId: string): Promise<ScenarioDoc[] | null> {
   const entry = await getOrRehydrateSession(sessionId);
   if (!entry?.scenarioId) return null;
-  const scenario = await loadScenarioById(entry.scenarioId);
-  if (!scenario) return null;
-  const raw = (scenario.docs ?? []) as unknown[];
+  const raw = await loadScenarioDocs(entry.scenarioId);
+  if (raw === null) return null;
   return raw.filter(
     (d): d is ScenarioDoc =>
       typeof d === "object" &&

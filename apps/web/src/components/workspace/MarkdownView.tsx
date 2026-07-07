@@ -1,5 +1,5 @@
 "use client";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { color, radius, font } from "@/styles/tokens";
 
 // Minimal markdown renderer scoped to what the scenario docs use:
@@ -127,7 +127,7 @@ function renderInline(text: string): React.ReactNode[] {
 }
 
 export default function MarkdownView({ source }: Props) {
-  const blocks = parse(source);
+  const blocks = useMemo(() => parse(source), [source]);
   return (
     <div
       style={{

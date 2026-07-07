@@ -3,6 +3,7 @@ import { revokeSessionKey } from "./litellm.js";
 import { finalizeSession } from "./db.js";
 import { logEvent, flushTelemetry } from "./telemetry.js";
 import { runAnalysisAgent } from "./analysis-agent.js";
+import { clearScenarioCache } from "./persona-agent.js";
 
 // "orphaned" is the orphan-teardown reason — set by sandbox.ts's
 // orphanTeardown() when DELETE /sessions/:id runs against a session
@@ -31,6 +32,7 @@ export async function expireSession(
 
   // Mark completed first so concurrent requests are rejected immediately.
   entry.status = "completed";
+  clearScenarioCache(sessionId);
 
   // Emit the session.ended event and flush the full buffer to Supabase BEFORE
   // we start destroying infra — ensures telemetry arrives even if kill() throws.
@@ -62,15 +64,18 @@ export async function expireSession(
   }
   entry.messagingSockets.clear();
 
-  // Revoke the per-session LiteLLM key (best-effort).
-  await revokeSessionKey(entry.litellmKey).catch(() => {});
-
-  // Kill the E2B microVM (best-effort — may already be dead).
-  try {
-    await entry.sandbox.kill();
-  } catch {
-    // already dead or network error — ignore
-  }
+  // Revoke the per-session LiteLLM key and kill the E2B microVM in parallel
+  // (both best-effort and independent — errors swallowed per-branch as before).
+  await Promise.all([
+    revokeSessionKey(entry.litellmKey).catch(() => {}),
+    (async () => {
+      try {
+        await entry.sandbox.kill();
+      } catch {
+        // already dead or network error — ignore
+      }
+    })(),
+  ]);
 
   // Fire-and-forget the Analysis Agent for scenario-bound sessions. Runs
   // after telemetry flush + finalizeSession so all events are queryable

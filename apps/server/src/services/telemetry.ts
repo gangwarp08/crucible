@@ -105,8 +105,9 @@ export function appendPtyData(
     const buf = direction === "output" ? entry.ptyOutputBuffer : entry.ptyInputBuffer;
     buf.push(data);
 
-    const totalBytes = buf.reduce((s, b) => s + b.length, 0);
-    if (totalBytes >= PTY_HIGH_WATER_BYTES) {
+    const bytesKey = direction === "output" ? "ptyOutputBytes" : "ptyInputBytes";
+    entry[bytesKey] += data.length;
+    if (entry[bytesKey] >= PTY_HIGH_WATER_BYTES) {
       _flushPtyBuffer(sessionId, direction);
       return;
     }
@@ -141,6 +142,7 @@ function _flushPtyBuffer(sessionId: string, direction: "output" | "input"): void
 
   const combined = Buffer.concat(buf);
   buf.length = 0; // drain in-place
+  entry[direction === "output" ? "ptyOutputBytes" : "ptyInputBytes"] = 0;
 
   const type = direction === "output" ? "pty.output" : "pty.input";
   const actor = direction === "output" ? "system" : "candidate";

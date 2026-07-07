@@ -494,10 +494,21 @@ export async function persistEvidenceUnits(
   }
 }
 
+/** Extract + persist in one call, also returning the loaded event stream —
+ *  used by the analysis pipeline (Stage A) so Stage B can reuse the events
+ *  without a second fetch of the largest payload. */
+export async function extractAndPersistEvidenceWithEvents(
+  sessionId: string,
+): Promise<{ units: EvidenceUnit[]; events: EventRow[] }> {
+  const ctx = await loadContext(sessionId);
+  const units = runDetectors(ctx.slug, ctx.events, ctx.groundTruth);
+  await persistEvidenceUnits(sessionId, units);
+  return { units, events: ctx.events };
+}
+
 /** Extract + persist in one call. Used by the analysis pipeline (Stage A). */
 export async function extractAndPersistEvidence(sessionId: string): Promise<EvidenceUnit[]> {
-  const units = await extractEvidence(sessionId);
-  await persistEvidenceUnits(sessionId, units);
+  const { units } = await extractAndPersistEvidenceWithEvents(sessionId);
   return units;
 }
 

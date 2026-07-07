@@ -70,7 +70,11 @@ export default function Workspace({ sessionId }: Props) {
   const [layoutReady, setLayoutReady] = useState(false);
   const [showTour, setShowTour] = useState(false);
 
-  const { init, setStatus, status, scenario, setMessages } = useSessionStore();
+  const status = useSessionStore((s) => s.status);
+  const scenario = useSessionStore((s) => s.scenario);
+  const init = useSessionStore((s) => s.init);
+  const setStatus = useSessionStore((s) => s.setStatus);
+  const setMessages = useSessionStore((s) => s.setMessages);
   // The store's sessionId, distinct from the prop. Used to suppress UI from
   // a PRIOR session (EndScreen overlay especially) while the new session is
   // still hydrating. `hydrated` flips true once the store matches the route.

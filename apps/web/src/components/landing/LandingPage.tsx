@@ -603,7 +603,9 @@ function useBurningTokens(): string {
   return tokens.toLocaleString("en-US");
 }
 
-function Simulation() {
+// Leaf component owning the ticking hooks so their per-second/per-burst
+// setState re-renders only these five readout spans, not all of Simulation.
+function ConstraintReadouts() {
   const clock = useTickingClock();
   const tokens = useBurningTokens();
   const constraints = [
@@ -613,6 +615,21 @@ function Simulation() {
     { l: "money",   v: "$25",     cap: "" },
     { l: "memory",  v: "2,048MB", cap: "" },
   ];
+  return (
+    <>
+      {constraints.map((c) => (
+        <span key={c.l} style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontFamily: font.mono, fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: color.text.muted }}>{c.l}</span>
+          <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 600, color: c.l === "time" ? color.fire.bright : color.text.primary, fontVariantNumeric: "tabular-nums" }}>
+            {c.v} <span style={{ color: color.text.muted, fontWeight: 400 }}>{c.cap}</span>
+          </span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+function Simulation() {
   const tabs = [
     { l: "docs",        note: "" },
     { l: "messages",    note: "teammate & client personas" },
@@ -657,14 +674,7 @@ function Simulation() {
                   width: 8, height: 16, background: color.fire.bright, display: "inline-block",
                 }} />
               </span>
-              {constraints.map((c) => (
-                <span key={c.l} style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
-                  <span style={{ fontFamily: font.mono, fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: color.text.muted }}>{c.l}</span>
-                  <span style={{ fontFamily: font.mono, fontSize: 13, fontWeight: 600, color: c.l === "time" ? color.fire.bright : color.text.primary, fontVariantNumeric: "tabular-nums" }}>
-                    {c.v} <span style={{ color: color.text.muted, fontWeight: 400 }}>{c.cap}</span>
-                  </span>
-                </span>
-              ))}
+              <ConstraintReadouts />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 1, background: color.border.subtle }}>
               {tabs.map((t) => (

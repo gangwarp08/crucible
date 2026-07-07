@@ -89,6 +89,8 @@ export interface SessionEntry {
   // Telemetry — PTY stream batching
   ptyOutputBuffer: Buffer[];                     // sandbox→browser bytes pending flush
   ptyInputBuffer: Buffer[];                      // browser→sandbox bytes pending flush
+  ptyOutputBytes: number;                        // running byte count of ptyOutputBuffer
+  ptyInputBytes: number;                         // running byte count of ptyInputBuffer
   ptyOutputFlushTimer: ReturnType<typeof setTimeout> | null;
   ptyInputFlushTimer: ReturnType<typeof setTimeout> | null;
 
