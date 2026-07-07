@@ -640,6 +640,12 @@ proven not to regress scoring, security, or the candidate experience.
   band), *then* flip `ORG_AUTH_REQUIRED=true` on the server. Until the flip,
   `/api/review/*` falls back to the default asaya org, so nothing breaks while
   keys are being handed out.
+- **Internal admin credential:** for the internal asaya org, set the
+  `ORG_ADMIN_KEY` env var (min 16 chars) instead of minting a key. It is
+  accepted (timing-safe compare) as both the org API key and the outcome
+  webhook bearer, resolving to the default asaya org (role admin) — one
+  variable to manage, rotated by editing the Railway variable. Partner orgs
+  still get minted per-org keys via `scripts/mint-org-key.ts`.
 - **Operational lesson (from the first dry run):** deploying **during** a live
   candidate session restarts the server, which loses in-memory timers and drops
   WebSockets. The deadline reaper + server-verified session-end make the system
