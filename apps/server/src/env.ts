@@ -50,6 +50,13 @@ const EnvSchema = z.object({
   // import script bypasses HTTP and writes via the service role directly.
   OUTCOMES_WEBHOOK_SECRET: z.string().min(16).optional(),
 
+  // Operator-set admin credential for the internal asaya org. When set, this
+  // value is accepted (timing-safe compare) wherever an org API key or org
+  // webhook secret is presented, resolving to the default asaya org (role
+  // admin). Rotate by editing the Railway variable — no minting round-trip.
+  // Partner orgs still use minted per-org keys (scripts/mint-org-key.ts).
+  ORG_ADMIN_KEY: z.string().min(16).optional(),
+
   // P2 multi-tenant org auth flag. When "true", every /api/review/* request
   // MUST carry a valid X-Org-Key header (401 otherwise). Off by default: a
   // key-less request resolves to the default 'asaya' admin org so the current

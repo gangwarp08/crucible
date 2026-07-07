@@ -14,7 +14,7 @@
 // the routes, and every query is scoped by org_id unless the caller org has
 // role 'admin' (the internal asaya org, which sees everything).
 
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { supabase } from "./supabase.js";
 import { env } from "../env.js";
@@ -103,8 +103,28 @@ async function lookupOrgBy(column: "api_key_hash" | "webhook_secret_hash" | "slu
   return (data as unknown as OrgRow) ?? null;
 }
 
+// ── Operator-set admin credential (ORG_ADMIN_KEY) ────────────────────────────
+// The internal asaya org's credential can be a plain env var instead of a
+// minted secret: operators set/rotate it by editing the Railway variable. It is
+// accepted anywhere an org API key OR org webhook secret is presented — one
+// variable to manage — and always resolves to the default asaya org (role
+// admin). Minted admin secrets, if any, continue to work via the hash lookup.
+// This is a direct raw-secret comparison (unlike the hash-keyed lookups above),
+// so it MUST be constant-time: timingSafeEqual on equal-length buffers.
+function matchesOrgAdminKey(raw: string): boolean {
+  const adminKey = env.ORG_ADMIN_KEY;
+  if (!adminKey) return false;
+  const a = Buffer.from(raw);
+  const b = Buffer.from(adminKey);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /** Resolve an org from a raw API key (X-Org-Key). Active orgs only. */
 export async function resolveOrgByApiKey(raw: string): Promise<OrgRow | null> {
+  if (matchesOrgAdminKey(raw)) {
+    const def = await getDefaultOrg();
+    if (def) return def;
+  }
   const hash = sha256(raw);
   const cached = cacheGet(`api:${hash}`);
   if (cached) return cached;
@@ -115,6 +135,10 @@ export async function resolveOrgByApiKey(raw: string): Promise<OrgRow | null> {
 
 /** Resolve an org from a raw per-org webhook secret (Bearer on /api/outcomes). */
 export async function resolveOrgByWebhookSecret(raw: string): Promise<OrgRow | null> {
+  if (matchesOrgAdminKey(raw)) {
+    const def = await getDefaultOrg();
+    if (def) return def;
+  }
   const hash = sha256(raw);
   const cached = cacheGet(`whk:${hash}`);
   if (cached) return cached;
