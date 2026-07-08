@@ -13,6 +13,7 @@ import EndScreen from "./EndScreen";
 import WorkspaceTour, { tourHasBeenSeen } from "./WorkspaceTour";
 import { readFile, getSession, getAssistantHistory } from "@/lib/api";
 import { useIntegrityMonitor } from "@/lib/integrity";
+import { useWebcamPresence } from "@/lib/webcam-presence";
 import { useSessionStore } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
 import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
@@ -86,6 +87,13 @@ export default function Workspace({ sessionId }: Props) {
   // scored. Armed only while the candidate is actually working (active, or
   // token_exhausted where work continues without the assistant).
   useIntegrityMonitor(sessionId, hydrated && (status === "active" || status === "token_exhausted"));
+
+  // P6.3 (proctoring v2, DORMANT) — webcam presence sampling. Same arming
+  // window as the passive monitor, but the hook ALSO gates internally on the
+  // session's recorded-consent marker BEFORE touching getUserMedia: for every
+  // session that never accepted the v2 consent (i.e. all of them while the
+  // org flag is off), this line is a no-op — no permission prompt, ever.
+  useWebcamPresence(sessionId, hydrated && (status === "active" || status === "token_exhausted"));
 
   // Hydrate panel layout once on mount so the PanelGroup mounts with the
   // persisted sizes, not the defaults.

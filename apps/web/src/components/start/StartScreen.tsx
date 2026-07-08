@@ -7,6 +7,11 @@ import {
   ScenarioNotFoundError, ScenarioInviteRequiredError,
   type Scenario,
 } from "@/lib/api";
+import {
+  getProctoringConfig, postProctoringConsent, markProctoringV2Accepted,
+  type ProctoringConfig, type ConsentDecision,
+} from "@/lib/proctoring";
+import IdentityCapture from "./IdentityCapture";
 import { color, radius, font } from "@/styles/tokens";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -32,7 +37,11 @@ type Phase =
   | { kind: "invite-required"; inviteError: string | null; submitting: boolean }
   | { kind: "ready"; scenario: Scenario }
   | { kind: "starting"; scenario: Scenario }
-  | { kind: "starting-failed"; scenario: Scenario; message: string };
+  | { kind: "starting-failed"; scenario: Scenario; message: string }
+  // P6 (proctoring v2): session is created and consent was ACCEPTED +
+  // recorded — the identity-capture step renders before the workspace.
+  // Unreachable while the org flag is off (the dormant default).
+  | { kind: "identity"; sessionId: string };
 
 function fmtBytes(mb: number | null): string {
   if (mb === null) return "—";
@@ -51,6 +60,25 @@ export default function StartScreen({ slug, linkToken }: Props) {
   // Invite code the candidate already used to unlock the scenario. Reused on
   // Begin so we don't ask twice. null when the server isn't gating.
   const [validatedInviteCode, setValidatedInviteCode] = useState<string | null>(null);
+  // P6 (proctoring v2, DORMANT): non-null ONLY when the candidate arrived via
+  // a session link whose org enabled v2. Everything below stays byte-identical
+  // to today when null (the default) — no consent UI, no capture, and (when
+  // there is no linkToken at all) no extra network call either.
+  const [proctoring, setProctoring] = useState<ProctoringConfig | null>(null);
+  const [consentDecision, setConsentDecision] = useState<ConsentDecision | null>(null);
+
+  // Proctoring-tier probe — STRICTLY link-gated. Without a linkToken this
+  // effect returns before any fetch (dormancy assert: a plain /start/<slug>
+  // visit issues zero proctoring requests). getProctoringConfig returns null
+  // on disabled / unknown / older-server / any failure.
+  useEffect(() => {
+    if (!linkToken) return;
+    let cancelled = false;
+    void getProctoringConfig(linkToken).then((cfg) => {
+      if (!cancelled && cfg) setProctoring(cfg);
+    });
+    return () => { cancelled = true; };
+  }, [linkToken]);
 
   // Probe the server for the scenario, reusing any invite code already
   // validated this tab (e.g. on the catalog page) so the candidate isn't
@@ -121,6 +149,23 @@ export default function StartScreen({ slug, linkToken }: Props) {
         // via the starting-failed phase below.
         ...(linkToken ? { linkToken } : {}),
       });
+      // P6 consent recording — AFTER the session exists (the decision is a
+      // session-scoped fact), BEFORE the workspace. Fire-and-observe: a
+      // failed recording downgrades to v1 passive (capture stays off — the
+      // hard gate is "no RECORDED consent, no capture"), never blocks.
+      if (proctoring !== null) {
+        const decision: ConsentDecision = consentDecision ?? "declined";
+        const recorded = await postProctoringConsent(
+          sessionId, decision, proctoring.consentTextVersion,
+        );
+        if (decision === "accepted" && recorded) {
+          // Arms useWebcamPresence for this session (read pre-getUserMedia)…
+          markProctoringV2Accepted(sessionId);
+          // …and inserts the identity-capture step before the workspace.
+          setPhase({ kind: "identity", sessionId });
+          return;
+        }
+      }
       router.push(`/session/${sessionId}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start the session";
@@ -237,7 +282,17 @@ export default function StartScreen({ slug, linkToken }: Props) {
             inviteCode={inviteCode}
             onInviteCodeChange={setInviteCode}
             hideInviteField={validatedInviteCode !== null}
+            proctoring={proctoring}
+            consentDecision={consentDecision}
+            onConsentDecision={setConsentDecision}
             onBegin={() => { void begin(phase.scenario); }}
+          />
+        )}
+
+        {phase.kind === "identity" && (
+          <IdentityCapture
+            sessionId={phase.sessionId}
+            onContinue={() => router.push(`/session/${phase.sessionId}`)}
           />
         )}
       </div>
@@ -246,7 +301,8 @@ export default function StartScreen({ slug, linkToken }: Props) {
 }
 
 function ScenarioBody({
-  scenario, starting, beginError, inviteCode, onInviteCodeChange, hideInviteField, onBegin,
+  scenario, starting, beginError, inviteCode, onInviteCodeChange, hideInviteField,
+  proctoring, consentDecision, onConsentDecision, onBegin,
 }: {
   scenario: Scenario;
   starting: boolean;
@@ -256,9 +312,18 @@ function ScenarioBody({
   /** When true, the invite code was already validated on the scenario fetch
    *  (the gated path). No need to ask again on Begin — hide the field. */
   hideInviteField: boolean;
+  /** P6: non-null only when this link's org enabled proctoring v2. Null (the
+   *  dormant default) renders this component byte-identically to before P6. */
+  proctoring: ProctoringConfig | null;
+  consentDecision: ConsentDecision | null;
+  onConsentDecision: (d: ConsentDecision) => void;
   onBegin: () => void;
 }) {
   const c = scenario.constraints;
+  // Consent gate is HARD: with v2 enabled, Begin stays disabled until the
+  // candidate explicitly accepts or declines (decline = v1 passive-only, the
+  // session still proceeds).
+  const consentPending = proctoring !== null && consentDecision === null;
   return (
     <div>
       <div style={{ marginBottom: 36 }}>
@@ -420,9 +485,45 @@ function ScenarioBody({
           browser tab — tab focus changes, large paste bursts, long idle gaps,
           and copy events from the brief and docs. Reviewers see these as
           informational signals only; they never change your competency score.
-          No webcam, no biometrics.
+          {/* The "no webcam / no biometrics" promise holds for every session
+              except a v2-enabled link — where the consent card below covers
+              exactly what changes and the choice stays with the candidate. */}
+          {proctoring === null && " No webcam, no biometrics."}
         </p>
       </section>
+
+      {proctoring !== null && (
+        <section style={{ marginBottom: 32 }}>
+          <Card header="Enhanced proctoring — your choice" padding={5}>
+            <p style={{ color: color.text.primary, fontSize: 13, lineHeight: 1.7, margin: "0 0 16px", whiteSpace: "pre-wrap" }}>
+              {proctoring.consentText}
+            </p>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <Button
+                variant={consentDecision === "accepted" ? "primary" : "secondary"}
+                size="md"
+                disabled={starting}
+                onClick={() => onConsentDecision("accepted")}
+              >
+                {consentDecision === "accepted" ? "✓ Consent given" : "I consent"}
+              </Button>
+              <Button
+                variant={consentDecision === "declined" ? "primary" : "ghost"}
+                size="md"
+                disabled={starting}
+                onClick={() => onConsentDecision("declined")}
+              >
+                {consentDecision === "declined" ? "✓ Declined" : "Decline"}
+              </Button>
+            </div>
+            {consentDecision === "declined" && (
+              <p style={{ color: color.text.muted, fontSize: 12, margin: "12px 0 0", lineHeight: 1.6 }}>
+                Continuing with passive checks only — no webcam, no ID capture.
+              </p>
+            )}
+          </Card>
+        </section>
+      )}
 
       <div style={{
         display: "flex", flexDirection: "column",
@@ -454,9 +555,14 @@ function ScenarioBody({
             />
           </label>
         )}
-        <Button variant="primary" size="lg" disabled={starting} onClick={onBegin}>
+        <Button variant="primary" size="lg" disabled={starting || consentPending} onClick={onBegin}>
           {starting ? "Starting…" : "Begin assessment"}
         </Button>
+        {consentPending && (
+          <p style={{ color: color.text.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
+            Choose whether to consent to enhanced proctoring above before beginning.
+          </p>
+        )}
         <p style={{ color: color.text.muted, fontSize: 12, margin: 0, lineHeight: 1.6 }}>
           Once you click Begin, the timer starts and the sandbox is provisioned.
           Allow ~5 seconds for the workspace to load.

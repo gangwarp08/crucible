@@ -517,6 +517,18 @@ export interface IntegrityTimelineEvent {
   payload: Record<string, unknown> | null;
 }
 
+/** P6 (proctoring v2) identity status — recruiter-only, informational. Only
+ *  populated when the suspicion route reports it (v2 sessions on a v2-aware
+ *  server); null everywhere else, including every v1 session. */
+export interface SuspicionIdentity {
+  /** Candidate's recorded consent decision; null = no decision on record. */
+  consent: "accepted" | "declined" | null;
+  /** Identity-match outcome; null = never attempted / not recorded. */
+  verified: boolean | null;
+  /** 0–1 match confidence when the server stored one. */
+  matchConfidence: number | null;
+}
+
 export interface SuspicionReport {
   /** 0–100; deterministic aggregation of integrity events (suspicion-score.ts).
    *  min(100, sum of factor contributions). */
@@ -526,6 +538,22 @@ export interface SuspicionReport {
   version: string;
   /** The session's integrity.* events, seq-ordered (mini-timeline source). */
   events: IntegrityTimelineEvent[];
+  /** P6 identity status; null on v1 sessions and pre-v2 servers. */
+  identity: SuspicionIdentity | null;
+}
+
+/** Tolerant parse of the suspicion route's OPTIONAL identity block (older /
+ *  v1-only servers simply don't send one → null, panel renders nothing). */
+function parseSuspicionIdentity(raw: unknown): SuspicionIdentity | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  const consent =
+    o["consent"] === "accepted" || o["consent"] === "declined" ? o["consent"] : null;
+  const verified = typeof o["verified"] === "boolean" ? o["verified"] : null;
+  const rawConf = o["matchConfidence"] ?? o["match_confidence"];
+  const matchConfidence = typeof rawConf === "number" ? rawConf : null;
+  if (consent === null && verified === null && matchConfidence === null) return null;
+  return { consent, verified, matchConfidence };
 }
 
 /** Fetch the server-computed Suspicion Score for a session
@@ -541,6 +569,7 @@ export async function getSuspicionReport(sessionId: string): Promise<SuspicionRe
     const body = (await res.json()) as {
       suspicion?: { score?: unknown; factors?: SuspicionFactor[]; version?: unknown };
       events?: IntegrityTimelineEvent[];
+      identity?: unknown;
     };
     if (typeof body.suspicion?.score !== "number") return null;
     return {
@@ -548,6 +577,7 @@ export async function getSuspicionReport(sessionId: string): Promise<SuspicionRe
       factors: body.suspicion.factors ?? [],
       version: typeof body.suspicion.version === "string" ? body.suspicion.version : "?",
       events: body.events ?? [],
+      identity: parseSuspicionIdentity(body.identity),
     };
   } catch {
     return null;

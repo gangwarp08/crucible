@@ -677,7 +677,13 @@ export function runDetectors(
   // entry point every extraction path flows through. Integrity events never
   // reached detectors before this channel existed, so detector behavior was
   // unchanged and DETECTOR_VERSION stayed at "2" for that change.
-  events = events.filter((e) => !e.type.startsWith("integrity."));
+  // P6 extends the same rule to identity.* (consent / identity-verification
+  // events): proctoring signals inform the recruiter, never the competency
+  // score. Same reasoning — these types never reached detectors before, so
+  // DETECTOR_VERSION is unchanged.
+  events = events.filter(
+    (e) => !e.type.startsWith("integrity.") && !e.type.startsWith("identity."),
+  );
 
   const units = agnosticDetectors(events);
   units.push(...verificationDetectors(events));

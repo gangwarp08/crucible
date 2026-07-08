@@ -359,10 +359,13 @@ export async function assembleAnalysisInput(
   }
   // P1 isolation rule (asaya v-next spec, Priority 1): integrity.* events are
   // an informational recruiter-only channel — they MUST NOT reach the judge
-  // input or evaluations. Defensive mirror of the hard filter in
-  // evidence-extractor.runDetectors(); covers both the preloaded and the
-  // freshly-fetched event paths.
-  events = events.filter((e) => !e.type.startsWith("integrity."));
+  // input or evaluations. P6 adds identity.* (proctoring-v2 consent /
+  // verification events) under the same rule. Defensive mirror of the hard
+  // filter in evidence-extractor.runDetectors(); covers both the preloaded
+  // and the freshly-fetched event paths.
+  events = events.filter(
+    (e) => !e.type.startsWith("integrity.") && !e.type.startsWith("identity."),
+  );
 
   // ── 5. File snapshots — latest per path ─────────────────────────────
   const { data: snapsRaw } = await supabase

@@ -12,9 +12,15 @@
 // MUST NEVER appear here (spec P4.3): cost/spend, model names, raw
 // transcript/events, sandbox ids, org ids, session ids, other candidates'
 // data, suspicion factor details (kinds/counts/weights/contributions — those
-// are recruiter-only, via the SuspicionPanel endpoint). Evidence carries seq
-// numbers + judge notes only — seq numbers are meaningless without the
-// (internal-only) event stream.
+// are recruiter-only, via the SuspicionPanel endpoint), and — P6 — ANY
+// identity/proctoring-v2 data: consent decisions, consent text versions,
+// match confidence, verified flags, identity.* event rows, anything from
+// identity_checks. Identity status is recruiter-only (suspicion endpoint);
+// note the events query below fetches integrity.% ONLY, so identity.* rows
+// can't even reach this assembly. Evidence carries seq numbers + judge notes
+// only — seq numbers are meaningless without the (internal-only) event
+// stream. (verify-identity-verify.ts asserts the serialized report contains
+// no identity material.)
 
 import { z } from "zod";
 import { supabase } from "./supabase.js";

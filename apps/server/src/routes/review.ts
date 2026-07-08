@@ -42,6 +42,7 @@ import { DIFFICULTY_STATS_VERSION } from "../services/difficulty-stats.js";
 import { appendEvent } from "../services/events-direct.js";
 import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
 import { computeSuspicionScore, type SuspicionEventInput } from "../services/suspicion-score.js";
+import { readIdentityStatus } from "../services/proctoring-v2.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
   createReportShare,
@@ -365,7 +366,11 @@ export async function reviewRoutes(server: FastifyInstance) {
           .from("events")
           .select("seq, type, ts, payload")
           .eq("session_id", id)
-          .like("type", "integrity.%")
+          // P6: identity.* (consent / verification) rides the same
+          // informational timeline as integrity.*. PostgREST `or` uses `*`
+          // as the like-wildcard. computeSuspicionScore ignores identity.*
+          // (it filters on the integrity. prefix), so the score is unchanged.
+          .or("type.like.integrity.*,type.like.identity.*")
           .order("seq", { ascending: true })
           .limit(1000),
       ]);
@@ -392,6 +397,12 @@ export async function reviewRoutes(server: FastifyInstance) {
         // Explicit .limit(1000) above — at exactly 1000 rows the timeline (and
         // therefore the recomputed score) may be missing later events.
         truncated: events.length === 1000,
+        // P6 identity status (recruiter-only, informational) — null for every
+        // v1 session and pre-0024 deploys; the web SuspicionPanel renders the
+        // identity row only when non-null. RECRUITER-ONLY like the factor
+        // breakdown: this block must never reach the public shared report
+        // (services/shared-report.ts allowlist).
+        identity: await readIdentityStatus(id),
       });
     },
   );
