@@ -553,10 +553,22 @@ function fdeApiIntegrationDetectors(events: EventRow[]): EvidenceUnit[] {
 //     with different domain skins keep detection deterministic.
 
 const PS_FORK2_DEFAULT_CURVEBALL_ID = "hardcode_workaround";
-// Evidence the deliverable ships the hardcoded/special-cased workaround.
-const PS_FORK2_SHORTCUT_MARKERS = [
+// ACTION markers: phrasings that themselves describe DOING the hack
+// ("hardcoded the page size"). In a sentence with no rejection stance these
+// are adoption evidence on their own.
+const PS_FORK2_ACTION_MARKERS = [
   "hard[\\s-]?cod", "special[\\s-]?cas", "stub(bed)?\\s+(out\\s+)?(the\\s+)?(response|value|call)",
-  "pin(ned)?\\s+(the\\s+)?(value|response|version)", "workaround", "temporary fix", "band[\\s-]?aid",
+  "pin(ned)?\\s+(the\\s+)?(page\\s+size|value|response|version)",
+];
+// NAMING markers: words that merely NAME the shortcut ("the workaround") —
+// the teammate's own proposal and the deliverable prompt both use them, so a
+// bare mention is NOT adoption evidence; they need an adoption verb in the
+// same sentence. (The old detector treated bare "workaround" as adoption and
+// only scanned a 60-char backward negation window, so "the workaround Sam
+// proposed was declined" misread as shortcut_taken — the fork-detector fix
+// spec / GOING-LIVE A.2 bug.)
+const PS_FORK2_NAMING_MARKERS = [
+  "workaround", "temporary fix", "band[\\s-]?aid", "short[\\s-]?cut", "quick fix",
 ];
 // Evidence the deliverable ships the robust fix (root cause addressed for all users).
 const PS_FORK2_ROBUST_MARKERS = [
@@ -564,12 +576,13 @@ const PS_FORK2_ROBUST_MARKERS = [
   "retr(y|ies)", "backoff", "idempoten", "schema (chang|drift)", "contract (chang|drift)",
   "root cause", "all (users|customers|accounts|pages)", "edge[\\s-]?case",
 ];
-// A shortcut marker preceded (within a short window) by negation is a REJECTION
-// of the shortcut, not an acceptance — "we did not hardcode it" must not read
-// as taking the shortcut. Family 1 dodged this with numeric figures; the text
-// analog needs the negation window.
-const PS_FORK2_NEGATION_RE =
-  /(\bno\b|\bnot\b|n['’]t|never|avoid\w*|instead of|rather than|reject\w*|declin\w*|refus\w*|without|against)\s*(\S+\s+){0,4}$/i;
+// Candidate stance toward the shortcut, evaluated per sentence in BOTH
+// directions (not a proximity window): rejection wins over adoption within a
+// sentence, so "we declined the hardcode" never reads as taking it.
+const PS_FORK2_DECLINE_RE =
+  /(\bno\b|\bnot\b|n['’]t\b|never|avoid\w*|instead of|rather than|reject\w*|declin\w*|refus\w*|without|against|opt(ed)?\s+(out|against)|push(ed)?\s+back|skip(ped|ping)?|dropp(ed|ing)|scrapp(ed|ing)|chose\s+not|decided\s+(not|against)|(shouldn|wouldn|won|can|couldn|didn|don)['’]?t)/i;
+const PS_FORK2_ADOPT_RE =
+  /(\bship(ped|ping)?\b|\bappl(y|ied|ying)\b|\bus(ed|ing)\b|\badd(ed|ing)?\b|\bimplement(ed|ing)?\b|went\s+with|\bkept\b|\bkeep(ing)?\b|\btook\b|\btak(e|ing)\b|\baccept(ed|ing)?\b|\bdeploy(ed|ing)?\b|\bwrote\b|\bput\s+in\b|for\s+now|as\s+a\s+stopgap|to\s+save\s+time)/i;
 // Corroborating user/business-impact reasoning on the team channel.
 const PS_FORK2_REASONING_RE =
   /(edge[\s-]?case|breaks?\s+(for|other|when)|silent(ly)?\s+(fail|drop|break)|wrong (data|results?|numbers?)|missing (data|records|pages)|misleading|incorrect|brittle|tech(nical)?\s+debt|will break|regress|other (users|customers|tenants|accounts)|long[\s-]?term|maintain\w*|correctness|trust|can['’]?t (just )?(ship|hardcode|pin)|band[\s-]?aid|papers? over|root cause)/i;
@@ -586,16 +599,36 @@ function compileMarkers(fromGt: unknown, fallback: string[]): RegExp[] {
   return out;
 }
 
-/** True when `re` matches `text` at least once OUTSIDE a negation window. */
-function matchesAffirmed(text: string, re: RegExp): boolean {
-  const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-  let m: RegExpExecArray | null;
-  while ((m = g.exec(text)) !== null) {
-    const windowStart = Math.max(0, m.index - 60);
-    if (!PS_FORK2_NEGATION_RE.test(text.slice(windowStart, m.index))) return true;
-    if (m.index === g.lastIndex) g.lastIndex++; // zero-width safety
+type ForkStance = "adopt" | "decline" | "conflict" | "none";
+
+/** Classify the candidate's stance toward the proposed shortcut from the
+ *  deliverable text, sentence by sentence. Rules per the fork-detector fix
+ *  spec §3: rejection stance in a marker sentence → decline; an ACTION marker
+ *  (or a NAMING marker with an adoption verb) in a non-rejecting sentence →
+ *  adopt; bare naming with neither → no evidence. Contradictory sentences →
+ *  conflict (ambiguous, default safe). */
+function classifyForkStance(
+  text: string,
+  actionRes: RegExp[],
+  namingRes: RegExp[],
+): ForkStance {
+  // Sentence granularity ([.!?] + newlines); semicolon-joined clauses share
+  // stance context ("Sam suggested the workaround; I decided against it"), so
+  // they deliberately stay in one unit.
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/);
+  let adopt = false;
+  let decline = false;
+  for (const s of sentences) {
+    const hasAction = actionRes.some((re) => re.test(s));
+    const hasNaming = namingRes.some((re) => re.test(s));
+    if (!hasAction && !hasNaming) continue;
+    if (PS_FORK2_DECLINE_RE.test(s)) { decline = true; continue; }
+    if (hasAction || PS_FORK2_ADOPT_RE.test(s)) adopt = true;
   }
-  return false;
+  if (adopt && decline) return "conflict";
+  if (adopt) return "adopt";
+  if (decline) return "decline";
+  return "none";
 }
 
 /** Family-2 Product-Sense fork — the design_under_constraints judgment when
@@ -623,28 +656,39 @@ function psForkApiIntegrationDetectors(
   const submits = events.filter((e) => e.type === "deliverable.submit");
   const lastSubmit = submits.sort((a, b) => b.seq - a.seq)[0] ?? null;
 
+  let decisionMade = false;
   if (lastSubmit) {
     const data = (lastSubmit.payload.data ?? {}) as Record<string, unknown>;
     const text = Object.values(data).filter((v): v is string => typeof v === "string").join("\n");
-    const shortcutRes = compileMarkers(psForkGt.shortcut_markers, PS_FORK2_SHORTCUT_MARKERS);
+    // gt override contract preserved: ps_fork.shortcut_markers replaces the
+    // ACTION set (an isomorph's overrides describe doing that skin's hack);
+    // optional ps_fork.naming_markers replaces the naming set.
+    const actionRes = compileMarkers(psForkGt.shortcut_markers, PS_FORK2_ACTION_MARKERS);
+    const namingRes = compileMarkers(psForkGt.naming_markers, PS_FORK2_NAMING_MARKERS);
     const robustRes = compileMarkers(psForkGt.robust_markers, PS_FORK2_ROBUST_MARKERS);
 
-    // Affirmed (non-negated) shortcut markers = the deliverable ships the hack.
-    const shortcutHits = shortcutRes.filter((re) => matchesAffirmed(text, re)).length;
     const robustHits = robustRes.filter((re) => re.test(text)).length;
-    const shortcutAccepted = shortcutHits > 0;
-    // Shipping the hardcode breaks the edge-case users even when partial fixes
-    // land alongside it (e.g. "hardcoded fallback + refreshed the tokens"), so
-    // an affirmed shortcut IS the shortcut taken — partial robust markers do
-    // not undo it. Protected requires the robust fix WITHOUT the hack. The two
-    // stay mutually exclusive; Stage B reads the hit counts for mixed cases.
-    const userProtected = robustHits > 0 && !shortcutAccepted; // robust fix shipped, no hack
-    const shortcutTaken = shortcutAccepted;                    // hack shipped
+    let stance = classifyForkStance(text, actionRes, namingRes);
+    // Silent rejection: the fork's decision is observable in the WORK — a
+    // user-sound deliverable with no adoption evidence rejects the shortcut
+    // even if the candidate never names it. (Only from "none": a "conflict"
+    // stays ambiguous.)
+    if (stance === "none" && robustHits > 0) stance = "decline";
 
-    units.push(unit(PS_FORK_COMPETENCY, "ps_fork_user_protected",
-      { protected: userProtected, robust_marker_hits: robustHits }, [forkSeq, lastSubmit.seq]));
-    units.push(unit(PS_FORK_COMPETENCY, "ps_fork_shortcut_taken",
-      { taken: shortcutTaken, shortcut_marker_hits: shortcutHits }, [forkSeq, lastSubmit.seq]));
+    // Fix-spec §3.4 safe default: ambiguity ("none"/"conflict") fires NEITHER
+    // decision unit, letting the competency fall to not_assessed (RD4) rather
+    // than guessing — a false not_assessed is recoverable; a false
+    // shortcut_taken inverts the score. On a clear stance both units are
+    // emitted (booleans mirror family 1's shape for cross-family
+    // comparability; Stage B reads the hit counts on mixed evidence).
+    if (stance === "adopt" || stance === "decline") {
+      decisionMade = true;
+      const shortcutTaken = stance === "adopt";
+      units.push(unit(PS_FORK_COMPETENCY, "ps_fork_user_protected",
+        { protected: !shortcutTaken, stance, robust_marker_hits: robustHits }, [forkSeq, lastSubmit.seq]));
+      units.push(unit(PS_FORK_COMPETENCY, "ps_fork_shortcut_taken",
+        { taken: shortcutTaken, stance }, [forkSeq, lastSubmit.seq]));
+    }
   }
 
   // Corroborating: user/business-impact reasoning on the team channel AFTER the
@@ -655,8 +699,14 @@ function psForkApiIntegrationDetectors(
       e.seq > forkSeq &&
       PS_FORK2_REASONING_RE.test(String((e.payload as Record<string, unknown> | undefined)?.["text"] ?? "")),
   );
-  units.push(unit(PS_FORK_COMPETENCY, "ps_fork_reasoning_present",
-    reasoningMsgs.length > 0, reasoningMsgs.map((e) => e.seq)));
+  // Corroborating only: emitted alongside a decision (both booleans, family-1
+  // shape) or when reasoning genuinely exists. When the decision is ambiguous
+  // AND no reasoning surfaced, emit nothing — the competency falls cleanly to
+  // not_assessed instead of carrying a lone false-reasoning unit.
+  if (decisionMade || reasoningMsgs.length > 0) {
+    units.push(unit(PS_FORK_COMPETENCY, "ps_fork_reasoning_present",
+      reasoningMsgs.length > 0, reasoningMsgs.map((e) => e.seq)));
+  }
 
   return units;
 }

@@ -110,13 +110,13 @@ pnpm --filter @crucible/server exec tsx scripts/verify-family2-isomorph.ts
 **All green is the gate.** Any failure → stop here; the family stays hidden
 and nothing has changed for candidates.
 
-Also on the pre-activation checklist (from the final PR #28 review): tighten
-the family-2 fork detector's decline handling — `PS_FORK2_SHORTCUT_MARKERS`
-includes the bare word "workaround" and the negation window only scans 60
-chars backwards, so a deliverable phrased "the workaround Sam proposed was
-declined" can register as `shortcut_taken`. Bounded impact (Stage-B LLM
-grading is primary), but fix + re-run `verify-family2-units.ts` before real
-candidates see the family.
+~~Pre-activation checklist item (final PR #28 review): fork-detector decline
+handling.~~ **RESOLVED** by the fork-detector fix (see the fix spec): the
+detector now classifies the candidate's stance sentence-by-sentence (decline
+beats adoption; bare naming of "the workaround" is never adoption evidence;
+ambiguity fires neither decision unit → not_assessed). Proven by
+`verify-family2-units.ts` cases H–K; family-1 drift verifier stays
+byte-identical, so `DETECTOR_VERSION` remains "3".
 
 ### A.3 Flip the visibility switch
 
