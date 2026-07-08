@@ -1296,3 +1296,134 @@ export async function probeValidityAccess(): Promise<boolean> {
     return false;
   }
 }
+
+// ─── Costs dashboard (admin-only, read-only) ─────────────────────────────────
+// GET /api/admin/costs/* — the operator's billing cockpit. Same guard as the
+// validity surface (admin org key only; 401/403 → AdminOnlyError). The server
+// aggregates everything; these fetchers only type the contract. gateway-down
+// is NOT an HTTP failure: it arrives as litellm.available=false and the rest
+// of the payload still renders.
+
+/** Daily spend by model from the LiteLLM gateway (last 30 days). */
+export interface LitellmDailyModelSpend {
+  date: string; // YYYY-MM-DD (UTC)
+  model: string;
+  spend_usd: number;
+}
+
+export interface LitellmTopKey {
+  /** e.g. "session-<uuid>" for per-session keys. */
+  key_alias: string | null;
+  /** Truncated token hash — enough to eyeball, never a usable credential. */
+  key_hash_prefix: string | null;
+  /** ALL-TIME spend for this key (the OSS endpoint is not windowed). */
+  spend_usd: number;
+}
+
+export interface LitellmSpendSection {
+  available: boolean;
+  error: string | null;
+  daily_by_model: LitellmDailyModelSpend[];
+  /** Sum of gateway spend since the 1st of the current UTC month. */
+  month_to_date_usd: number | null;
+  top_keys: LitellmTopKey[];
+}
+
+/** Internal usage from our own sessions table (spend_usd is the server's
+ *  stored per-session tally, not a recomputation). */
+export interface InternalUsageSection {
+  window: { from: string | null; to: string | null };
+  sessions: {
+    total: number;
+    by_status: Array<{ status: string; n: number }>;
+    scorable: { scorable_n: number; excluded_n: number; pending_n: number };
+  };
+  cost: {
+    total_usd: number;
+    avg_usd: number | null;
+    p90_usd: number | null;
+  };
+  budget: {
+    /** Mean spend/budget ratio across sessions with a positive budget. */
+    avg_utilization: number | null;
+    /** Utilization histogram: [0,25) [25,50) [50,75) [75,100) [100,∞). */
+    distribution: Array<{ bucket: string; n: number }>;
+    /** Sessions that hit the cap: end_reason='budget' OR spend >= budget. */
+    hit_budget_n: number;
+  };
+  sandbox_hours: {
+    total: number;
+    by_scenario: Array<{ scenario_slug: string; hours: number; sessions: number }>;
+  };
+  daily: Array<{ date: string; sessions: number; cost_usd: number }>;
+  by_org: Array<{ org_id: string; org_name: string; sessions: number; cost_usd: number }>;
+}
+
+/** Static fixed-plan card (Railway/Vercel/…) — a link-out, not a live figure. */
+export interface FixedService {
+  name: string;
+  plan: string;
+  est_monthly_usd: number;
+  dashboard_url: string;
+  notes: string;
+}
+
+export interface CostsOverview {
+  litellm: LitellmSpendSection;
+  internal: InternalUsageSection;
+  fixed_services: FixedService[];
+  generated_at: string;
+}
+
+/** Date-window filters (ISO datetimes, applied to sessions.created_at).
+ *  Only the internal section is windowed — the gateway window is fixed. */
+export interface CostsFilters {
+  from?: string;
+  to?: string;
+}
+
+async function costsFetch<T>(section: string, filters?: CostsFilters): Promise<T> {
+  const qs = new URLSearchParams();
+  if (filters?.from) qs.set("from", filters.from);
+  if (filters?.to) qs.set("to", filters.to);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const res = await fetch(`${SERVER_URL}/api/admin/costs/${section}${suffix}`, {
+    headers: orgKeyHeader(),
+  });
+  if (res.status === 401 || res.status === 403) throw new AdminOnlyError();
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<T>;
+}
+
+/** All three sections in one payload. */
+export async function getCostsOverview(filters?: CostsFilters): Promise<CostsOverview> {
+  return costsFetch<CostsOverview>("overview", filters);
+}
+
+/** Gateway section alone — per-card refresh without re-aggregating the DB. */
+export async function getCostsLitellm(): Promise<{
+  litellm: LitellmSpendSection;
+  generated_at: string;
+}> {
+  return costsFetch("litellm");
+}
+
+/** DB section alone — the date filter drives this without re-hitting the gateway. */
+export async function getCostsInternal(filters?: CostsFilters): Promise<{
+  internal: InternalUsageSection;
+  generated_at: string;
+}> {
+  return costsFetch("internal", filters);
+}
+
+/** One-shot admin probe for the review dashboard's "Costs" nav link. Probes
+ *  the cheap /litellm section (no DB aggregation; gateway-down still 200s).
+ *  NEVER throws — partner keys / missing key / older servers → false. */
+export async function probeCostsAccess(): Promise<boolean> {
+  try {
+    await getCostsLitellm();
+    return true;
+  } catch {
+    return false;
+  }
+}

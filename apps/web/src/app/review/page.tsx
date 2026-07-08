@@ -1,7 +1,7 @@
 import SessionsTable from "@/components/review/SessionsTable";
 import OrgKeyInput from "@/components/review/OrgKeyInput";
 import SessionLinkMintPanel from "@/components/review/SessionLinkMintPanel";
-import ValidityNavLink from "@/components/review/ValidityNavLink";
+import AdminNavLinks from "@/components/review/AdminNavLinks";
 import { color } from "@/styles/tokens";
 
 export default function ReviewPage() {
@@ -40,9 +40,9 @@ export default function ReviewPage() {
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {/* Admin-only validity link — renders only when the probe against
-                /api/admin/validity/* succeeds; hidden for partner keys. */}
-            <ValidityNavLink />
+            {/* Admin-only links (Validity / Costs) — each renders only when
+                its probe against /api/admin/* succeeds; hidden for partners. */}
+            <AdminNavLinks />
             {/* P2: per-org API key (X-Org-Key). Optional while the server's
                 ORG_AUTH_REQUIRED flag is off — key-less requests see the
                 default org. */}

@@ -152,6 +152,7 @@ and persists to the DB.
 | `scenarios.ts` | `GET /api/scenarios[/:slug]` | Public catalog (excludes isomorphs + `-fork` dev clones) + invite-gated detail. |
 | `review.ts` | `GET/POST /api/review/*` | Recruiter tool: list/detail sessions, re-evaluate, reinterpret, confirm/override verification cap, session-links + outcome-invites admin, suspicion breakdown (`GET .../sessions/:id/suspicion` — now with a recruiter-only `identity` block from `identity_checks`, null for every v1 session), cohort dashboard (`GET .../cohorts/:scenarioId`), report-share mint/list/revoke, equating readout (`GET .../equating/:familyId`). Org-authenticated + org-scoped (§13.2). |
 | `validity.ts` | `GET /api/admin/validity/*` | **Admin-only, READ-ONLY** validity instrumentation (§13.8): six views — discrimination, not-assessed, distributions, correlation, exclusions, versions — over the shared aggregation service. Requires an explicit `X-Org-Key` resolving to the admin org (the `ORG_ADMIN_KEY` credential works); partner keys 403, key-less requests 401 **even with `ORG_AUTH_REQUIRED` off** — no back-compat fallback, because cross-org aggregation sits behind it. |
+| `costs.ts` | `GET /api/admin/costs/*` | **Admin-only, READ-ONLY** costs dashboard (§13.9): `overview` / `litellm` / `internal` over LiteLLM gateway spend, `sessions.spend_usd`, and a static fixed-plan constant. Reuses the **same `requireAdmin` guard as `validity.ts`** (imported, not duplicated) — identical 401/403 semantics, fails closed even with `ORG_AUTH_REQUIRED` off. Gateway-down is not a failure mode: `litellm.available=false`, HTTP stays 200. |
 | `report.ts` | `GET /api/report/:token` | **Public** shareable candidate report — a strict Zod allowlist (no cost/model/sandbox/transcript data; suspicion **score** only, factors are recruiter-only). |
 | `outcomes.ts` | `POST /api/outcomes`, invite resolve/submit | Partner outcome webhook + token-gated feedback links. |
 | `health.ts` | `GET /health` | Deployed commit SHA + latest migration + feature-flag states. |
@@ -575,8 +576,8 @@ Four partner-facing capabilities landed after the v1 hardening pass (PR #24).
 Each keeps the v1 invariants: deterministic where it counts, versioned,
 verified against real infra. §13.5–13.7 then document the two **dormant
 builds** that followed (PR #28) — built, verified, and deliberately off —
-and §13.8 the **validity instrumentation dashboard** (asaya-internal,
-admin-only, read-only).
+and §13.8–13.9 the **validity instrumentation** and **costs** dashboards
+(asaya-internal, admin-only, read-only).
 
 ### 13.1 Passive proctoring + Suspicion Score (measurement-neutral)
 
@@ -809,6 +810,34 @@ context on every panel, and no write controls. `ValidityNavLink` probes the
 surface once on mount and shows the review nav's "Validity" link only when
 the probe succeeds (admin org); 401/403/older servers keep it hidden.
 
+### 13.9 Costs dashboard
+
+The operator's billing cockpit, in the same mold as §13.8: `services/costs.ts`
++ `routes/costs.ts` expose `GET /api/admin/costs/{overview,litellm,internal}`
+— **READ-ONLY, no new accounting**. Per-session cost is the figure the server
+already tallies into `sessions.spend_usd` (per-call rows behind it in
+`cost_ledger`); this surface only reads the instrument. Three sections:
+**LiteLLM gateway spend** via the free-tier spend endpoints
+`/user/daily/activity` (daily by model, last 30 days + month-to-date) and
+`/global/spend/keys` (top keys, all-time) — `/global/spend/report` is
+Enterprise-gated on our OSS gateway (discovered live: it 400s with a license
+nag). The master key travels only in the request header and is defensively
+stripped from anything leaving the module; a down gateway degrades to
+`available: false` while internal + fixed sections still render. **Internal
+usage** over `sessions`: status/scorable splits, total/avg/p90 cost,
+budget-utilization histogram + hit-budget count, sandbox-hours by scenario,
+daily trend, per-org breakdown, with an optional from/to window.
+**`FIXED_SERVICES`** — an operator-editable constant of six fixed-plan cards
+(Railway, Vercel, Supabase, E2B, Langfuse, Redis) with plan, monthly estimate,
+and a billing-page link-out each; no provider billing APIs are queried. Access
+imports the exact `requireAdmin` preHandler from `routes/validity.ts` (routes
+table, §4.2). The web side is **`/review/costs`**
+(`components/review/CostsDashboard.tsx`): the server computes every number,
+the client only renders, and the date filter refetches only `/internal` —
+that is what the section endpoints are for. `AdminNavLinks` replaces
+`ValidityNavLink`, probing the Validity and Costs surfaces independently so
+each link appears only where its probe succeeds.
+
 ---
 
 ## 14. Verification & regression system
@@ -842,7 +871,11 @@ seeding isolated far-future fixtures on the existing scenario):
 `verify-validity-access` (admin gate + read-only surface — 401/403
 semantics), `verify-not-assessed`, `verify-exclusions`,
 `verify-discrimination-view`, `verify-correlation-view`, and
-`verify-version-panel`. That brings the suite to ~65. This is how a change is
+`verify-version-panel`. The costs dashboard (§13.9) added one more in the
+same infra-light mold: `verify-costs-dashboard` (47 checks — the four-way
+access matrix on all three endpoints, a static no-write scan of the route +
+service, seeded-session aggregation exactness, and master-key absence from
+every payload). That brings the suite to ~66. This is how a change is
 proven not to regress scoring, security, or the candidate experience.
 
 ---

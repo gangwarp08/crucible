@@ -207,6 +207,12 @@ version-aware (legacy v1-judge segregated, never pooled),
 scorable-only, and small-N-honest (numbers nulled server-side below
 N=10 / paired-N=20). See `docs/ARCHITECTURE-REPORT.md` §13.8.
 
+Costs dashboard: a READ-ONLY, admin-only billing cockpit at
+`/review/costs` (`GET /api/admin/costs/*`, same admin gate as
+validity) — LiteLLM gateway spend, internal per-session usage from
+`sessions.spend_usd`, and fixed-plan service cards. See
+`docs/ARCHITECTURE-REPORT.md` §13.9.
+
 Not yet shipped: per-candidate one-time invite codes (currently a
 shared secret), audit log table, stricter Helmet CSP, multi-scenario
 catalog UI.
