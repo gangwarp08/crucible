@@ -11,8 +11,13 @@
 //      contract-drift) with correct event_seqs
 //   E) DISSOCIABILITY: every ps_fork_* unit binds PS_FORK_COMPETENCY
 //      (design_under_constraints) and NEVER teamwork
-//   F) negation safety: "we did NOT hardcode" reads as rejection, not acceptance
-//   G) ground-truth override: ps_fork.curveball_id + marker arrays are honored
+//   E) negation safety: "we did NOT hardcode" reads as rejection, not acceptance
+//   F) ground-truth override: ps_fork.curveball_id + marker arrays are honored
+//   G) family-2 detectors inert on family-1 slugs
+//   H–K) fork-detector fix spec §4 (stance classification): explicit decline
+//      naming the workaround → user_protected; naming while reasoning against
+//      → user_protected; ambiguous mention → NEITHER decision unit
+//      (not_assessed); persona-only mention → neither.
 //
 // The family is DORMANT (catalog_visible=false): these synthetic playthroughs
 // are the only sessions that exercise the detectors until activation.
@@ -220,6 +225,71 @@ if (PS_FORK_COMPETENCY === "teamwork") fail("PS_FORK_COMPETENCY must never be te
   const fam2 = u.filter((x) => x.kind.startsWith("api_") || x.kind.startsWith("ps_fork_"));
   // ps_fork_* here would need family 1's shortcut_suggestion id — hardcode_workaround must not trigger it either
   if (fam2.length === 0) pass("no api_* / ps_fork_* units on a family-1 slug from family-2 events"); else fail(`family-2 detectors fired on family 1: ${fam2.map((x) => x.kind).join(",")}`);
+}
+
+// ── H) explicit decline NAMING the workaround (the GOING-LIVE A.2 bug) ───────
+{
+  console.log("\n[H] explicit decline naming the workaround — NOT shortcut_taken");
+  for (const [tag, fix] of [
+    ["shouldn't-do", "We shouldn't do that workaround — it breaks pagination for the client. Implemented the cursor handling properly."],
+    ["was-declined", "The workaround Sam proposed was declined. Implemented cursor pagination and token refresh for all customers."],
+  ] as const) {
+    const events = [forkEv, ev(11, "deliverable.submit", { data: { fix_summary: fix } })];
+    const u = runDetectors(SLUG, events, GT);
+    const prot = byKind(u, "ps_fork_user_protected");
+    const taken = byKind(u, "ps_fork_shortcut_taken");
+    if ((taken?.value as { taken?: boolean })?.taken === false) pass(`${tag}: decline is NOT taken`); else fail(`${tag}: shortcut_taken = ${JSON.stringify(taken?.value)}`);
+    if ((prot?.value as { protected?: boolean })?.protected === true) pass(`${tag}: decline IS user_protected`); else fail(`${tag}: user_protected = ${JSON.stringify(prot?.value)}`);
+    assertDissociable(u, `H:${tag}`);
+  }
+}
+
+// ── I) "workaround" named while reasoning about why NOT to take it ───────────
+{
+  console.log("\n[I] naming the workaround while reasoning against it");
+  const events = [
+    forkEv,
+    ev(11, "deliverable.submit", {
+      data: {
+        decisions_and_tradeoffs:
+          "Sam suggested hardwiring the old page size as a workaround; I decided against it because it silently drops records for large accounts.",
+      },
+    }),
+  ];
+  const u = runDetectors(SLUG, events, GT);
+  const taken = byKind(u, "ps_fork_shortcut_taken");
+  const prot = byKind(u, "ps_fork_user_protected");
+  if ((taken?.value as { taken?: boolean })?.taken === false) pass("reason-against mention is not taken"); else fail(`shortcut_taken = ${JSON.stringify(taken?.value)}`);
+  if ((prot?.value as { protected?: boolean })?.protected === true) pass("reason-against decline is user_protected"); else fail(`user_protected = ${JSON.stringify(prot?.value)}`);
+  assertDissociable(u, "I");
+}
+
+// ── J) ambiguous / no decision → NEITHER decision unit (→ not_assessed) ──────
+{
+  console.log("\n[J] ambiguous mention — neither decision unit fires");
+  const events = [
+    forkEv,
+    ev(11, "deliverable.submit", {
+      data: { fix_summary: "There is a workaround under discussion with the team; investigation is ongoing." },
+    }),
+  ];
+  const u = runDetectors(SLUG, events, GT);
+  if (byKind(u, "ps_fork_shortcut_taken") === undefined) pass("no shortcut_taken on ambiguity (safe default)"); else fail(`ambiguous fired shortcut_taken: ${JSON.stringify(byKind(u, "ps_fork_shortcut_taken")?.value)}`);
+  if (byKind(u, "ps_fork_user_protected") === undefined) pass("no user_protected on ambiguity"); else fail(`ambiguous fired user_protected: ${JSON.stringify(byKind(u, "ps_fork_user_protected")?.value)}`);
+  if (byKind(u, "ps_fork_reasoning_present") === undefined) pass("no lone reasoning unit on full ambiguity"); else fail("lone reasoning unit emitted on ambiguity");
+}
+
+// ── K) persona-only mention — teammate says it, candidate never engages ──────
+{
+  console.log("\n[K] persona-only mention — neither unit fires");
+  const events = [
+    forkEv,
+    ev(11, "message.team.persona", { text: "quickest fix: hardcode the old paging behaviour as a workaround, we can do it properly later" }, "persona"),
+    ev(12, "deliverable.submit", { data: { fix_summary: "Documented findings from the 401 investigation; analysis still in progress." } }),
+  ];
+  const u = runDetectors(SLUG, events, GT);
+  if (byKind(u, "ps_fork_shortcut_taken") === undefined) pass("persona proposal alone never reads as taken"); else fail(`persona-only fired shortcut_taken: ${JSON.stringify(byKind(u, "ps_fork_shortcut_taken")?.value)}`);
+  if (byKind(u, "ps_fork_user_protected") === undefined) pass("persona proposal alone fires no decision"); else fail("persona-only fired user_protected");
 }
 
 console.log("\n" + (failures === 0 ? "ALL CHECKS PASSED" : `FAILED: ${failures} check(s)`));
