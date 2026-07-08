@@ -171,9 +171,9 @@ fixtures/
   fde-db-triage/        # generate.ts, ground_truth.json, queries.sql,
   fde-db-triage-pro/    # scenario.json, schema.sql, seed.sql
   fde-api-integration/  # family 2 (DORMANT) — canonical mid-band scenario.json,
-                        #   generate.ts, schema/seed/ground_truth (the -iso and -pro
-                        #   dirs are generated locally, not committed; migration 0023
-                        #   + the encode-fde-api-integration* scripts carry their rows)
+                        #   generate.ts, schema/seed/ground_truth; the -iso and -pro
+                        #   sibling dirs are committed alongside (migration 0023 seeds
+                        #   all three dataset_refs)
 
 docs/
   ARCHITECTURE.md
