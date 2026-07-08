@@ -52,6 +52,8 @@ apps/
         integrity.ts               # passive proctoring signals (integrity.* events)
         messages.ts                # message history
         outcomes.ts                # partner outcome webhook + feedback invites
+        proctoring.ts              # proctoring v2 surface (DORMANT — org flag): consent,
+                                   #   identity-verify, org-scoped identity-delete
         pty.ts                     # terminal/PTY bridge
         query.ts                   # SQL query runner (scenarios)
         report.ts                  # PUBLIC shareable candidate report (token-gated)
@@ -74,6 +76,8 @@ apps/
         messaging.ts
         orgs.ts                    # org resolution + API key / webhook secret minting
         persona-agent.ts           # AI interviewer persona
+        proctoring-v2.ts           # DORMANT: consent recording, gateway-vision identity
+                                   #   match (raw images in-memory only), biometric deletion
         query-runner.ts
         registry.ts
         report-share.ts            # mint/list/revoke shareable report tokens
@@ -86,10 +90,15 @@ apps/
         shared-report.ts           # public report payload (strict Zod allowlist)
         sqlrun.py.ts
         supabase.ts
-        suspicion-score.ts         # deterministic 0-100 integrity score (never scored)
+        suspicion-score.ts         # deterministic 0-100 integrity score (never scored;
+                                   #   v2 adds dormant webcam-presence factors)
         telemetry.ts               # telemetry writes
       session.test.ts
-    scripts/                       # verify-*.ts harnesses (~49, incl. verify-tenant-isolation.ts)
+    scripts/                       # verify-*.ts harnesses (~59, incl. verify-tenant-isolation.ts,
+                                   #   verify-family2-*.ts + verify-family1-drift-inert.ts +
+                                   #   verify-cross-family-scale.ts (dormant family 2) and
+                                   #   verify-proctoring-v2-flag / identity-verify /
+                                   #   biometric-retention (dormant proctoring v2))
                                    # + encode/seed helpers + mint-org-key.ts
     package.json  tsconfig.json  vitest.config.ts
 
@@ -110,7 +119,8 @@ apps/
                       # SessionSummary, SessionsTable, ShareReportModal,
                       # StatusBadge, SuspicionPanel, TerminalReplay, Timeline,
                       # TranscriptPanel, format.ts
-        start/        # ScenariosCatalog, StartScreen
+        start/        # ScenariosCatalog, StartScreen, IdentityCapture (dormant
+                      # proctoring-v2 consent + ID/selfie capture)
         ui/           # Bubble, Button, Card, IconButton, Pill,
                       # SectionLabel, Stat, TabStrip, Wordmark
         workspace/    # BriefPanel, ChatHUD, ConstraintHUD, DataExplorer,
@@ -119,6 +129,8 @@ apps/
                       # Workspace, WorkspaceLoader, WorkspaceTour
       lib/api.ts
       lib/integrity.ts             # useIntegrityMonitor hook (passive proctoring)
+      lib/proctoring.ts            # dormant proctoring-v2 client plumbing (consent, config)
+      lib/webcam-presence.ts       # dormant in-browser presence heuristic (frames never leave)
       lib/ai-fluency.ts
       stores/sessionStore.ts
       styles/tokens.ts
@@ -147,6 +159,8 @@ supabase/
     0020_difficulty_calibration.sql  # sessions.difficulty_band + competency_difficulty_stats
     0021_report_shares.sql         # shareable candidate report tokens
     0022_session_link_band.sql     # session_links.difficulty_band
+    0023_family2_api_integration.sql  # AUTHORED-UNAPPLIED: family 2 seed (catalog_visible=false)
+    0024_proctoring_v2.sql            # AUTHORED-UNAPPLIED: identity_checks (derived data only)
 
 infra/
   e2b/
@@ -156,9 +170,15 @@ infra/
 fixtures/
   fde-db-triage/        # generate.ts, ground_truth.json, queries.sql,
   fde-db-triage-pro/    # scenario.json, schema.sql, seed.sql
+  fde-api-integration/  # family 2 (DORMANT) — canonical mid-band scenario.json,
+                        #   generate.ts, schema/seed/ground_truth (the -iso and -pro
+                        #   dirs are generated locally, not committed; migration 0023
+                        #   + the encode-fde-api-integration* scripts carry their rows)
 
 docs/
   ARCHITECTURE.md
+  ARCHITECTURE-REPORT.md
+  GOING-LIVE.md         # operator runbook: activating the dormant builds
   architecture.html
   scenarios/crucible_scenario_fde-db-triage.md
 ```

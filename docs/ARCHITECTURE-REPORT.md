@@ -88,8 +88,9 @@ crucible/
 ├─ fixtures/     Scenario definitions + datasets + ground truth
 │  ├─ fde-db-triage/     scenario.json, schema.sql, seed.sql, ground_truth.json
 │  ├─ fde-db-triage-iso/ isomorph (same construct, different numbers)
-│  └─ fde-db-triage-pro/ harder cross-band variant
-├─ supabase/migrations/  0001 → 0022 schema evolution
+│  ├─ fde-db-triage-pro/ harder cross-band variant
+│  └─ fde-api-integration{,-iso,-pro}/  family 2 (dormant — §13.5)
+├─ supabase/migrations/  0001 → 0024 schema evolution (0023/0024 authored, unapplied)
 └─ docs/         architecture + scenario guides + this report
 ```
 
@@ -147,8 +148,9 @@ and persists to the DB.
 | `messages.ts` | `WS /messages/:id`, `GET .../messages` | Persona (client/team) + verifier channels. |
 | `docs.ts` | `GET/POST .../docs` | Scenario reference docs + `doc.view` telemetry. |
 | `integrity.ts` | `POST /sessions/:id/integrity` | Passive proctoring signals from the browser (batched `integrity.*` events). Session-JWT, Zod-strict, per-session rate caps (60/min total, 40/min low-signal) with a server-authored `rate_capped` marker. |
+| `proctoring.ts` | `GET /api/session-links/:token/proctoring-config`, `POST /sessions/:id/consent`, `POST /sessions/:id/identity-verify`, `POST /api/review/sessions/:id/identity-delete` | **Dormant (P6, §13.6).** Config resolves the link's org and answers `{v2Enabled:false}` unless `orgs.settings.proctoring_v2_enabled === true` — every failure path (unknown token, org read error, pre-0024 schema) **fails closed to dormant**. Consent records accept/decline + the consent-text version the candidate saw (first decision wins; **decline → downgrade to v1 passive**). Identity-verify (session-JWT, 3/min) requires the org flag **and** a recorded *accepted* consent, compares ID photo + selfie via a gateway vision call, stores derived results only. Identity-delete (org-key) hard-deletes a session's `identity_checks` rows, org-scoped. |
 | `scenarios.ts` | `GET /api/scenarios[/:slug]` | Public catalog (excludes isomorphs + `-fork` dev clones) + invite-gated detail. |
-| `review.ts` | `GET/POST /api/review/*` | Recruiter tool: list/detail sessions, re-evaluate, reinterpret, confirm/override verification cap, session-links + outcome-invites admin, suspicion breakdown (`GET .../sessions/:id/suspicion`), cohort dashboard (`GET .../cohorts/:scenarioId`), report-share mint/list/revoke, equating readout (`GET .../equating/:familyId`). Org-authenticated + org-scoped (§13.2). |
+| `review.ts` | `GET/POST /api/review/*` | Recruiter tool: list/detail sessions, re-evaluate, reinterpret, confirm/override verification cap, session-links + outcome-invites admin, suspicion breakdown (`GET .../sessions/:id/suspicion` — now with a recruiter-only `identity` block from `identity_checks`, null for every v1 session), cohort dashboard (`GET .../cohorts/:scenarioId`), report-share mint/list/revoke, equating readout (`GET .../equating/:familyId`). Org-authenticated + org-scoped (§13.2). |
 | `report.ts` | `GET /api/report/:token` | **Public** shareable candidate report — a strict Zod allowlist (no cost/model/sandbox/transcript data; suspicion **score** only, factors are recruiter-only). |
 | `outcomes.ts` | `POST /api/outcomes`, invite resolve/submit | Partner outcome webhook + token-gated feedback links. |
 | `health.ts` | `GET /health` | Deployed commit SHA + latest migration + feature-flag states. |
@@ -316,6 +318,15 @@ the canonical model. Per-scenario **anchors** override the global 1–5 bands.
   clarifier-before-first-query, AI-turn counts, channel-engagement counts, etc.
 - *fde-db-triage* detectors: `dedup_correct`, `status_filter_missing`,
   `figures_match_truth` (deliverable figures vs ground truth ±2 %).
+- *fde-api-integration* detectors (**v3, dormant family 2 — §13.5**): domain
+  signals (gap quantified provider-vs-distinct-local, duplicate-cursor
+  fingerprint, auth red herring rejected with numbers, retry-idempotency fix
+  named) plus the family's **native** `ps_fork_*` units. They are
+  **slug-prefix-gated** — they run only when
+  `slug.startsWith("fde-api-integration")` — so the `DETECTOR_VERSION` 3 bump
+  is **inert on family 1**: `verify-family1-drift-inert.ts` re-runs the full
+  v3 pipeline over a frozen family-1 stream and byte-diffs the units against
+  the captured v2 baseline (modulo the version stamp).
 - *Product-sense fork* detectors: `ps_fork_user_protected` /
   `_shortcut_taken` / `_reasoning_present` (feed `design_under_constraints`).
 - *Verification* detectors: `defense_weak` per competency.
@@ -373,9 +384,20 @@ them to scores so the instrument's predictive validity can be measured.
 Every evaluation stamps four versions —
 `competency_model_version, detector_version, judge_prompt_version,
 scenario_version`. Two further version namespaces live *outside* evaluations
-and evolve independently: `suspicion_detector_version` (=1, stamped on
-suspicion-score computations, §13.1) and `difficulty_stats_version` (=1,
-stamped on calibration-stat rows, §13.4). When any changes, a held-out
+and evolve independently: `suspicion_detector_version` (stamped on
+suspicion-score computations, §13.1) and `difficulty_stats_version` (stamped
+on calibration-stat rows, §13.4). Current values:
+
+| Version namespace | Current | Notes |
+|---|---|---|
+| `competency_model_version` | 1 | Canonical 8-competency model (0007). |
+| `detector_version` | **3** | v3 added the family-2 detectors — slug-prefix-gated, **inert on family 1** (drift-boundary byte-diff above). |
+| `judge_prompt_version` | 5 | |
+| `scenario_version` | per scenario | |
+| `suspicion_detector_version` | **2** | v2 added the webcam-presence factors `face_absent` / `multiple_faces` (§13.6). Those events can only exist for consented proctoring-v2 sessions, so v2 is **inert for every v1 session** — but a v2 session's score is not comparable to a v1 score, hence the bump. |
+| `difficulty_stats_version` | 1 | |
+
+When any changes, a held-out
 **anchor set** is re-scored and
 `drift.ts` flags per-competency deltas. `verify-discrimination / gradient /
 anchor-tuning / isomorph-equivalence` prove the judge cleanly separates a strong
@@ -394,12 +416,13 @@ extraction reproducible and prevents seq-hallucination.
 |---|---|---|
 | **Identity/session** | `assessments`, `candidates`, `sessions` | Session is the hub: status, budget/spend, deadline, `scenario_state` (JSONB game state), and the lifecycle columns (`deliverable_locked_at`, `defense_outcome`, `scorable`, `exclusion_reason`, `verification_cap_status`). |
 | **Telemetry (append-only)** | `events`, `transcript`, `cost_ledger`, `file_snapshots` | `events` = every interaction (monotonic seq). `transcript` = AI turns + tokens/cost. `cost_ledger` = per-call spend audit. `file_snapshots` = code timeline (SHA-dedup). |
-| **Scenarios** | `scenarios`, `scenario_families`, `scenario_stats` | Immutable definitions (rubric binding, personas, curveballs, constraints, ground-truth ref); families group isomorphs; stats are running per-competency aggregates. |
+| **Scenarios** | `scenarios`, `scenario_families`, `scenario_stats` | Immutable definitions (rubric binding, personas, curveballs, constraints, ground-truth ref); families group isomorphs; stats are running per-competency aggregates. `scenarios.catalog_visible` (0023, default `true`) is the family-dormancy switch — `false` hides a scenario from the candidate catalog while the direct-by-slug calibration path stays open. |
 | **Scoring** | `competency_model_versions`, `competencies`, `evidence_units`, `evaluations`, `evaluation_items` | The versioned rubric, deterministic Stage-A units (seq-pinned), and the judge's verdict (`assessed` flag from 0015 distinguishes not-assessed from scored-low). |
 | **Partner loop** | `outcomes`, `outcome_invites`, `session_links` | Real-world outcomes + single-use expiring links (only token hashes stored). `session_links.difficulty_band` (0022) requests a band at mint time. |
 | **Tenancy** | `orgs` (+ `org_id NOT NULL` on `sessions`, `session_links`, `outcomes`, `outcome_invites`) | One row per partner org (role `admin` \| `partner`); API key + webhook secret stored as sha256 hashes. v1 data backfilled to the default asaya org. Scenarios remain global. |
 | **Reports** | `report_shares` | Expiring share tokens (hash-only) for the public candidate report. |
 | **Difficulty** | `competency_difficulty_stats` (+ `sessions.difficulty_band`) | Per scenario/band/competency calibration aggregates over **scorable sessions only**, stamped `difficulty_stats_version`. |
+| **Proctoring v2 (dormant)** | `identity_checks` (0024 — **authored, unapplied**) | One row per session: consent decision + the consent-text version the candidate saw, plus the *derived* identity-verification result (match confidence, verified boolean). **No column can hold image bytes** — raw frames are never persisted. Org-scoped, RLS deny-all, hard-deletable via the identity-delete endpoint (+ `ON DELETE CASCADE` with the session). |
 
 Migration highlights: `0001` core telemetry · `0003` FDE scenarios + evaluations
 · `0007/0008` competency model + rubric rebind · `0009` evidence units · `0010`
@@ -407,8 +430,12 @@ outcomes · `0011` scenario families · `0012` version stamps + scenario_stats �
 `0013` outcome invites · `0014` lifecycle columns · `0015` `evaluation_items.assessed`
 · `0016` session links · `0017` review counts · `0018/0019` orgs + deny-all RLS
 posture · `0020` `sessions.difficulty_band` + `competency_difficulty_stats` ·
-`0021` report shares · `0022` `session_links.difficulty_band`. Migrations
-0018–0022 are **applied to the live DB** (2026-07-07).
+`0021` report shares · `0022` `session_links.difficulty_band` · `0023`
+family-2 seed + `scenarios.catalog_visible` · `0024` `identity_checks`.
+Migrations 0018–0022 are **applied to the live DB** (2026-07-07). Migrations
+**0023 and 0024 are AUTHORED-UNAPPLIED-BY-DESIGN** — both dormant builds
+(§13.5–13.7) are skip-graceful without them, and applying each migration is
+step 1 of its activation runbook in `docs/GOING-LIVE.md`.
 
 *One important distinction:* `scenarios.constraints` is the **in-fiction**
 budget (compute-minutes, tokens, memory the candidate "spends") — pedagogical.
@@ -421,7 +448,9 @@ control. They are independent.
 
 Next.js app-router. Pages: `/` (landing), `/scenarios` (catalog),
 `/start/[slug]` (session start — consumes a single-use session-link token via
-`?link=` and shows the proctoring disclosure), `/session/[id]` (the
+`?link=` and shows the proctoring disclosure; when the link's org has
+proctoring v2 enabled it additionally renders the consent gate +
+`IdentityCapture` — dormant by default, §13.6), `/session/[id]` (the
 **workspace**), `/review` + `/review/[id]` (recruiter),
 `/review/cohorts/[scenarioId]` (cohort dashboard), `/report/[token]` (public
 shared candidate report with print-CSS PDF export), `/feedback/[token]`
@@ -543,7 +572,8 @@ scenario is a deliberate, checkpointed step.
 
 Four partner-facing capabilities landed after the v1 hardening pass (PR #24).
 Each keeps the v1 invariants: deterministic where it counts, versioned,
-verified against real infra.
+verified against real infra. §13.5–13.7 then document the two **dormant
+builds** that followed (PR #28) — built, verified, and deliberately off.
 
 ### 13.1 Passive proctoring + Suspicion Score (measurement-neutral)
 
@@ -553,8 +583,9 @@ blur/focus, window blur, paste bursts, idle gaps, devtools, copy, fullscreen
 exit (`packages/shared/src/schemas/telemetry.ts`) — debounced and batched to
 `POST /sessions/:id/integrity` (rate-capped server-side).
 `services/suspicion-score.ts` folds them into a deterministic **0–100
-Suspicion Score + factors** (`suspicion_detector_version=1`, pure like
-`scorability.ts`). The hard rule: **integrity signals never touch scoring** —
+Suspicion Score + factors** (`suspicion_detector_version=2` — v2 added the
+webcam-presence factors from the dormant proctoring-v2 build, §13.6; inert
+for every v1 session — pure like `scorability.ts`). The hard rule: **integrity signals never touch scoring** —
 the evidence extractor filters `integrity.*` before any detector runs, so the
 score is an informational flag beside the scorecard (the SuspicionPanel is
 labelled "integrity signal — informational, not scored"), never part of it.
@@ -623,34 +654,117 @@ The candidate link token is consumed end-to-end from `/start/[slug]?link=…`,
 so org inheritance, single-use enforcement, and routing all operate through
 the real UI.
 
-### 13.5 Dormant builds (second scenario family)
+### 13.5 Dormant build A — the second scenario family (`fde-api-integration`)
 
 The second scenario family — **`fde-api-integration`** (API-integration
-debugging: auth, pagination, retries, contract drift), with the teammate
-product-sense fork **native** (the teammate proposes hardcoding a workaround
-that ships faster but breaks edge-case users; measured on
-`design_under_constraints` only, graded 5/3/1, decision observable in the
-deliverable) — is **built dormant**: migration 0023 seeds it with
-`catalog_visible = false`, so it never lists in the candidate catalog and is
-never assignable to pilot candidates. Its detectors (`DETECTOR_VERSION` 3) are
-slug-prefix-gated and **inert on family 1** (`verify-family1-drift-inert.ts`
-asserts family-1 re-scores are unchanged). Calibration runs only against
-internal hand-authored playthroughs via the direct-slug path and admin-minted
-session links (`verify-family2-discrimination.ts`, `verify-family2-isomorph.ts`,
-`verify-cross-family-scale.ts`, `verify-family2-dormant.ts`).
+debugging: a third-party contact sync silently drops records after the
+provider moved to cursor pagination and a non-idempotent retry re-sends a
+stale cursor; the 401s are a red herring), three members (canonical mid-band,
+same-band isomorph, hard-band `-pro`), with the teammate product-sense fork
+**native from day one** (Sam pitches hardcoding the old paging behaviour — a
+workaround that ships faster but silently keeps dropping boundary-page
+records; measured on `design_under_constraints` only, graded 5/3/1, decision
+observable in the deliverable) — is **built dormant by construction**:
 
-**Activation is a manual, documented flip — never automatic.** Trigger:
-*cohort 1 closed* = all cohort-1 session links consumed or expired **and**
-every cohort-1 session's evaluation complete, plus family 2 green on the four
-calibration verifiers above. Then run:
+- **Migration 0023** (authored, **unapplied**) adds
+  `scenarios.catalog_visible` (default `true` — every existing scenario keeps
+  listing) and seeds all three family-2 members with
+  `catalog_visible = false`, so the family never lists in the candidate
+  catalog (`listScenarios()` filters on it) and is never assignable to pilot
+  candidates. Until 0023 is applied the family isn't even in the DB;
+  `services/scenarios.ts` tolerates the missing column pre-0023.
+- Its Stage-A detectors (**`DETECTOR_VERSION` 3**,
+  `evidence-extractor.ts`) are slug-prefix-gated and **inert on family 1**
+  (`verify-family1-drift-inert.ts` byte-diffs family-1 re-scores against the
+  frozen v2 baseline — see §7).
+- Calibration runs only against internal hand-authored playthroughs via the
+  direct-by-slug path and admin-minted session links. Content/units checks
+  are deterministic (`verify-family2-content.ts`, `verify-family2-units.ts`,
+  `verify-family2-dormant.ts`, `verify-cross-family-scale.ts`); the two
+  **infra-gated** calibration verifiers (`verify-family2-discrimination.ts`,
+  `verify-family2-isomorph.ts`) run scripted playthroughs end to end through
+  the real harness — they **boot E2B sandboxes and call the judge, spending
+  real budget** — and skip cleanly while the family is unseeded.
 
-```sql
-UPDATE scenarios SET catalog_visible = true
-WHERE family_id = 'fde-api-integration';
-```
+Retrofitting the native ps-fork back into `fde-db-triage` remains a separate,
+later versioning event — it is *not* part of family-2 activation.
 
-(optionally enabling band routing to the family afterwards). Retrofitting the
-fork into `fde-db-triage` remains a separate, later versioning event.
+### 13.6 Dormant build B — proctoring v2 (identity + webcam presence)
+
+Proctoring v2 upgrades the passive v1 tier (§13.1) with consent-gated
+identity verification and an in-browser webcam-presence heuristic. It is
+**dormant by flag**: `orgs.settings.proctoring_v2_enabled` (jsonb) defaults
+to *absent* = false, and only the literal boolean `true` enables it — per
+org, never globally.
+
+- **Consent gate** (`routes/proctoring.ts` + `services/proctoring-v2.ts`):
+  the start screen resolves the link's org via
+  `GET /api/session-links/:token/proctoring-config` (link → org → settings;
+  every failure path answers `{v2Enabled:false}` — fail-closed). With the
+  flag on, the candidate sees the versioned `CONSENT_TEXT`
+  (`CONSENT_TEXT_VERSION`, currently 1 — **a draft until counsel signs off**)
+  and `POST /sessions/:id/consent` records the decision plus the text version
+  they actually saw (first decision wins). **Decline → downgrade to v1
+  passive proctoring** (signed-off policy): no webcam, no ID capture, session
+  proceeds normally.
+- **Identity verification**: `POST /sessions/:id/identity-verify` accepts an
+  ID photo + selfie (two data-URL images) only when the org flag is on *and*
+  an accepted consent is on record. The match is a **gateway vision call**
+  (Hard Rule 3 — through `LITELLM_BASE_URL`, authenticated with the
+  session's own minted key so it's bounded by the session budget), returning
+  a same-person confidence; `verified = confidence ≥ 0.8`
+  (calibration-pending threshold; informational — a failed match never
+  blocks a session). **Raw images are ephemeral**: handled in memory only,
+  never written to Supabase/events/sandbox/disk/logs (the gateway call
+  deliberately surfaces HTTP status only, since provider error bodies can
+  echo request content).
+- **Webcam presence** (`apps/web/src/lib/webcam-presence.ts`): frames never
+  leave the browser; a luminance heuristic on a 64×48 downsample emits only
+  derived booleans (`integrity.face_absent`, `integrity.multiple_faces`) on
+  the same informational integrity channel — folded into the Suspicion Score
+  by `suspicion_detector_version=2`, still never into competency scores.
+- **Storage & deletion**: `identity_checks` (**migration 0024 — authored,
+  unapplied**; the code is skip-graceful when the table is absent) stores
+  derived results only, org-scoped under the deny-all RLS posture.
+  `POST /api/review/sessions/:id/identity-delete` is the **org-scoped
+  hard-delete** (partner orgs delete only their own rows; a foreign org
+  deletes nothing and learns nothing). The recruiter-only `identity` block
+  rides the suspicion route; the public shared report exposes zero identity
+  material.
+
+### 13.7 Dormant builds & activation
+
+Both features above are **fully built, verified, and OFF** — by two different
+dormancy mechanisms, each chosen to fail closed:
+
+1. **Dormant by data** (family 2): the content simply isn't reachable —
+   migration 0023 is unapplied, and even once applied the seed carries
+   `catalog_visible = false`. Nothing candidate-facing changes until the
+   documented `UPDATE scenarios SET catalog_visible = true` flip. The code
+   path (v3 detectors) ships enabled but is slug-gated to a family no
+   candidate can reach.
+2. **Dormant by flag** (proctoring v2): the code and routes are deployed, but
+   every entry point gates on `orgs.settings.proctoring_v2_enabled === true`
+   per org, defaults absent/false, and fails closed to v1 on any error —
+   including the pre-0024 schema (skip-graceful, never a crash).
+
+**Activation is a manual, documented, per-feature runbook — never
+automatic**: `docs/GOING-LIVE.md` is the operator's step-by-step (apply the
+migration via the Supabase pooler, run the gate verifiers, flip the
+switch, smoke-test). Family 2's trigger is *cohort 1 closed* (all cohort-1
+session links consumed or expired **and** every cohort-1 evaluation
+complete) plus green calibration verifiers; proctoring v2's prerequisite is
+**counsel sign-off** on the consent text + data handling (an operational
+gate, not a code path), and it is never enabled for trusted pilot orgs.
+
+**Recorded decision — no event scrubbing after biometric deletion.** The
+identity-delete endpoint hard-deletes `identity_checks` rows; the
+`identity.consent` / `identity.verified` events on the append-only stream are
+**retained by design**. They carry only the consent decision and the derived
+confidence/verified flags — no imagery, nothing biometric — and the
+append-only telemetry rule (monotonic `seq`, reproducible extraction) stands.
+Scrubbing events is *not* required for now; if a jurisdiction ever demands
+it, that becomes its own versioned change to the telemetry contract.
 
 ---
 
@@ -666,8 +780,21 @@ equivalence, the injection canaries, product-sense fork). The v-next work
 (§13) added nine more — integrity events, suspicion score, orgs schema,
 **tenant isolation (the multi-tenancy gate)**, cohort dashboard, candidate
 report, report shares, difficulty routing + stats, and the equating hook —
-bringing the suite to ~49 scripts. This is how a change is
-proven not to regress scoring, security, or the candidate experience.
+bringing the suite to ~49 scripts. The dormant builds (§13.5–13.7) added ten
+more: **family 2** — `verify-family2-content` (authored content + fork beat +
+dormant seed), `verify-family2-units` (detectors + fork dissociability,
+deterministic), `verify-family1-drift-inert` (the v3 drift boundary,
+byte-diff), `verify-cross-family-scale` (same 8 keys / same 1–5 scale),
+`verify-family2-dormant` (catalog hidden, calibration path open), and the two
+infra-gated calibration gates `verify-family2-discrimination` +
+`verify-family2-isomorph` (real sandbox + judge playthroughs of the dormant
+family); **proctoring v2** — `verify-proctoring-v2-flag` (org flag + consent
+gate + "no capture when off"), `verify-identity-verify` (derived-only
+storage: the raw images appear nowhere), and `verify-biometric-retention`
+(org-scoped hard deletion). That brings the suite to ~59; the DB-backed
+dormant-build verifiers **skip cleanly** until migrations 0023/0024 are
+applied. This is how a change is proven not to regress scoring, security, or
+the candidate experience.
 
 ---
 
@@ -681,7 +808,14 @@ proven not to regress scoring, security, or the candidate experience.
 - **DB** → a single shared Supabase (dev + prod), so scenario-content changes are
   staged on throwaway clones before touching the live scenario. Migrations
   0018–0022 (orgs, RLS posture, difficulty, report shares, link bands) are
-  applied to the live DB as of 2026-07-07.
+  applied to the live DB as of 2026-07-07. Migrations **0023/0024 are
+  authored but deliberately unapplied** (dormant builds, §13.5–13.7); the
+  direct DB host is IPv6-only, so migrations are applied by `psql` through
+  the Supabase **pooler** host — exact commands in `docs/GOING-LIVE.md`.
+- **Dormant-build activation** is a manual runbook, never a deploy
+  side-effect: `docs/GOING-LIVE.md` covers activating family 2 (after cohort
+  1 closes) and enabling proctoring v2 per org (after counsel signs off the
+  consent text + data handling — the operational gate).
 - **Org-auth rollout order:** mint each partner org's API key with
   `scripts/mint-org-key.ts` — it prints the raw key once, plus a single
   ready-to-share review link (`https://tryassaya.com/review?key=<key>`) that

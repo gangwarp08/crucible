@@ -89,6 +89,7 @@ apps/
 fixtures/
   fde-db-triage/        Tier 1 scenario — synthetic dataset + ground truth
   fde-db-triage-pro/    Tier 1.5 — multi-issue + prioritization + Sam pushes wrong priority
+  fde-api-integration/  Family 2 (dormant) — API-integration debugging + native ps-fork
 infra/
   e2b/          Sandbox template definition
 packages/
@@ -188,6 +189,14 @@ key on the review surface),
 cohort dashboards + public shareable reports, and difficulty-band
 routing with calibration stats + equating. Migrations 0018–0022 are
 applied to the live DB; see `docs/ARCHITECTURE-REPORT.md` §13.
+
+Built dormant (fully verified, deliberately OFF): a second scenario
+family (`fde-api-integration`, hidden behind `catalog_visible=false` —
+migration 0023 authored, unapplied) and proctoring v2 (consent-gated
+identity verification + webcam presence, per-org flag default off —
+migration 0024 authored, unapplied). Activation is a manual runbook:
+`docs/GOING-LIVE.md`; details in `docs/ARCHITECTURE-REPORT.md`
+§13.5–13.7.
 
 Not yet shipped: per-candidate one-time invite codes (currently a
 shared secret), audit log table, stricter Helmet CSP, multi-scenario
