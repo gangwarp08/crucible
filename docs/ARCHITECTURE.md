@@ -880,6 +880,22 @@ is the detailed source of truth. In brief:
   `ORG_AUTH_REQUIRED=true`. The verify suite grew by nine scripts (~49 total),
   including the tenant-isolation gate.
 
+**Dormant builds (July 2026 — fully built, deliberately OFF).** Two features
+ship in the codebase but do nothing until manually activated: the second
+scenario family **`fde-api-integration`** (dormant by data — migration 0023
+is authored but unapplied, and its seed carries `catalog_visible = false`, so
+the family never lists in the candidate catalog; its `DETECTOR_VERSION` 3
+detectors are slug-gated and inert on family 1) and **proctoring v2**
+(dormant by flag — consent-gated identity verification + webcam presence,
+gated per org on `orgs.settings.proctoring_v2_enabled`, default off and
+fail-closed to v1 passive on every error path; migration 0024
+(`identity_checks`) is likewise authored but unapplied, raw imagery is never
+persisted, and deletion is an org-scoped hard delete — `identity.*` events
+are retained by design). Activation is a manual, per-feature operator
+runbook — `docs/GOING-LIVE.md` — with family 2 gated on cohort 1 closing +
+green calibration verifiers, and proctoring v2 gated on counsel sign-off of
+the consent text; details in `docs/ARCHITECTURE-REPORT.md` §13.5–13.7.
+
 ---
 
 ## Glossary

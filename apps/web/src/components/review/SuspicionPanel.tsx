@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import {
   getSuspicionReport,
   type SuspicionReport,
+  type SuspicionIdentity,
   type IntegrityTimelineEvent,
   type ReviewEvent,
 } from "@/lib/api";
@@ -38,6 +39,53 @@ type Fetch =
   | { kind: "loading" }
   | { kind: "loaded"; report: SuspicionReport | null };
 
+// ── P6 identity status (recruiter-only, informational) ──────────────────────
+// Preferred source: the suspicion route's identity block (v2-aware server).
+// Fallback: derive from the session's own identity.* event rows in the detail
+// bundle — works the moment consent/verify events exist, even before the
+// suspicion route learns to summarize them. Both absent (every v1 session,
+// the entire dormant default) → null → no identity row renders at all.
+function deriveIdentity(
+  report: SuspicionReport | null,
+  events: ReviewEvent[],
+): SuspicionIdentity | null {
+  if (report?.identity) return report.identity;
+  let consent: SuspicionIdentity["consent"] = null;
+  let verified: boolean | null = null;
+  let matchConfidence: number | null = null;
+  for (const e of events) {
+    const p: Record<string, unknown> = e.payload ?? {};
+    if (e.type === "identity.consent") {
+      if (p["decision"] === "accepted" || p["decision"] === "declined") {
+        consent = p["decision"];
+      }
+    } else if (e.type === "identity.verified") {
+      if (typeof p["verified"] === "boolean") verified = p["verified"];
+      const conf = p["match_confidence"] ?? p["matchConfidence"];
+      if (typeof conf === "number") matchConfidence = conf;
+    }
+  }
+  if (consent === null && verified === null && matchConfidence === null) return null;
+  return { consent, verified, matchConfidence };
+}
+
+/** One-line recruiter-facing summary, e.g. "consented · verified (0.93)". */
+function identitySummary(id: SuspicionIdentity): { text: string; tone: string } {
+  if (id.consent === "declined") {
+    return { text: "v2 declined — passive checks only", tone: color.text.secondary };
+  }
+  const consented = id.consent === "accepted" ? "consented" : "consent not recorded";
+  if (id.verified === true) {
+    const conf = id.matchConfidence !== null ? ` (${id.matchConfidence.toFixed(2)} confidence)` : "";
+    return { text: `${consented} · identity verified${conf}`, tone: color.success.base };
+  }
+  if (id.verified === false) {
+    const conf = id.matchConfidence !== null ? ` (${id.matchConfidence.toFixed(2)} confidence)` : "";
+    return { text: `${consented} · identity NOT verified${conf}`, tone: color.warn.base };
+  }
+  return { text: `${consented} · identity not verified (not attempted)`, tone: color.text.secondary };
+}
+
 export default function SuspicionPanel({ sessionId, events, sessionStart }: Props) {
   const [fetch, setFetch] = useState<Fetch>({ kind: "loading" });
 
@@ -59,10 +107,14 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
   const integrityEvents: IntegrityTimelineEvent[] =
     report !== null
       ? report.events
-      : events.filter((e) => e.type.startsWith("integrity."));
+      // P6: identity.* rows (consent / verification) belong on this timeline
+      // too — same informational channel as integrity.*.
+      : events.filter((e) => e.type.startsWith("integrity.") || e.type.startsWith("identity."));
+
+  const identity = deriveIdentity(report, events);
 
   // Older server deploy (no route) and nothing recorded → stay invisible.
-  if (report === null && integrityEvents.length === 0) return null;
+  if (report === null && integrityEvents.length === 0 && identity === null) return null;
 
   const score = report !== null ? Math.max(0, Math.min(100, Math.round(report.score))) : null;
   const factors = report?.factors ?? [];
@@ -131,6 +183,18 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
         )}
       </div>
 
+      {/* P6 identity status (proctoring v2) — renders only when a consent /
+          verification signal exists; invisible for every v1 session. Same
+          rule as everything in this panel: informational, never scored. */}
+      {identity !== null && (
+        <div style={{ padding: "10px 16px", borderBottom: `1px solid ${color.border.subtle}`, display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontSize: 12, color: color.text.secondary }}>Identity</span>
+          <span style={{ fontSize: 12, fontFamily: font.mono, color: identitySummary(identity).tone }}>
+            {identitySummary(identity).text}
+          </span>
+        </div>
+      )}
+
       {/* Factor breakdown */}
       {factors.length > 0 && (
         <div style={{ borderBottom: `1px solid ${color.border.subtle}` }}>
@@ -185,7 +249,7 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
                   #{ev.seq}
                 </span>
                 <span style={{ fontSize: 12, color: color.text.primary }}>
-                  {ev.type.replace(/^integrity\./, "")}
+                  {ev.type.replace(/^(integrity|identity)\./, "")}
                 </span>
                 <span
                   style={{

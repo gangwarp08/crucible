@@ -24,6 +24,14 @@ const BEAT_FOR_CURVEBALL: Record<string, ScheduledBeat["beat"]> = {
   misleading_teammate_hint: "refund_hint",
   requirement_change:       "requirement_change",
   shortcut_suggestion:      "shortcut_pitch",  // 7.1 product-sense fork
+  // P3.1 family-2 native fork (fde-api-integration, DORMANT): reuses the
+  // shortcut_pitch beat mode so the beat is schedulable + curveball.fired
+  // carries curveball_id="hardcode_workaround" (what the family-2 ps_fork_*
+  // detectors gate on). Inert on family 1 — no family-1 scenario carries this
+  // curveball id. NOTE: proactiveBeatMessage's shortcut_pitch prompt is still
+  // family-1-flavoured; generalizing the persona agent per family is P3
+  // follow-up work before live calibration runs.
+  hardcode_workaround:      "shortcut_pitch",
 };
 
 interface CurveballJson {

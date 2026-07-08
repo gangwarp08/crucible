@@ -10,6 +10,7 @@ import { healthRoutes } from "./routes/health.js";
 import { ptyRoutes } from "./routes/pty.js";
 import { fileRoutes } from "./routes/files.js";
 import { integrityRoutes } from "./routes/integrity.js";
+import { proctoringRoutes } from "./routes/proctoring.js";
 import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
 import { reportRoutes } from "./routes/report.js";
@@ -73,6 +74,9 @@ export async function buildServer() {
   await server.register(ptyRoutes);
   await server.register(fileRoutes);
   await server.register(integrityRoutes);
+  // P6 (proctoring v2, dormant): pre-session config lookup only — answers
+  // { v2Enabled: false } for every org until the flag + counsel gate flip.
+  await server.register(proctoringRoutes);
   await server.register(chatRoutes, { prefix: "/api" });
   await server.register(queryRoutes, { prefix: "/api" });
   await server.register(messageRoutes);

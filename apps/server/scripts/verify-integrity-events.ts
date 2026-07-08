@@ -55,11 +55,33 @@ const check = (m: string, ok: boolean, detail?: string) =>
 
 const SID = "00000000-0000-4000-8000-00000000b101";
 
+/** Default-org lookup for the seed row (0018 backfill pattern): post-0018,
+ *  sessions.org_id is NOT NULL, so the seed must carry the asaya org id.
+ *  Skip-graceful pre-0018: when the orgs table is absent (42P01 / PGRST205)
+ *  seed without org_id, preserving the legacy behavior. */
+async function lookupSeedOrgId(): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("orgs")
+    .select("id")
+    .eq("slug", "asaya")
+    .maybeSingle();
+  if (error) {
+    const msg = `${error.code ?? ""} ${error.message ?? ""}`;
+    if (/42P01|PGRST205|does not exist|Could not find the table/i.test(msg)) {
+      return null; // pre-0018 database — seed without org_id
+    }
+    throw new Error(`orgs lookup failed: ${error.message}`);
+  }
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 async function seedSession(): Promise<string | null> {
+  const orgId = await lookupSeedOrgId();
   const { error } = await supabase.from("sessions").insert({
     id: SID, status: "active", sandbox_id: "verify-integrity", template: "crucible-dev",
     litellm_key_alias: "vi", model: "gemini-flash", budget_usd: 1.0, timeout_min: 60,
     deadline: "2030-01-01T00:00:00.000Z", scenario_state: {},
+    ...(orgId ? { org_id: orgId } : {}),
   });
   return error ? error.message : null;
 }
@@ -77,6 +99,12 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
       return { type, ts, payload: { ms: 180_000 } };
     case "integrity.copy":
       return { type, ts, payload: { source: "brief", chars: 300 } };
+    // P6.3 webcam types: typed payloads are OPTIONAL (the shipped browser
+    // heuristic emits signal-only); exercise the typed shape here.
+    case "integrity.face_absent":
+      return { type, ts, payload: { ms: 45_000 } };
+    case "integrity.multiple_faces":
+      return { type, ts, payload: { count: 2 } };
     default:
       return { type, ts } as IntegrityEvent;
   }
@@ -88,7 +116,7 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
 
   // [a] shared schema — taxonomy round-trip + malformed rejection
   console.log("\n[a] IntegrityEventSchema");
-  check("taxonomy has the 8 spec types", INTEGRITY_EVENT_TYPES.length === 8);
+  check("taxonomy has the 10 types (8 P1 + 2 P6.3 webcam)", INTEGRITY_EVENT_TYPES.length === 10);
   for (const t of INTEGRITY_EVENT_TYPES) {
     const r = IntegrityEventSchema.safeParse(sampleEvent(t, Date.now()));
     check(`accepts ${t}`, r.success, r.success ? "" : JSON.stringify(r.error.issues[0]));
@@ -101,7 +129,15 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
     ["paste_burst bad target rejected", { type: "integrity.paste_burst", payload: { chars: 10, target: "terminal" } }],
     ["idle_gap non-int ms rejected", { type: "integrity.idle_gap", payload: { ms: 1.5 } }],
     ["copy bad source rejected", { type: "integrity.copy", payload: { source: "google", chars: 10 } }],
+    ["face_absent non-int ms rejected", { type: "integrity.face_absent", payload: { ms: 1.5 } }],
+    ["face_absent stray key rejected", { type: "integrity.face_absent", payload: { ms: 1000, raw: "x" } }],
+    ["multiple_faces count=1 rejected", { type: "integrity.multiple_faces", payload: { count: 1 } }],
   ];
+  // Signal-only shape (what lib/webcam-presence.ts actually sends) must parse.
+  check("face_absent with NO payload accepted (signal-only browser shape)",
+    IntegrityEventSchema.safeParse({ type: "integrity.face_absent", ts: Date.now() }).success);
+  check("multiple_faces with NO payload accepted (signal-only browser shape)",
+    IntegrityEventSchema.safeParse({ type: "integrity.multiple_faces", ts: Date.now() }).success);
   for (const [name, input] of badCases) {
     check(name, !IntegrityEventSchema.safeParse(input).success);
   }
@@ -194,7 +230,7 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
   check("seq strictly monotonic from 0",
     seqs.every((s, i) => s === i), `first=${seqs[0]} last=${seqs[seqs.length - 1]}`);
   const persistedTypes = new Set(readBack.map((r) => r.type as string));
-  check("all 8 taxonomy types persisted round-trip",
+  check("all taxonomy types persisted round-trip",
     INTEGRITY_EVENT_TYPES.every((t) => persistedTypes.has(t)),
     [...persistedTypes].join(","));
   check("every row actor='candidate'", readBack.every((r) => r.actor === "candidate"));

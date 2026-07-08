@@ -13,8 +13,14 @@
 // detector input).
 
 /** Bump when weights/thresholds/factor logic change so stored or displayed
- *  scores can be told apart across versions. */
-export const SUSPICION_DETECTOR_VERSION = "1";
+ *  scores can be told apart across versions.
+ *  "1" → "2": P6.3 added the webcam-presence factors face_absent /
+ *  multiple_faces. Inert for every v1 session (those events cannot exist
+ *  without recorded v2 consent), but a v2 session's score is not comparable
+ *  to a v1 score, hence the bump. NOTE: this is the SUSPICION detector
+ *  version — a separate namespace from the evidence DETECTOR_VERSION; P6
+ *  touches no competency-scoring version. */
+export const SUSPICION_DETECTOR_VERSION = "2";
 
 export interface SuspicionFactor {
   kind: string;
@@ -56,6 +62,11 @@ export const SUSPICION_WEIGHTS = {
   fullscreen_exit: { weight: 4,  cap: 12 },
   focus_flurry:    { weight: 10, cap: 20 }, // >=5 blur/focus pairs inside 60s (tab-cycling)
   rate_capped:     { weight: 10, cap: 20 }, // server-authored ingest-cap marker — flooding raises suspicion, not hides it
+  // P6.3 webcam-presence factors (consented v2 sessions only — the events
+  // cannot exist otherwise). Same posture as everything here: informational,
+  // recruiter-only, never touches the competency score.
+  face_absent:     { weight: 6,  cap: 24 }, // nobody visible for a sustained stretch
+  multiple_faces:  { weight: 12, cap: 36 }, // >=2 faces — someone else in frame
 } as const;
 
 export const PASTE_CHARS_THRESHOLD = 500;
@@ -103,6 +114,8 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
   let copyCount = 0;
   let fullscreenCount = 0;
   let rateCappedCount = 0;
+  let faceAbsentCount = 0;
+  let multipleFacesCount = 0;
 
   // blur→focus pairing for the flurry factor: a tab_blur "opens" a pair, the
   // next tab_focus closes it. Pair time = the blur's timestamp.
@@ -145,6 +158,15 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
       case "integrity.rate_capped":
         rateCappedCount++; // server-authored (one per capped minute window)
         break;
+      // P6.3 — signal-only occurrences (the browser heuristic debounces to at
+      // most one emission per sustained episode; payloads, when present, are
+      // informational and don't gate the count).
+      case "integrity.face_absent":
+        faceAbsentCount++;
+        break;
+      case "integrity.multiple_faces":
+        multipleFacesCount++;
+        break;
       default:
         break; // unknown integrity.* subtype — contributes nothing
     }
@@ -159,6 +181,8 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
     factor("fullscreen_exit", fullscreenCount),
     factor("focus_flurry", countFlurries(pairTimesMs)),
     factor("rate_capped", rateCappedCount),
+    factor("face_absent", faceAbsentCount),
+    factor("multiple_faces", multipleFacesCount),
   ];
   const factors = all.filter((f) => f.count > 0);
   const score = Math.min(100, factors.reduce((s, f) => s + f.contribution, 0));

@@ -142,6 +142,48 @@ console.log("\n[c] factor arithmetic");
     f3?.count === 3 && f3.contribution === SUSPICION_WEIGHTS.rate_capped.cap,
     JSON.stringify(f3));
 }
+// P6.3 webcam-presence factors (detector v2): face_absent / multiple_faces
+// count signal-only occurrences (payload optional) and respect their caps.
+{
+  seq = 0;
+  const one = computeSuspicionScore([
+    ev("integrity.face_absent", 0),
+    ev("integrity.multiple_faces", 10_000, { count: 2 }),
+  ]);
+  const fa = one.factors.find((f) => f.kind === "face_absent");
+  const mf = one.factors.find((f) => f.kind === "multiple_faces");
+  check("face_absent: 1 signal → contribution 6",
+    fa?.count === 1 && fa.contribution === SUSPICION_WEIGHTS.face_absent.weight,
+    JSON.stringify(fa));
+  check("multiple_faces: 1 signal → contribution 12",
+    mf?.count === 1 && mf.contribution === SUSPICION_WEIGHTS.multiple_faces.weight,
+    JSON.stringify(mf));
+
+  seq = 0;
+  const many = computeSuspicionScore([
+    ...Array.from({ length: 6 }, (_, i) => ev("integrity.face_absent", i * 60_000, { ms: 45_000 })),
+    ...Array.from({ length: 5 }, (_, i) => ev("integrity.multiple_faces", i * 60_000 + 5_000)),
+  ]);
+  const faMany = many.factors.find((f) => f.kind === "face_absent");
+  const mfMany = many.factors.find((f) => f.kind === "multiple_faces");
+  check("face_absent: 6 signals → capped at 24",
+    faMany?.count === 6 && faMany.contribution === SUSPICION_WEIGHTS.face_absent.cap,
+    JSON.stringify(faMany));
+  check("multiple_faces: 5 signals → capped at 36",
+    mfMany?.count === 5 && mfMany.contribution === SUSPICION_WEIGHTS.multiple_faces.cap,
+    JSON.stringify(mfMany));
+}
+// identity.* (P6 consent/verification events) must NOT contribute to the
+// suspicion score — it aggregates integrity.* only.
+{
+  seq = 0;
+  const r = computeSuspicionScore([
+    ev("identity.consent", 0, { decision: "accepted", consent_text_version: "1" }),
+    ev("identity.verified", 1_000, { verified: false, match_confidence: 0.4 }),
+  ]);
+  check("identity.* events → score 0, no factors", r.score === 0 && r.factors.length === 0,
+    JSON.stringify(r));
+}
 
 // ── [d] thresholds — sub-threshold events contribute nothing ──
 console.log("\n[d] thresholds");
@@ -177,8 +219,8 @@ console.log("\n[e] focus-flurry boundary");
     JSON.stringify(flurry));
 }
 
-// ── [f] ISOLATION — integrity.* never reaches evidence detectors ──
-console.log("\n[f] isolation: integrity.* → zero evidence units");
+// ── [f] ISOLATION — integrity.* AND identity.* never reach evidence detectors ──
+console.log("\n[f] isolation: integrity.* / identity.* → zero evidence units");
 {
   const base: EventRow[] = [
     { seq: 1, type: "db.query", actor: "candidate",
@@ -189,29 +231,39 @@ console.log("\n[f] isolation: integrity.* → zero evidence units");
     { seq: 4, type: "deliverable.submit", actor: "candidate",
       payload: { data: { corrected_monthly_revenue: "$1.0M" } } },
   ];
-  const integritySeqs = [100, 101, 102, 103];
-  const withIntegrity: EventRow[] = [
+  // integrity.* (P1) + the P6.3 webcam types + identity.* (P6.1/P6.2) — the
+  // whole proctoring channel must be invisible to the detectors.
+  const proctoringSeqs = [100, 101, 102, 103, 104, 105, 106, 107];
+  const withProctoring: EventRow[] = [
     ...base,
     { seq: 100, type: "integrity.tab_blur", actor: "candidate", payload: {} },
     { seq: 101, type: "integrity.paste_burst", actor: "candidate", payload: { chars: 5_000, target: "editor" } },
     { seq: 102, type: "integrity.devtools", actor: "candidate", payload: {} },
     { seq: 103, type: "integrity.copy", actor: "candidate", payload: { source: "brief", chars: 900 } },
+    { seq: 104, type: "integrity.face_absent", actor: "candidate", payload: {} },
+    { seq: 105, type: "integrity.multiple_faces", actor: "candidate", payload: { count: 2 } },
+    { seq: 106, type: "identity.consent", actor: "candidate",
+      payload: { decision: "accepted", consent_text_version: "1" } },
+    { seq: 107, type: "identity.verified", actor: "system",
+      payload: { verified: true, match_confidence: 0.93 } },
   ];
 
   for (const slug of ["fde-db-triage", "some-other-scenario"]) {
     const unitsClean = runDetectors(slug, base, {});
-    const unitsMixed = runDetectors(slug, withIntegrity, {});
+    const unitsMixed = runDetectors(slug, withProctoring, {});
 
-    const referencesIntegrity = unitsMixed.some((u) =>
-      u.event_seqs.some((s) => integritySeqs.includes(s)));
-    check(`[${slug}] zero evidence units reference integrity seqs`, !referencesIntegrity);
+    const referencesProctoring = unitsMixed.some((u) =>
+      u.event_seqs.some((s) => proctoringSeqs.includes(s)));
+    check(`[${slug}] zero evidence units reference integrity/identity seqs`, !referencesProctoring);
 
-    const mentionsIntegrity = unitsMixed.some((u) =>
-      u.kind.includes("integrity") || JSON.stringify(u.value).includes("integrity."));
-    check(`[${slug}] no unit kind/value mentions integrity`, !mentionsIntegrity);
+    const mentionsProctoring = unitsMixed.some((u) =>
+      u.kind.includes("integrity") || u.kind.includes("identity") ||
+      JSON.stringify(u.value).includes("integrity.") ||
+      JSON.stringify(u.value).includes("identity."));
+    check(`[${slug}] no unit kind/value mentions integrity/identity`, !mentionsProctoring);
 
     check(
-      `[${slug}] units identical with/without integrity events (measurement-neutral)`,
+      `[${slug}] units identical with/without proctoring events (measurement-neutral)`,
       JSON.stringify(unitsClean) === JSON.stringify(unitsMixed),
     );
   }

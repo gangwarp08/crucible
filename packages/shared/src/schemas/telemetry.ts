@@ -38,6 +38,10 @@ export const INTEGRITY_EVENT_TYPES = [
   "integrity.devtools",
   "integrity.copy",
   "integrity.fullscreen_exit",
+  // P6.3 (proctoring v2) — webcam-presence signals. Emitted ONLY by consented
+  // v2 sessions (lib/webcam-presence.ts); derived booleans, never pixels.
+  "integrity.face_absent",
+  "integrity.multiple_faces",
 ] as const;
 
 export type IntegrityEventType = (typeof INTEGRITY_EVENT_TYPES)[number];
@@ -75,6 +79,23 @@ export const IntegrityEventSchema = z.discriminatedUnion("type", [
     }),
   }),
   z.object({ type: z.literal("integrity.fullscreen_exit"), ts: ClientTs, payload: emptyPayload }),
+  // P6.3 webcam-presence signals. Payloads are OPTIONAL: the shipped browser
+  // heuristic emits signal-only events (no payload — it can't reliably measure
+  // duration/count), but a richer client MAY attach the typed payload below.
+  // Both shapes must validate — before P6 these types were Zod-REJECTED at
+  // ingest (adversarial review HIGH #2).
+  z.object({
+    type: z.literal("integrity.face_absent"),
+    ts: ClientTs,
+    /** How long no one was visible, when the client can measure it. */
+    payload: z.object({ ms: z.number().int().positive() }).strict().optional(),
+  }),
+  z.object({
+    type: z.literal("integrity.multiple_faces"),
+    ts: ClientTs,
+    /** Faces detected (>= 2 by definition of the signal). */
+    payload: z.object({ count: z.number().int().min(2).max(100) }).strict().optional(),
+  }),
 ]);
 
 export type IntegrityEvent = z.infer<typeof IntegrityEventSchema>;

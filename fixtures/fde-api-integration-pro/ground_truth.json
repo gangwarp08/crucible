@@ -1,0 +1,51 @@
+{
+  "seed_label": "fde-api-integration-pro-v1",
+  "company": "Atlas Freight",
+  "provider": "ContactHub",
+  "sync_run_at": "2026-06-12 02:00:00",
+  "page_size": 40,
+  "provider_record_count": 7422,
+  "synced_record_count": 6982,
+  "missing_record_count": 440,
+  "edge_case_record_count": 360,
+  "root_cause": "cursor_pagination_contract_drift",
+  "cursor_skipped_record_count": 360,
+  "auth_dropped_record_count": 80,
+  "skipped_pages": [
+    13,
+    31,
+    38,
+    58,
+    60,
+    117,
+    134,
+    143,
+    158
+  ],
+  "auth_dropped_pages": [
+    87,
+    182
+  ],
+  "duplicate_cursor_pages": [
+    12,
+    30,
+    37,
+    57,
+    59,
+    116,
+    133,
+    142,
+    157
+  ],
+  "auth_401_count": 8,
+  "auth_401_all_retried_ok": false,
+  "totals": {
+    "provider_contacts": 7422,
+    "local_contacts": 6982,
+    "api_requests": 212
+  },
+  "ps_fork": {
+    "curveball_id": "hardcode_workaround"
+  },
+  "root_cause_narrative": "ContactHub moved /v2/contacts from offset to cursor pagination (contract drift). Our retry wrapper is non-idempotent: on a retry it rebuilds the page token from its own counter and re-sends the PREVIOUS page's cursor, so the retried page is fetched twice (duplicate-cursor fingerprint: GROUP BY cursor HAVING COUNT(*) > 1 on the 200s) and its successor page is silently skipped — the 440 missing contacts cluster exactly at those page boundaries. The 401s are a red herring for the BULK of the gap: most were retried successfully, but 80 records on 2 pages were also lost to a token-rotation race (refresh rejected, retry 401'd) — a real but SECONDARY issue that must be quantified separately from the dominant cursor bug."
+}

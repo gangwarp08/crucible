@@ -65,6 +65,14 @@ export interface ScenarioCatalogRow {
   created_at: string;
 }
 
+// P3 dormancy (migration 0023): scenarios.catalog_visible gates the candidate
+// catalog. Pre-0023 databases don't have the column yet — the first filtered
+// query fails with a missing-column error, we LATCH that for the process
+// lifetime and retry (now and on every later call) without the filter, so
+// pre-0023 deployments behave exactly as before. Applying 0023 comes with a
+// restart/redeploy, which clears the latch.
+let catalogVisibleColumnMissing = false;
+
 export async function listScenarios(): Promise<ScenarioCatalogRow[]> {
   if (!supabase) return [];
   // Exclude ISOMORPHS (isomorph_of IS NOT NULL): they are alternate forms of an
@@ -76,6 +84,28 @@ export async function listScenarios(): Promise<ScenarioCatalogRow[]> {
   // used to build + calibrate a fork off the live scenario). They stay
   // startable by direct /start/<slug> link for piloting, just not browsable in
   // the candidate catalog.
+  // Also hide DORMANT scenarios (catalog_visible = false — P3 family-2 seed):
+  // never listable or assignable until the deliberate activation flip. The
+  // internal calibration path (direct load by slug) is unaffected.
+  if (!catalogVisibleColumnMissing) {
+    const { data, error } = await supabase
+      .from("scenarios")
+      .select("slug, title, role, difficulty, created_at")
+      .eq("catalog_visible", true)
+      .is("isomorph_of", null)
+      .not("slug", "like", "%-fork")
+      .order("created_at", { ascending: true });
+    if (!error) return (data as unknown as ScenarioCatalogRow[]) ?? [];
+    if (!/catalog_visible/i.test(error.message)) {
+      console.error("[scenarios] list failed", error.message);
+      return [];
+    }
+    catalogVisibleColumnMissing = true;
+    console.warn(
+      "[scenarios] catalog_visible column missing (pre-0023 database) — " +
+        "listing without the dormancy filter",
+    );
+  }
   const { data, error } = await supabase
     .from("scenarios")
     .select("slug, title, role, difficulty, created_at")

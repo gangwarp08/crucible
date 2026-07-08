@@ -32,8 +32,12 @@ export const INTEGRITY_EVENTS_PER_MIN = 60;
 
 /** Per-type reservation within the window: low-signal chatter (blur/focus,
  *  idle, fullscreen) is capped at 40/min so at least 20/min of headroom always
- *  remains for the high-signal types (paste_burst, devtools, copy) — a client
- *  can't drown the interesting signals in noise. */
+ *  remains for the high-signal types (paste_burst, devtools, copy — and the
+ *  P6.3 webcam signals face_absent / multiple_faces, which are deliberately
+ *  NOT in the low-signal set: they're rare by construction (consecutive-sample
+ *  debounce client-side) and reviewers treat them as high-confidence flags, so
+ *  they must never be drowned by blur/focus noise) — a client can't drown the
+ *  interesting signals in noise. */
 export const INTEGRITY_LOW_SIGNAL_PER_MIN = 40;
 
 const LOW_SIGNAL_TYPES = new Set([
