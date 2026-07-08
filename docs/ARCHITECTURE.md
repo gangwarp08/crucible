@@ -896,6 +896,25 @@ runbook — `docs/GOING-LIVE.md` — with family 2 gated on cohort 1 closing +
 green calibration verifiers, and proctoring v2 gated on counsel sign-off of
 the consent text; details in `docs/ARCHITECTURE-REPORT.md` §13.5–13.7.
 
+**Validity instrumentation (July 2026).** A READ-ONLY, admin-only dashboard
+over the existing measurement data — no new measurement logic, no writes:
+`GET /api/admin/validity/*` (`services/validity.ts` + `routes/validity.ts`)
+serves six views — per-competency discrimination, not-assessed rates,
+band-stratified distributions, score↔outcome correlation (reusing
+`services/outcomes.ts`), exclusion breakdown, and a version/drift-boundary
+panel — rendered at `/review/validity` (ValidityDashboard, plus a web-only
+reliability placeholder; an admin-probe nav link on the review dashboard).
+Access requires an explicit `X-Org-Key` resolving to the admin org
+(`ORG_ADMIN_KEY` works); partner keys get 403 and key-less requests 401
+**even with `ORG_AUTH_REQUIRED` off** — this surface fails closed because it
+aggregates across orgs. Metrics are version-aware (never pooled across a
+judge-prompt / competency-model boundary; legacy v1-judge sessions are
+segregated to the versions panel, with a `boundary_warning`), scorable-only
+(the exclusions view is the one exception), and small-N-honest (the server
+nulls numbers below N=10 per segment / paired-N=20 for correlations). Six
+infra-light `verify-*` scripts gate it; details in
+`docs/ARCHITECTURE-REPORT.md` §13.8.
+
 ---
 
 ## Glossary

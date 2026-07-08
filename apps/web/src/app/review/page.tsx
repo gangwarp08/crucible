@@ -1,6 +1,7 @@
 import SessionsTable from "@/components/review/SessionsTable";
 import OrgKeyInput from "@/components/review/OrgKeyInput";
 import SessionLinkMintPanel from "@/components/review/SessionLinkMintPanel";
+import ValidityNavLink from "@/components/review/ValidityNavLink";
 import { color } from "@/styles/tokens";
 
 export default function ReviewPage() {
@@ -38,10 +39,15 @@ export default function ReviewPage() {
               Recruiter review · sessions in your organization
             </p>
           </div>
-          {/* P2: per-org API key (X-Org-Key). Optional while the server's
-              ORG_AUTH_REQUIRED flag is off — key-less requests see the
-              default org. */}
-          <OrgKeyInput />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Admin-only validity link — renders only when the probe against
+                /api/admin/validity/* succeeds; hidden for partner keys. */}
+            <ValidityNavLink />
+            {/* P2: per-org API key (X-Org-Key). Optional while the server's
+                ORG_AUTH_REQUIRED flag is off — key-less requests see the
+                default org. */}
+            <OrgKeyInput />
+          </div>
         </header>
         {/* RD6 + P5.1: single-use candidate start links with optional
             difficulty-band routing (consumed once at session creation). */}

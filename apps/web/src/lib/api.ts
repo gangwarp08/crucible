@@ -1114,3 +1114,185 @@ export async function getSharedReport(token: string): Promise<SharedReport> {
   if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
   return res.json() as Promise<SharedReport>;
 }
+
+// ─── Validity instrumentation (admin-only, read-only) ────────────────────────
+// GET /api/admin/validity/* — asaya R&D cockpit. Admin org key only: partner
+// keys 403, missing key 401 (both surface as AdminOnlyError so the page can
+// render a friendly "admin only" screen instead of an error dump). The server
+// computes ALL arithmetic; these fetchers only type the contract. The server
+// may add fields but never renames, so extra keys are simply ignored here.
+
+export class AdminOnlyError extends Error {
+  constructor() {
+    super("Admin only — this view requires the asaya admin key");
+    this.name = "AdminOnlyError";
+  }
+}
+
+/** Common filters accepted by every validity endpoint. */
+export interface ValidityFilters {
+  scenario_id?: string;
+  family_id?: string;
+  band?: string;
+  from?: string;
+  to?: string;
+}
+
+/** The four version stamps every metric is scoped to (never pooled across). */
+export interface ValidityVersionContext {
+  competency_model_version: string;
+  detector_version: string;
+  judge_prompt_version: string;
+}
+
+/** Common envelope on every validity response. */
+export interface ValidityEnvelope {
+  version_context: ValidityVersionContext;
+  /** Below this N the server flags insufficient_n — render the literal
+   *  "insufficient N (n=X, min=Y)" string, never a number. */
+  min_n: number;
+  generated_from: { scorable_sessions_n: number };
+}
+
+async function validityFetch<T extends ValidityEnvelope>(
+  view: string,
+  filters?: ValidityFilters,
+): Promise<T> {
+  const qs = new URLSearchParams();
+  const f = filters ?? {};
+  for (const k of ["scenario_id", "family_id", "band", "from", "to"] as const) {
+    const v = f[k];
+    if (v !== undefined && v !== "") qs.set(k, v);
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const res = await fetch(`${SERVER_URL}/api/admin/validity/${view}${suffix}`, {
+    headers: orgKeyHeader(),
+  });
+  if (res.status === 401 || res.status === 403) throw new AdminOnlyError();
+  if (!res.ok) throw new Error(`API error ${res.status}: ${await res.text()}`);
+  return res.json() as Promise<T>;
+}
+
+// 4.1 — per-competency discrimination (distributional + item-total structure).
+export interface DiscriminationSegment {
+  competency_key: string;
+  n: number;
+  // Numeric stats are gated behind insufficient_n — typed nullable so a
+  // gating server that omits them can't break the page.
+  mean: number | null;
+  sd: number | null;
+  cv: number | null;
+  item_total_r: number | null;
+  insufficient_n: boolean;
+  flags: string[]; // "bunched" | "low_item_total"
+}
+export interface ValidityDiscrimination extends ValidityEnvelope {
+  segments: DiscriminationSegment[];
+}
+export async function getValidityDiscrimination(
+  filters?: ValidityFilters,
+): Promise<ValidityDiscrimination> {
+  return validityFetch<ValidityDiscrimination>("discrimination", filters);
+}
+
+// 4.2 — not-assessed rates per competency per scenario/band.
+export interface NotAssessedRow {
+  scenario_id: string;
+  scenario_slug: string;
+  band: string | null;
+  competency_key: string;
+  load_bearing: boolean;
+  bound_n: number;
+  not_assessed_n: number;
+  rate: number; // 0..1
+}
+export interface ValidityNotAssessed extends ValidityEnvelope {
+  rows: NotAssessedRow[];
+}
+export async function getValidityNotAssessed(
+  filters?: ValidityFilters,
+): Promise<ValidityNotAssessed> {
+  return validityFetch<ValidityNotAssessed>("not-assessed", filters);
+}
+
+// 4.3 — band-stratified score distributions.
+export interface DistributionQuantiles {
+  p10: number; p25: number; p50: number; p75: number; p90: number;
+}
+export interface DistributionBand {
+  band: string;
+  competency_key: string; // or "overall"
+  n: number;
+  insufficient_n: boolean;
+  quantiles: DistributionQuantiles | null;
+  histogram: Array<{ bucket: string; count: number }>;
+}
+export interface ValidityDistributions extends ValidityEnvelope {
+  bands: DistributionBand[];
+}
+export async function getValidityDistributions(
+  filters?: ValidityFilters,
+): Promise<ValidityDistributions> {
+  return validityFetch<ValidityDistributions>("distributions", filters);
+}
+
+// 4.4 — live score↔outcome correlation (paired-N gated, caveat mandatory).
+export interface CorrelationPair {
+  outcome_type: string;
+  competency_key: string; // or "overall"
+  paired_n: number;
+  r: number | null;
+  insufficient_n: boolean;
+  caveat: string;
+}
+export interface ValidityCorrelation extends ValidityEnvelope {
+  pairs: CorrelationPair[];
+}
+export async function getValidityCorrelation(
+  filters?: ValidityFilters,
+): Promise<ValidityCorrelation> {
+  return validityFetch<ValidityCorrelation>("correlation", filters);
+}
+
+// 4.5 — exclusion breakdown (the ONE view over non-scorable sessions).
+export interface ValidityExclusions extends ValidityEnvelope {
+  totals: { scorable: number; excluded: number };
+  by_reason: Array<{ reason: string; n: number }>;
+  over_time: Array<{ week: string; scorable: number; excluded: number }>;
+}
+export async function getValidityExclusions(
+  filters?: ValidityFilters,
+): Promise<ValidityExclusions> {
+  return validityFetch<ValidityExclusions>("exclusions", filters);
+}
+
+// 4.6 — version / drift boundary panel (legacy v1-judge segregated).
+export interface VersionSegment {
+  competency_model_version: string;
+  detector_version: string;
+  judge_prompt_version: string;
+  scenario_version: string;
+  n: number;
+  legacy: boolean;
+}
+export interface ValidityVersions extends ValidityEnvelope {
+  segments: VersionSegment[];
+  boundary_warning: string | null;
+}
+export async function getValidityVersions(
+  filters?: ValidityFilters,
+): Promise<ValidityVersions> {
+  return validityFetch<ValidityVersions>("versions", filters);
+}
+
+/** One-shot admin probe for the review dashboard's "Validity" nav link:
+ *  true only when the stored org key reaches the validity surface (admin).
+ *  NEVER throws — partner keys / missing key / older servers → false. */
+export async function probeValidityAccess(): Promise<boolean> {
+  try {
+    await getValidityVersions();
+    return true;
+  } catch {
+    return false;
+  }
+}
