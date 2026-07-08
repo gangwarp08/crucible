@@ -913,7 +913,12 @@ segregated to the versions panel, with a `boundary_warning`), scorable-only
 (the exclusions view is the one exception), and small-N-honest (the server
 nulls numbers below N=10 per segment / paired-N=20 for correlations). Six
 infra-light `verify-*` scripts gate it; details in
-`docs/ARCHITECTURE-REPORT.md` §13.8.
+`docs/ARCHITECTURE-REPORT.md` §13.8. The same admin gate now also fronts a
+READ-ONLY **costs dashboard** at `/review/costs` (`GET /api/admin/costs/*`,
+`services/costs.ts` + `routes/costs.ts`) aggregating LiteLLM gateway spend,
+internal per-session usage from `sessions.spend_usd`, and fixed-plan service
+cards — gated by `verify-costs-dashboard`; details in
+`docs/ARCHITECTURE-REPORT.md` §13.9.
 
 ---
 

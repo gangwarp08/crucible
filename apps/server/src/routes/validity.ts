@@ -39,8 +39,10 @@ const FiltersSchema = z
 
 /** requireOrg first (401 semantics unchanged), then hard-require the admin
  *  role. Partner orgs and the pre-0018 org-less fallback both land on 403 —
- *  cross-org aggregation is only ever reachable as the admin org. */
-async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+ *  cross-org aggregation is only ever reachable as the admin org.
+ *  Exported: routes/costs.ts reuses this exact guard (same fail-closed
+ *  semantics) rather than duplicating it. */
+export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   // Fail closed independently of ORG_AUTH_REQUIRED: requireOrg's back-compat
   // branch resolves a KEY-LESS request to the default asaya org (role admin)
   // when the flag is off — acceptable for the review surface's rollout, not

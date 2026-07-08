@@ -45,6 +45,9 @@ apps/
       env.ts                       # env validation
       routes/
         chat.ts                    # candidate <-> AI interviewer chat
+        costs.ts                   # ADMIN-ONLY READ-ONLY costs dashboard
+                                   #   (/api/admin/costs/* — same requireAdmin
+                                   #   gate as validity.ts)
         deliverable.ts             # submission/deliverable
         docs.ts                    # scenario docs
         files.ts                   # sandbox file read/write
@@ -69,6 +72,8 @@ apps/
         analysis-input.ts
         cohort.ts                  # per-scenario cohort aggregates (org-scoped)
         compute-tracker.ts         # cost/compute accounting
+        costs.ts                   # READ-ONLY costs aggregation (LiteLLM gateway spend,
+                                   #   sessions.spend_usd usage, FIXED_SERVICES cards)
         dataset-seed.ts
         db.ts                      # in-sandbox SQL DB helpers
         difficulty-routing.ts      # band -> scenario-family sibling (at creation only)
@@ -99,14 +104,15 @@ apps/
         validity.ts                # READ-ONLY validity aggregation (version-aware,
                                    #   scorable-only, min-N gates N>=10 / paired-N>=20)
       session.test.ts
-    scripts/                       # verify-*.ts harnesses (~65, incl. verify-tenant-isolation.ts,
+    scripts/                       # verify-*.ts harnesses (~66, incl. verify-tenant-isolation.ts,
                                    #   verify-family2-*.ts + verify-family1-drift-inert.ts +
                                    #   verify-cross-family-scale.ts (dormant family 2),
                                    #   verify-proctoring-v2-flag / identity-verify /
                                    #   biometric-retention (dormant proctoring v2), and the six
                                    #   validity-dashboard gates: verify-validity-access /
                                    #   not-assessed / exclusions / discrimination-view /
-                                   #   correlation-view / version-panel)
+                                   #   correlation-view / version-panel, and
+                                   #   verify-costs-dashboard.ts)
                                    # + encode/seed helpers + mint-org-key.ts
     package.json  tsconfig.json  vitest.config.ts
 
@@ -117,18 +123,20 @@ apps/
         report/[token]/page.tsx                    # public shared candidate report (print-CSS PDF)
         review/page.tsx  review/[id]/page.tsx     # recruiter review
         review/cohorts/[scenarioId]/page.tsx       # cohort dashboard
+        review/costs/page.tsx                      # admin-only READ-ONLY costs dashboard
         review/validity/page.tsx                   # admin-only READ-ONLY validity dashboard
         scenarios/page.tsx
         session/[id]/page.tsx                      # candidate workspace
         start/[slug]/page.tsx                      # session start (consumes ?link= token)
       components/
         landing/      # EmberCanvas, FlameCube, LandingPage
-        review/       # CohortDashboard, CostPanel, FilesDiffPanel, OrgKeyInput,
+        review/       # AdminNavLinks (admin-probe nav links, replaces
+                      # ValidityNavLink), CohortDashboard, CostPanel,
+                      # CostsDashboard, FilesDiffPanel, OrgKeyInput,
                       # Scorecard, SessionDetail, SessionLinkMintPanel,
                       # SessionSummary, SessionsTable, ShareReportModal,
                       # StatusBadge, SuspicionPanel, TerminalReplay, Timeline,
-                      # TranscriptPanel, ValidityDashboard, ValidityNavLink
-                      # (admin-probe nav link), format.ts
+                      # TranscriptPanel, ValidityDashboard, format.ts
         start/        # ScenariosCatalog, StartScreen, IdentityCapture (dormant
                       # proctoring-v2 consent + ID/selfie capture)
         ui/           # Bubble, Button, Card, IconButton, Pill,
