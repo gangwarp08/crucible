@@ -151,6 +151,7 @@ and persists to the DB.
 | `proctoring.ts` | `GET /api/session-links/:token/proctoring-config`, `POST /sessions/:id/consent`, `POST /sessions/:id/identity-verify`, `POST /api/review/sessions/:id/identity-delete` | **Dormant (P6, §13.6).** Config resolves the link's org and answers `{v2Enabled:false}` unless `orgs.settings.proctoring_v2_enabled === true` — every failure path (unknown token, org read error, pre-0024 schema) **fails closed to dormant**. Consent records accept/decline + the consent-text version the candidate saw (first decision wins; **decline → downgrade to v1 passive**). Identity-verify (session-JWT, 3/min) requires the org flag **and** a recorded *accepted* consent, compares ID photo + selfie via a gateway vision call, stores derived results only. Identity-delete (org-key) hard-deletes a session's `identity_checks` rows, org-scoped. |
 | `scenarios.ts` | `GET /api/scenarios[/:slug]` | Public catalog (excludes isomorphs + `-fork` dev clones) + invite-gated detail. |
 | `review.ts` | `GET/POST /api/review/*` | Recruiter tool: list/detail sessions, re-evaluate, reinterpret, confirm/override verification cap, session-links + outcome-invites admin, suspicion breakdown (`GET .../sessions/:id/suspicion` — now with a recruiter-only `identity` block from `identity_checks`, null for every v1 session), cohort dashboard (`GET .../cohorts/:scenarioId`), report-share mint/list/revoke, equating readout (`GET .../equating/:familyId`). Org-authenticated + org-scoped (§13.2). |
+| `validity.ts` | `GET /api/admin/validity/*` | **Admin-only, READ-ONLY** validity instrumentation (§13.8): six views — discrimination, not-assessed, distributions, correlation, exclusions, versions — over the shared aggregation service. Requires an explicit `X-Org-Key` resolving to the admin org (the `ORG_ADMIN_KEY` credential works); partner keys 403, key-less requests 401 **even with `ORG_AUTH_REQUIRED` off** — no back-compat fallback, because cross-org aggregation sits behind it. |
 | `report.ts` | `GET /api/report/:token` | **Public** shareable candidate report — a strict Zod allowlist (no cost/model/sandbox/transcript data; suspicion **score** only, factors are recruiter-only). |
 | `outcomes.ts` | `POST /api/outcomes`, invite resolve/submit | Partner outcome webhook + token-gated feedback links. |
 | `health.ts` | `GET /health` | Deployed commit SHA + latest migration + feature-flag states. |
@@ -573,7 +574,9 @@ scenario is a deliberate, checkpointed step.
 Four partner-facing capabilities landed after the v1 hardening pass (PR #24).
 Each keeps the v1 invariants: deterministic where it counts, versioned,
 verified against real infra. §13.5–13.7 then document the two **dormant
-builds** that followed (PR #28) — built, verified, and deliberately off.
+builds** that followed (PR #28) — built, verified, and deliberately off —
+and §13.8 the **validity instrumentation dashboard** (asaya-internal,
+admin-only, read-only).
 
 ### 13.1 Passive proctoring + Suspicion Score (measurement-neutral)
 
@@ -766,6 +769,46 @@ append-only telemetry rule (monotonic `seq`, reproducible extraction) stands.
 Scrubbing events is *not* required for now; if a jurisdiction ever demands
 it, that becomes its own versioned change to the telemetry contract.
 
+### 13.8 Validity instrumentation dashboard
+
+An asaya-R&D (not partner-facing) surface for watching whether the instrument
+itself works: `services/validity.ts` + `routes/validity.ts` expose
+`GET /api/admin/validity/*` — a **READ-ONLY aggregation over existing tables
+and services** that adds no measurement logic and no write paths (the cockpit
+that reads the instrument, safe to run mid-pilot). Six views: per-competency
+**discrimination** (spread + corrected item-total r, flagged when scores bunch
+within ~half a band or r < 0.2), **not-assessed** rates (scenario-design weak
+spots), band-stratified **distributions**, score↔outcome **correlation**
+(reusing `outcomes.ts` — never reimplemented), **exclusions** breakdown, and a
+**versions / drift-boundary** panel. Governing properties are enforced in the
+service's shared loader — not the routes, not the browser — so no view can
+forget a guard:
+
+- **Version-aware**: metrics never pool across a `judge_prompt_version` or
+  `competency_model_version` boundary. The *current* version set is derived
+  from the data (the stamps of the newest complete evaluation under the
+  current judge prompt); everything else — including legacy v1-judge
+  sessions — is the segregated legacy segment, excluded from every metric
+  view and surfaced only by the versions panel, with a `boundary_warning`
+  when a selection would cross a boundary.
+- **Scorable-only** (RD3): views aggregate `sessions.scorable IS TRUE` only;
+  the exclusions view is the single exception, since it reports on the
+  excluded set itself.
+- **Small-N-honest**: below `MIN_N = 10` (segments) / `MIN_PAIRED_N = 20`
+  (correlation pairs) the numeric fields are **nulled server-side** and
+  `insufficient_n` set, so no client can render an indefensible number.
+
+Access reuses org resolution but **fails closed independently of
+`ORG_AUTH_REQUIRED`**: an explicit `X-Org-Key` resolving to the admin org is
+required (see the routes table, §4.2). The web side is **`/review/validity`**
+(`components/review/ValidityDashboard.tsx`, under the review layout so the
+`?key=` bootstrap covers it too): seven render-only panels — the six views
+plus a web-only **reliability placeholder** (no endpoint, no compute) — with
+N/paired-N on every metric, `insufficient_n` rendered literally, version
+context on every panel, and no write controls. `ValidityNavLink` probes the
+surface once on mount and shows the review nav's "Validity" link only when
+the probe succeeds (admin org); 401/403/older servers keep it hidden.
+
 ---
 
 ## 14. Verification & regression system
@@ -791,10 +834,16 @@ infra-gated calibration gates `verify-family2-discrimination` +
 family); **proctoring v2** — `verify-proctoring-v2-flag` (org flag + consent
 gate + "no capture when off"), `verify-identity-verify` (derived-only
 storage: the raw images appear nowhere), and `verify-biometric-retention`
-(org-scoped hard deletion). That brings the suite to ~59; the DB-backed
+(org-scoped hard deletion). That brought the suite to ~59; the DB-backed
 dormant-build verifiers **skip cleanly** until migrations 0023/0024 are
-applied. This is how a change is proven not to regress scoring, security, or
-the candidate experience.
+applied. The validity dashboard (§13.8) added six more, all **infra-light**
+(Supabase service-role + in-process Fastify inject — no E2B, no LLM, each
+seeding isolated far-future fixtures on the existing scenario):
+`verify-validity-access` (admin gate + read-only surface — 401/403
+semantics), `verify-not-assessed`, `verify-exclusions`,
+`verify-discrimination-view`, `verify-correlation-view`, and
+`verify-version-panel`. That brings the suite to ~65. This is how a change is
+proven not to regress scoring, security, or the candidate experience.
 
 ---
 

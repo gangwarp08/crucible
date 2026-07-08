@@ -21,6 +21,7 @@ import { deliverableRoutes } from "./routes/deliverable.js";
 import { scenariosRoutes } from "./routes/scenarios.js";
 import { outcomesRoutes } from "./routes/outcomes.js";
 import { contactRoutes } from "./routes/contact.js";
+import { validityRoutes } from "./routes/validity.js";
 import { startBeatScheduler } from "./services/scheduler.js";
 import { startDeadlineReaper } from "./services/deadline-reaper.js";
 
@@ -88,6 +89,9 @@ export async function buildServer() {
   await server.register(reportRoutes, { prefix: "/api/report" });
   await server.register(outcomesRoutes, { prefix: "/api" });
   await server.register(contactRoutes, { prefix: "/api" });
+  // Admin-only, read-only validity instrumentation (registers full
+  // /api/admin/validity/* paths itself; fails closed to non-admin orgs).
+  await server.register(validityRoutes);
 
   // Start the proactive-beat scheduler. The sweep loop iterates the live
   // sessionRegistry — initially empty after a fresh boot, populated as

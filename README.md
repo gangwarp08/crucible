@@ -198,6 +198,15 @@ migration 0024 authored, unapplied). Activation is a manual runbook:
 `docs/GOING-LIVE.md`; details in `docs/ARCHITECTURE-REPORT.md`
 §13.5–13.7.
 
+Validity instrumentation: a READ-ONLY, admin-only dashboard at
+`/review/validity` (`GET /api/admin/validity/*`; admin `X-Org-Key`
+required — partner keys 403, key-less 401 even with
+`ORG_AUTH_REQUIRED` off) with six views — discrimination,
+not-assessed, distributions, correlation, exclusions, versions —
+version-aware (legacy v1-judge segregated, never pooled),
+scorable-only, and small-N-honest (numbers nulled server-side below
+N=10 / paired-N=20). See `docs/ARCHITECTURE-REPORT.md` §13.8.
+
 Not yet shipped: per-candidate one-time invite codes (currently a
 shared secret), audit log table, stricter Helmet CSP, multi-scenario
 catalog UI.

@@ -60,6 +60,9 @@ apps/
         review.ts                  # recruiter review data (org-scoped via X-Org-Key)
         scenarios.ts               # scenario catalog
         sessions.ts                # session lifecycle
+        validity.ts                # ADMIN-ONLY READ-ONLY validity instrumentation
+                                   #   (/api/admin/validity/* — six views; fails closed
+                                   #   even with ORG_AUTH_REQUIRED off)
       services/
         ai-fluency.ts              # presentation-only AI-Fluency placement
         analysis-agent.ts          # post-session analysis
@@ -93,12 +96,17 @@ apps/
         suspicion-score.ts         # deterministic 0-100 integrity score (never scored;
                                    #   v2 adds dormant webcam-presence factors)
         telemetry.ts               # telemetry writes
+        validity.ts                # READ-ONLY validity aggregation (version-aware,
+                                   #   scorable-only, min-N gates N>=10 / paired-N>=20)
       session.test.ts
-    scripts/                       # verify-*.ts harnesses (~59, incl. verify-tenant-isolation.ts,
+    scripts/                       # verify-*.ts harnesses (~65, incl. verify-tenant-isolation.ts,
                                    #   verify-family2-*.ts + verify-family1-drift-inert.ts +
-                                   #   verify-cross-family-scale.ts (dormant family 2) and
+                                   #   verify-cross-family-scale.ts (dormant family 2),
                                    #   verify-proctoring-v2-flag / identity-verify /
-                                   #   biometric-retention (dormant proctoring v2))
+                                   #   biometric-retention (dormant proctoring v2), and the six
+                                   #   validity-dashboard gates: verify-validity-access /
+                                   #   not-assessed / exclusions / discrimination-view /
+                                   #   correlation-view / version-panel)
                                    # + encode/seed helpers + mint-org-key.ts
     package.json  tsconfig.json  vitest.config.ts
 
@@ -109,6 +117,7 @@ apps/
         report/[token]/page.tsx                    # public shared candidate report (print-CSS PDF)
         review/page.tsx  review/[id]/page.tsx     # recruiter review
         review/cohorts/[scenarioId]/page.tsx       # cohort dashboard
+        review/validity/page.tsx                   # admin-only READ-ONLY validity dashboard
         scenarios/page.tsx
         session/[id]/page.tsx                      # candidate workspace
         start/[slug]/page.tsx                      # session start (consumes ?link= token)
@@ -118,7 +127,8 @@ apps/
                       # Scorecard, SessionDetail, SessionLinkMintPanel,
                       # SessionSummary, SessionsTable, ShareReportModal,
                       # StatusBadge, SuspicionPanel, TerminalReplay, Timeline,
-                      # TranscriptPanel, format.ts
+                      # TranscriptPanel, ValidityDashboard, ValidityNavLink
+                      # (admin-probe nav link), format.ts
         start/        # ScenariosCatalog, StartScreen, IdentityCapture (dormant
                       # proctoring-v2 consent + ID/selfie capture)
         ui/           # Bubble, Button, Card, IconButton, Pill,
