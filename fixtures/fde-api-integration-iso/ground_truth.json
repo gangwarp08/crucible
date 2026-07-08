@@ -1,0 +1,44 @@
+{
+  "seed_label": "fde-api-integration-iso-v1",
+  "company": "Solstice Retail",
+  "provider": "ContactHub",
+  "sync_run_at": "2026-06-12 02:00:00",
+  "page_size": 50,
+  "provider_record_count": 6075,
+  "synced_record_count": 5725,
+  "missing_record_count": 350,
+  "edge_case_record_count": 350,
+  "root_cause": "cursor_pagination_contract_drift",
+  "cursor_skipped_record_count": 350,
+  "auth_dropped_record_count": 0,
+  "skipped_pages": [
+    5,
+    50,
+    62,
+    86,
+    111,
+    114,
+    117
+  ],
+  "auth_dropped_pages": [],
+  "duplicate_cursor_pages": [
+    4,
+    49,
+    61,
+    85,
+    110,
+    113,
+    116
+  ],
+  "auth_401_count": 4,
+  "auth_401_all_retried_ok": true,
+  "totals": {
+    "provider_contacts": 6075,
+    "local_contacts": 5725,
+    "api_requests": 138
+  },
+  "ps_fork": {
+    "curveball_id": "hardcode_workaround"
+  },
+  "root_cause_narrative": "ContactHub moved /v2/contacts from offset to cursor pagination (contract drift). Our retry wrapper is non-idempotent: on a retry it rebuilds the page token from its own counter and re-sends the PREVIOUS page's cursor, so the retried page is fetched twice (duplicate-cursor fingerprint: GROUP BY cursor HAVING COUNT(*) > 1 on the 200s) and its successor page is silently skipped — the 350 missing contacts cluster exactly at those page boundaries. The 401s are a red herring: every one was retried successfully after a token refresh, so token expiry cannot explain the gap."
+}
