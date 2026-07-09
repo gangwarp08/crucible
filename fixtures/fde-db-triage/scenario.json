@@ -1,267 +1,267 @@
 {
-  "slug": "fde-db-triage",
-  "title": "Revenue dashboard triage",
-  "role": "fde",
-  "difficulty": "mid",
-  "dataset_ref": "fixtures/fde-db-triage",
-  "docs": [
-    {
-      "id": "data-dictionary",
-      "title": "Meridian Data Dictionary",
-      "body": "## customers\n\nOne row per Meridian customer (a B2B company on the platform).\n\n- `id` — opaque customer identifier\n- `name` — company name\n- `plan` — the plan the customer signed up on\n- `created_at` — when the customer record was created, in UTC\n\n## subscriptions\n\nOne row per active or historical subscription. A customer can have multiple subscriptions over time.\n\n- `id` — subscription identifier\n- `customer_id` — references `customers.id`\n- `plan` — the subscription's plan tier (starter, pro, scale, enterprise)\n- `mrr` — monthly recurring revenue in cents\n- `started_at` — when the subscription began, in UTC\n- `status` — one of `active`, `churned`, or `paused`\n\n## payments\n\nOne row per payment record received from the payment processor (Stripe).\n\n- `id` — opaque local payment identifier\n- `external_payment_id` — the payment processor's unique id for the payment\n- `subscription_id` — references `subscriptions.id`\n- `amount_cents` — the payment amount in cents\n- `currency` — three-letter currency code (USD)\n- `status` — one of `succeeded`, `refunded`, or `failed`\n- `created_at` — when the payment was recorded, in UTC\n"
-    },
-    {
-      "id": "revenue-dashboard-definition",
-      "title": "Revenue Dashboard Definition",
-      "body": "## Method\n\nThe monthly recognized revenue tile on the finance dashboard computes revenue as:\n\n> `SUM(amount_cents)` for all rows in `payments` where `status = 'succeeded'`, bucketed by `created_at` (UTC) into calendar months.\n\n## Source\n\nThe tile reads directly from the `payments` table on the read replica. No materialized view or pre-aggregation.\n\n## Display\n\nValues are shown in dollars with two decimal places. The \"last 3 months\" view returns the three most recent complete calendar months relative to today.\n\n## Refresh\n\nThe tile refreshes every 15 minutes against the read replica.\n"
-    }
-  ],
-  "brief": "You're the forward-deployed engineer assigned to Meridian, a B2B SaaS company. Their finance team has flagged that the monthly revenue dashboard looks materially too high for recent months, and leadership wants answers before a board meeting. You have read access to a copy of Meridian's production database and an internal channel with your teammate. Figure out what's going on, fix it, and give finance something they can trust. Your client (Dana, VP Finance) is in the client channel.",
-  "constraints": {
-    "time_minutes": 60,
-    "tokens": 200000,
-    "compute_minutes": 60,
-    "money_usd": 25,
-    "memory_mb": 2048
+ "slug": "fde-db-triage",
+ "title": "Revenue dashboard triage",
+ "role": "fde",
+ "difficulty": "mid",
+ "dataset_ref": "fixtures/fde-db-triage",
+ "docs": [
+  {
+   "id": "data-dictionary",
+   "title": "Meridian Data Dictionary",
+   "body": "## customers\n\nOne row per Meridian customer (a B2B company on the platform).\n\n- `id` — opaque customer identifier\n- `name` — company name\n- `plan` — the plan the customer signed up on\n- `created_at` — when the customer record was created, in UTC\n\n## subscriptions\n\nOne row per active or historical subscription. A customer can have multiple subscriptions over time.\n\n- `id` — subscription identifier\n- `customer_id` — references `customers.id`\n- `plan` — the subscription's plan tier (starter, pro, scale, enterprise)\n- `mrr` — monthly recurring revenue in cents\n- `started_at` — when the subscription began, in UTC\n- `status` — one of `active`, `churned`, or `paused`\n\n## payments\n\nOne row per payment record received from the payment processor (Stripe).\n\n- `id` — opaque local payment identifier\n- `external_payment_id` — the payment processor's unique id for the payment\n- `subscription_id` — references `subscriptions.id`\n- `amount_cents` — the payment amount in cents\n- `currency` — three-letter currency code (USD)\n- `status` — one of `succeeded`, `refunded`, or `failed`\n- `created_at` — when the payment was recorded, in UTC\n"
   },
-  "client_persona": {
-    "name": "Dana",
-    "role": "VP Finance",
-    "voice": "non-technical, anxious, time-pressured",
-    "goal": "A trustworthy corrected revenue number plus a plain-English explanation she can take to the board.",
-    "knows": [
-      "The dashboard 'looks wrong, way too high.'",
-      "Numbers started looking off around April.",
-      "The board meeting is soon."
-    ],
-    "never_reveals": [
-      "The technical root cause.",
-      "Anything about the database schema or SQL.",
-      "Any opinion about webhooks, retries, duplicates, refunds, or timezones."
-    ],
-    "beats": [
-      {
-        "id": "open",
-        "trigger": "session_start",
-        "behavior": "Opens with the vague, urgent ask from the brief. Does not volunteer specifics."
-      },
-      {
-        "id": "specifics_on_ask",
-        "trigger": "candidate_asks_clarifying_question",
-        "behavior": "Reveals: it's the monthly recognized revenue tile; finance expected roughly $1.1M–$1.3M/mo; the dashboard shows ~$1.5M+; it started looking off around April."
-      },
-      {
-        "id": "relief_on_update",
-        "trigger": "candidate_gives_status_update",
-        "behavior": "Expresses relief and adds slight extra pressure: 'Can you have it by end of session?'"
-      },
-      {
-        "id": "curveball_1_relay",
-        "trigger": "curveball.requirement_change",
-        "behavior": "Relays leadership's new ask: corrected figures for the last 3 months plus a one-paragraph board explanation, by end of session."
-      },
-      {
-        "id": "skeptical_acceptance",
-        "trigger": "candidate_delivers_final",
-        "behavior": "Asks one skeptical follow-up — 'Are you sure this is the real number?' — before accepting."
-      }
-    ],
-    "guardrails": [
-      "Never volunteers or confirms the technical cause.",
-      "If asked leading SQL-ish questions, redirects to business context.",
-      "Stays in character; does not coach the candidate."
-    ]
-  },
-  "team_persona": {
-    "name": "Sam",
-    "role": "senior engineer / teammate",
-    "voice": "helpful but busy, slightly overconfident",
-    "goal": "Be helpful while mid-task; nudge the candidate without doing the work for them.",
-    "beats": [
-      {
-        "id": "misleading_hint",
-        "trigger": "early_session",
-        "behavior": "Proactively messages: 'the revenue thing? pretty sure it's refunds not being subtracted, just filter those out.' (Refunds are a red herring.)"
-      },
-      {
-        "id": "concede_with_evidence",
-        "trigger": "candidate_pushes_back_with_evidence",
-        "behavior": "Concedes and offers a real clue: 'huh. payments come in via Stripe webhooks — worth checking for dupes if a retry misfired.' Only fires if the candidate brings specific numbers showing refunds do not close the gap."
-      },
-      {
-        "id": "scope_boundary",
-        "trigger": "candidate_asks_for_prod_access",
-        "behavior": "Declines: 'can't pull prod creds, but the read replica you have should be enough.'"
-      },
-      {
-        "id": "shortcut_pitch",
-        "trigger": "mid_session_time_pressure",
-        "behavior": "Under deadline pressure, proposes shipping the raw monthly SUM to the board and skipping the dedup/reconciliation as 'overkill' — a genuine, well-meant shortcut that is faster but ships the overstated figure. Collaborative: concedes gracefully if the candidate insists on reconciling. This is a Product-Sense judgment fork (design_under_constraints), NOT a teamwork test."
-      }
-    ],
-    "guardrails": [
-      "Gives the misleading hint exactly once.",
-      "Never hands over the answer.",
-      "The real clue only unlocks if the candidate brings evidence (rewards verification over trust).",
-      "Pitches the ship-the-raw-number shortcut exactly once; concedes gracefully if the candidate insists on reconciling."
-    ]
-  },
-  "curveballs": [
-    {
-      "id": "requirement_change",
-      "trigger": {
-        "kind": "time_or_event",
-        "time_offset_minutes": 25,
-        "event": "candidate_first_substantive_client_update"
-      },
-      "payload": {
-        "channel": "client",
-        "speaker": "Dana",
-        "message": "Quick update from leadership — they now want the corrected figures for the last 3 months and a one-paragraph board explanation, by end of session."
-      },
-      "tests": [
-        "adaptability",
-        "reprioritization",
-        "outcome_communication"
-      ],
-      "difficulty_band": "mid"
-    },
-    {
-      "id": "misleading_teammate_hint",
-      "trigger": {
-        "kind": "time_or_event",
-        "time_offset_minutes": 0.5,
-        "event": "session_start"
-      },
-      "payload": {
-        "channel": "team",
-        "speaker": "Sam",
-        "message": "the revenue thing? pretty sure it's refunds not being subtracted, just filter those out."
-      },
-      "tests": [
-        "verification_over_trust",
-        "teamwork"
-      ],
-      "difficulty_band": "mid"
-    },
-    {
-      "id": "shortcut_suggestion",
-      "trigger": {
-        "kind": "time_or_event",
-        "time_offset_minutes": 15,
-        "event": "candidate_first_dedup_or_substantive_query"
-      },
-      "payload": {
-        "channel": "team",
-        "speaker": "Sam",
-        "message": "honestly we're tight on time — the raw monthly SUM already looks about right, let's just ship those numbers to the board and skip the whole dedup reconciliation, it's probably overkill."
-      },
-      "tests": [
-        "product_sense",
-        "design_under_constraints"
-      ],
-      "difficulty_band": "mid"
-    }
-  ],
-  "deliverable_spec": {
-    "components": [
-      {
-        "key": "corrected_monthly_revenue",
-        "label": "Corrected monthly revenue (last 3 months)",
-        "what": "A query or script that runs against the database and reproduces the corrected monthly revenue figures for March, April, and May 2026.",
-        "accept_criteria": [
-          "Query executes successfully against the seeded database.",
-          "Output is the corrected (dedup + status-filtered) revenue.",
-          "Numbers land within ±2% of the fixture's ground-truth corrected figures."
-        ]
-      },
-      {
-        "key": "root_cause_finding",
-        "label": "Root-cause finding",
-        "what": "A clear statement of what was wrong and why — duplicate payment rows from webhook retries, not the refund hypothesis the teammate proposed.",
-        "accept_criteria": [
-          "Identifies duplicate succeeded payments (same external_payment_id) as the cause.",
-          "Explicitly rejects the refund hypothesis with evidence.",
-          "Quantifies the duplicate rate and the resulting overstatement."
-        ]
-      },
-      {
-        "key": "client_facing_summary",
-        "label": "Board-ready client-facing summary",
-        "what": "A one-paragraph explanation Dana can take to the board: the corrected number, plain-English cause, and that this is a recording bug (revenue was never actually that high). Recommends the upstream fix.",
-        "accept_criteria": [
-          "Written in plain language a non-technical board member can follow.",
-          "States the corrected figure clearly.",
-          "Makes clear that real revenue did not change — only the dashboard was wrong.",
-          "Recommends fixing the upstream webhook idempotency issue."
-        ]
-      },
-      {
-        "key": "decisions_and_tradeoffs",
-        "label": "Key decisions and trade-offs",
-        "what": "A short engineering note: how refunds were handled, how the timezone question was resolved, the chosen dedup strategy, and what should be fixed upstream.",
-        "accept_criteria": [
-          "Addresses refund handling.",
-          "Addresses the UTC timestamp question.",
-          "Names the dedup approach (e.g., DISTINCT ON external_payment_id, or GROUP BY keeping MIN(id)).",
-          "Recommends an upstream change (idempotency key, retry-safe ingest)."
-        ]
-      }
-    ]
-  },
-  "rubric": [
-    {
-      "competency_key": "problem_framing",
-      "weight": 0.15,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "data_fluency",
-      "weight": 0.2,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "design_under_constraints",
-      "weight": 0.1,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "execution",
-      "weight": 0.2,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "ai_orchestration",
-      "weight": 0.1,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "teamwork",
-      "weight": 0.1,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "customer_engagement",
-      "weight": 0.05,
-      "load_bearing": true
-    },
-    {
-      "competency_key": "outcome_communication",
-      "weight": 0.1,
-      "load_bearing": true
-    }
-  ],
-  "success_criteria": {
-    "must": [
-      "Identifies duplicate payments as the root cause (not refunds).",
-      "Corrected last-3-month figures land within ±2% of the fixture's true corrected numbers.",
-      "Delivers all four deliverable components."
-    ],
-    "bonus": [
-      "Recommends the upstream idempotency fix, not just a one-off dedupe in the query."
-    ],
-    "tolerance": {
-      "revenue_pct": 0.02
-    }
+  {
+   "id": "revenue-dashboard-definition",
+   "title": "Revenue Dashboard Definition",
+   "body": "## Method\n\nThe monthly recognized revenue tile on the finance dashboard computes revenue as:\n\n> `SUM(amount_cents)` for all rows in `payments` where `status = 'succeeded'`, bucketed by `created_at` (UTC) into calendar months.\n\n## Source\n\nThe tile reads directly from the `payments` table on the read replica. No materialized view or pre-aggregation.\n\n## Display\n\nValues are shown in dollars with two decimal places. The \"last 3 months\" view returns the three most recent complete calendar months relative to today.\n\n## Refresh\n\nThe tile refreshes every 15 minutes against the read replica.\n"
   }
+ ],
+ "brief": "You're the forward-deployed engineer assigned to Meridian, a B2B SaaS company. Their finance team has flagged that the monthly revenue dashboard looks materially too high for recent months, and leadership wants answers before a board meeting. You have read access to a copy of Meridian's production database and an internal channel with your teammate. Figure out what's going on, fix it, and give finance something they can trust. Your client (Dana, VP Finance) is in the client channel.",
+ "constraints": {
+  "time_minutes": 60,
+  "tokens": 50000,
+  "compute_minutes": 30,
+  "money_usd": 25,
+  "memory_mb": 1024
+ },
+ "client_persona": {
+  "name": "Dana",
+  "role": "VP Finance",
+  "voice": "non-technical, anxious, time-pressured",
+  "goal": "A trustworthy corrected revenue number plus a plain-English explanation she can take to the board.",
+  "knows": [
+   "The dashboard 'looks wrong, way too high.'",
+   "Numbers started looking off around April.",
+   "The board meeting is soon."
+  ],
+  "never_reveals": [
+   "The technical root cause.",
+   "Anything about the database schema or SQL.",
+   "Any opinion about webhooks, retries, duplicates, refunds, or timezones."
+  ],
+  "beats": [
+   {
+    "id": "open",
+    "trigger": "session_start",
+    "behavior": "Opens with the vague, urgent ask from the brief. Does not volunteer specifics."
+   },
+   {
+    "id": "specifics_on_ask",
+    "trigger": "candidate_asks_clarifying_question",
+    "behavior": "Reveals: it's the monthly recognized revenue tile; finance expected roughly $1.1M–$1.3M/mo; the dashboard shows ~$1.5M+; it started looking off around April."
+   },
+   {
+    "id": "relief_on_update",
+    "trigger": "candidate_gives_status_update",
+    "behavior": "Expresses relief and adds slight extra pressure: 'Can you have it by end of session?'"
+   },
+   {
+    "id": "curveball_1_relay",
+    "trigger": "curveball.requirement_change",
+    "behavior": "Relays leadership's new ask: corrected figures for the last 3 months plus a one-paragraph board explanation, by end of session."
+   },
+   {
+    "id": "skeptical_acceptance",
+    "trigger": "candidate_delivers_final",
+    "behavior": "Asks one skeptical follow-up — 'Are you sure this is the real number?' — before accepting."
+   }
+  ],
+  "guardrails": [
+   "Never volunteers or confirms the technical cause.",
+   "If asked leading SQL-ish questions, redirects to business context.",
+   "Stays in character; does not coach the candidate."
+  ]
+ },
+ "team_persona": {
+  "name": "Sam",
+  "role": "senior engineer / teammate",
+  "voice": "helpful but busy, slightly overconfident",
+  "goal": "Be helpful while mid-task; nudge the candidate without doing the work for them.",
+  "beats": [
+   {
+    "id": "misleading_hint",
+    "trigger": "early_session",
+    "behavior": "Proactively messages: 'the revenue thing? pretty sure it's refunds not being subtracted, just filter those out.' (Refunds are a red herring.)"
+   },
+   {
+    "id": "concede_with_evidence",
+    "trigger": "candidate_pushes_back_with_evidence",
+    "behavior": "Concedes and offers a real clue: 'huh. payments come in via Stripe webhooks — worth checking for dupes if a retry misfired.' Only fires if the candidate brings specific numbers showing refunds do not close the gap."
+   },
+   {
+    "id": "scope_boundary",
+    "trigger": "candidate_asks_for_prod_access",
+    "behavior": "Declines: 'can't pull prod creds, but the read replica you have should be enough.'"
+   },
+   {
+    "id": "shortcut_pitch",
+    "trigger": "mid_session_time_pressure",
+    "behavior": "Under deadline pressure, proposes shipping the raw monthly SUM to the board and skipping the dedup/reconciliation as 'overkill' — a genuine, well-meant shortcut that is faster but ships the overstated figure. Collaborative: concedes gracefully if the candidate insists on reconciling. This is a Product-Sense judgment fork (design_under_constraints), NOT a teamwork test."
+   }
+  ],
+  "guardrails": [
+   "Gives the misleading hint exactly once.",
+   "Never hands over the answer.",
+   "The real clue only unlocks if the candidate brings evidence (rewards verification over trust).",
+   "Pitches the ship-the-raw-number shortcut exactly once; concedes gracefully if the candidate insists on reconciling."
+  ]
+ },
+ "curveballs": [
+  {
+   "id": "requirement_change",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 25,
+    "event": "candidate_first_substantive_client_update"
+   },
+   "payload": {
+    "channel": "client",
+    "speaker": "Dana",
+    "message": "Quick update from leadership — they now want the corrected figures for the last 3 months and a one-paragraph board explanation, by end of session."
+   },
+   "tests": [
+    "adaptability",
+    "reprioritization",
+    "outcome_communication"
+   ],
+   "difficulty_band": "mid"
+  },
+  {
+   "id": "misleading_teammate_hint",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 0.5,
+    "event": "session_start"
+   },
+   "payload": {
+    "channel": "team",
+    "speaker": "Sam",
+    "message": "the revenue thing? pretty sure it's refunds not being subtracted, just filter those out."
+   },
+   "tests": [
+    "verification_over_trust",
+    "teamwork"
+   ],
+   "difficulty_band": "mid"
+  },
+  {
+   "id": "shortcut_suggestion",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 15,
+    "event": "candidate_first_dedup_or_substantive_query"
+   },
+   "payload": {
+    "channel": "team",
+    "speaker": "Sam",
+    "message": "honestly we're tight on time — the raw monthly SUM already looks about right, let's just ship those numbers to the board and skip the whole dedup reconciliation, it's probably overkill."
+   },
+   "tests": [
+    "product_sense",
+    "design_under_constraints"
+   ],
+   "difficulty_band": "mid"
+  }
+ ],
+ "deliverable_spec": {
+  "components": [
+   {
+    "key": "corrected_monthly_revenue",
+    "label": "Corrected monthly revenue (last 3 months)",
+    "what": "A query or script that runs against the database and reproduces the corrected monthly revenue figures for March, April, and May 2026.",
+    "accept_criteria": [
+     "Query executes successfully against the seeded database.",
+     "Output is the corrected (dedup + status-filtered) revenue.",
+     "Numbers land within ±2% of the fixture's ground-truth corrected figures."
+    ]
+   },
+   {
+    "key": "root_cause_finding",
+    "label": "Root-cause finding",
+    "what": "A clear statement of what was wrong and why — duplicate payment rows from webhook retries, not the refund hypothesis the teammate proposed.",
+    "accept_criteria": [
+     "Identifies duplicate succeeded payments (same external_payment_id) as the cause.",
+     "Explicitly rejects the refund hypothesis with evidence.",
+     "Quantifies the duplicate rate and the resulting overstatement."
+    ]
+   },
+   {
+    "key": "client_facing_summary",
+    "label": "Board-ready client-facing summary",
+    "what": "A one-paragraph explanation Dana can take to the board: the corrected number, plain-English cause, and that this is a recording bug (revenue was never actually that high). Recommends the upstream fix.",
+    "accept_criteria": [
+     "Written in plain language a non-technical board member can follow.",
+     "States the corrected figure clearly.",
+     "Makes clear that real revenue did not change — only the dashboard was wrong.",
+     "Recommends fixing the upstream webhook idempotency issue."
+    ]
+   },
+   {
+    "key": "decisions_and_tradeoffs",
+    "label": "Key decisions and trade-offs",
+    "what": "A short engineering note: how refunds were handled, how the timezone question was resolved, the chosen dedup strategy, and what should be fixed upstream.",
+    "accept_criteria": [
+     "Addresses refund handling.",
+     "Addresses the UTC timestamp question.",
+     "Names the dedup approach (e.g., DISTINCT ON external_payment_id, or GROUP BY keeping MIN(id)).",
+     "Recommends an upstream change (idempotency key, retry-safe ingest)."
+    ]
+   }
+  ]
+ },
+ "rubric": [
+  {
+   "competency_key": "problem_framing",
+   "weight": 0.15,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "data_fluency",
+   "weight": 0.2,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "design_under_constraints",
+   "weight": 0.1,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "execution",
+   "weight": 0.2,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "ai_orchestration",
+   "weight": 0.1,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "teamwork",
+   "weight": 0.1,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "customer_engagement",
+   "weight": 0.05,
+   "load_bearing": true
+  },
+  {
+   "competency_key": "outcome_communication",
+   "weight": 0.1,
+   "load_bearing": true
+  }
+ ],
+ "success_criteria": {
+  "must": [
+   "Identifies duplicate payments as the root cause (not refunds).",
+   "Corrected last-3-month figures land within ±2% of the fixture's true corrected numbers.",
+   "Delivers all four deliverable components."
+  ],
+  "bonus": [
+   "Recommends the upstream idempotency fix, not just a one-off dedupe in the query."
+  ],
+  "tolerance": {
+   "revenue_pct": 0.02
+  }
+ }
 }

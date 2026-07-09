@@ -1,0 +1,444 @@
+{
+  "startedAt": "2026-06-20T00:20:12.239Z",
+  "finishedAt": "2026-06-20T00:28:40.603Z",
+  "durationMs": 508365,
+  "scenarioSlug": "fde-db-triage-pro",
+  "runsPerArchetype": 3,
+  "trials": [
+    {
+      "archetype": "STRONG",
+      "trial": 1,
+      "sessionId": "375a70dd-9f91-4fce-8406-d6dfbbb01888",
+      "evalId": "3229ab85-1bbf-4c05-9eba-79981a8acaa6",
+      "overall": 4.63,
+      "competencies": {
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 4,
+        "problem_framing": 5,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 2,
+      "sessionId": "6da8ac97-49d8-432f-a5d3-28c065df0bd2",
+      "evalId": "61d91bff-b4b0-4bb5-a3de-b17fdfb8dd38",
+      "overall": 4.76,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 3,
+      "sessionId": "8e162851-4f54-411b-901e-a643c24d2c75",
+      "evalId": "f38e22bb-f40d-4641-a3b9-f76c7c628468",
+      "overall": 4.58,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 1,
+      "sessionId": "2b18ba10-9564-47d4-854f-fe1016a397bd",
+      "evalId": "459038f9-c560-4357-8580-55c1f977bd93",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 2,
+      "sessionId": "f82fe656-bbcc-4632-affc-47adc7deea19",
+      "evalId": "0bab44da-96ae-4491-a435-7dde57a18b8f",
+      "overall": 2.79,
+      "competencies": {
+        "problem_framing": 2,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 4,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 4
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 3,
+      "sessionId": "7a18b9d5-4784-4ab2-bce2-ac24693bcae2",
+      "evalId": "47cc8810-5d36-4de9-a850-39c720bfe7d1",
+      "overall": 2.42,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 1,
+      "sessionId": "a70500f6-80d3-4447-80c5-b57e0b5c2c24",
+      "evalId": "a39ff672-ff89-4b79-b91f-a727bc9d0d42",
+      "overall": 1.04,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 2,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 2,
+      "sessionId": "354bc638-3bb0-40d7-92f8-4d14446c3398",
+      "evalId": "8567e644-038a-4918-86e0-01f79b8c3001",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 3,
+      "sessionId": "1cd1a09d-590f-42b4-b917-59e021a7d0d7",
+      "evalId": "b8af2775-96bd-461a-9b48-7520a517158e",
+      "overall": 1.04,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 2,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    }
+  ],
+  "summaries": [
+    {
+      "archetype": "STRONG",
+      "label": "Strong FDE",
+      "blurb": "Probes the brief with a clarifying question to the customer (Dana) before writing SQL, reads the docs, verifies all three reported issues with data, pushes back on the teammate (Sam) with evidence when his hint is wrong, and ships a ranked deliverable that explicitly distinguishes signal from noise.",
+      "trials": [
+        {
+          "archetype": "STRONG",
+          "trial": 1,
+          "sessionId": "375a70dd-9f91-4fce-8406-d6dfbbb01888",
+          "evalId": "3229ab85-1bbf-4c05-9eba-79981a8acaa6",
+          "overall": 4.63,
+          "competencies": {
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 4,
+            "problem_framing": 5,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 2,
+          "sessionId": "6da8ac97-49d8-432f-a5d3-28c065df0bd2",
+          "evalId": "61d91bff-b4b0-4bb5-a3de-b17fdfb8dd38",
+          "overall": 4.76,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 3,
+          "sessionId": "8e162851-4f54-411b-901e-a643c24d2c75",
+          "evalId": "f38e22bb-f40d-4641-a3b9-f76c7c628468",
+          "overall": 4.58,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        }
+      ],
+      "overallRuns": [
+        4.63,
+        4.76,
+        4.58
+      ],
+      "overallMean": 4.656666666666667,
+      "overallStdev": 0.09291573243177556,
+      "competencyMeans": {
+        "design_under_constraints": 4.333333333333333,
+        "teamwork": 5,
+        "data_fluency": 5,
+        "execution": 5,
+        "problem_framing": 4.333333333333333,
+        "outcome_communication": 4.666666666666667,
+        "ai_orchestration": 4,
+        "customer_engagement": 4
+      },
+      "competencyStdevs": {
+        "design_under_constraints": 0.5773502691896258,
+        "teamwork": 0,
+        "data_fluency": 0,
+        "execution": 0,
+        "problem_framing": 0.5773502691896258,
+        "outcome_communication": 0.5773502691896258,
+        "ai_orchestration": 0,
+        "customer_engagement": 0
+      }
+    },
+    {
+      "archetype": "MEDIAN",
+      "label": "Median FDE",
+      "blurb": "Competent SQL but does not probe ambiguity. Acknowledges the teammate neutrally without verifying his hint. Finds the two real issues (revenue + churn) but does not investigate the third. Ships a workable two-issue deliverable with a caveat about the unverified third.",
+      "trials": [
+        {
+          "archetype": "MEDIAN",
+          "trial": 1,
+          "sessionId": "2b18ba10-9564-47d4-854f-fe1016a397bd",
+          "evalId": "459038f9-c560-4357-8580-55c1f977bd93",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 2,
+          "sessionId": "f82fe656-bbcc-4632-affc-47adc7deea19",
+          "evalId": "0bab44da-96ae-4491-a435-7dde57a18b8f",
+          "overall": 2.79,
+          "competencies": {
+            "problem_framing": 2,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 4,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 4
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 3,
+          "sessionId": "7a18b9d5-4784-4ab2-bce2-ac24693bcae2",
+          "evalId": "47cc8810-5d36-4de9-a850-39c720bfe7d1",
+          "overall": 2.42,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        }
+      ],
+      "overallRuns": [
+        2.66,
+        2.79,
+        2.42
+      ],
+      "overallMean": 2.6233333333333335,
+      "overallStdev": 0.18770544300401454,
+      "competencyMeans": {
+        "design_under_constraints": 3.3333333333333335,
+        "teamwork": 2,
+        "data_fluency": 3,
+        "execution": 3,
+        "problem_framing": 2,
+        "outcome_communication": 3.3333333333333335,
+        "ai_orchestration": 1,
+        "customer_engagement": 3
+      },
+      "competencyStdevs": {
+        "design_under_constraints": 0.5773502691896258,
+        "teamwork": 0,
+        "data_fluency": 0,
+        "execution": 0,
+        "problem_framing": 1,
+        "outcome_communication": 0.5773502691896258,
+        "ai_orchestration": 0,
+        "customer_engagement": 0
+      }
+    },
+    {
+      "archetype": "WEAK",
+      "label": "Weak FDE",
+      "blurb": "Accepts the teammate's misleading hint without verification. Runs one naive aggregate query. Does not read docs, does not ask the customer anything, does not engage the AI assistant. Submits an incomplete deliverable that prioritizes the wrong issue.",
+      "trials": [
+        {
+          "archetype": "WEAK",
+          "trial": 1,
+          "sessionId": "a70500f6-80d3-4447-80c5-b57e0b5c2c24",
+          "evalId": "a39ff672-ff89-4b79-b91f-a727bc9d0d42",
+          "overall": 1.04,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 2,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 2,
+          "sessionId": "354bc638-3bb0-40d7-92f8-4d14446c3398",
+          "evalId": "8567e644-038a-4918-86e0-01f79b8c3001",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 3,
+          "sessionId": "1cd1a09d-590f-42b4-b917-59e021a7d0d7",
+          "evalId": "b8af2775-96bd-461a-9b48-7520a517158e",
+          "overall": 1.04,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 2,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        }
+      ],
+      "overallRuns": [
+        1.04,
+        1,
+        1.04
+      ],
+      "overallMean": 1.0266666666666666,
+      "overallStdev": 0.02309401076758505,
+      "competencyMeans": {
+        "design_under_constraints": 1,
+        "teamwork": 1,
+        "data_fluency": 1,
+        "execution": 1,
+        "problem_framing": 1,
+        "outcome_communication": 1,
+        "ai_orchestration": 1,
+        "customer_engagement": 1.6666666666666667
+      },
+      "competencyStdevs": {
+        "design_under_constraints": 0,
+        "teamwork": 0,
+        "data_fluency": 0,
+        "execution": 0,
+        "problem_framing": 0,
+        "outcome_communication": 0,
+        "ai_orchestration": 0,
+        "customer_engagement": 0.5773502691896257
+      }
+    }
+  ],
+  "verdict": {
+    "rankOrderHolds": true,
+    "pairwiseGapsExceedNoise": true,
+    "strongAlwaysAboveWeak": true,
+    "perCompetencyConsistency": 1,
+    "notes": []
+  }
+}
