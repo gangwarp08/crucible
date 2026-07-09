@@ -483,7 +483,8 @@ function ScenarioBody({
         <p style={{ color: color.text.muted, fontSize: 12, margin: "8px 0 0", lineHeight: 1.6 }}>
           During the session we record passive integrity signals from this
           browser tab — tab focus changes, large paste bursts, long idle gaps,
-          and copy events from the brief and docs. Reviewers see these as
+          and copy events from the brief and docs. Network location is checked
+          during the session for integrity. Reviewers see these as
           informational signals only; they never change your competency score.
           {/* The "no webcam / no biometrics" promise holds for every session
               except a v2-enabled link — where the consent card below covers

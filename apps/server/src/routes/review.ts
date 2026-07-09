@@ -41,7 +41,11 @@ import { checkBandEquating } from "../services/equating.js";
 import { DIFFICULTY_STATS_VERSION } from "../services/difficulty-stats.js";
 import { appendEvent } from "../services/events-direct.js";
 import { VERIFICATION_CAP_SCORE } from "../services/defense.js";
-import { computeSuspicionScore, type SuspicionEventInput } from "../services/suspicion-score.js";
+import {
+  computeSuspicionScore,
+  computeNetworkSummary,
+  type SuspicionEventInput,
+} from "../services/suspicion-score.js";
 import { readIdentityStatus } from "../services/proctoring-v2.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
@@ -403,6 +407,14 @@ export async function reviewRoutes(server: FastifyInstance) {
         // breakdown: this block must never reach the public shared report
         // (services/shared-report.ts allowlist).
         identity: await readIdentityStatus(id),
+        // Geo/network slice (recruiter-only, informational — mirrors the
+        // identity block's posture exactly): coarse location at start,
+        // ip-change count, distinct countries, tz-mismatch flag. Derived from
+        // the integrity.* rows already loaded above; null for every session
+        // that predates the slice, so older sessions render no network row.
+        // Must NEVER reach the public shared report (allowlist has no
+        // network field; verify-geo-integrity.ts asserts it).
+        network: computeNetworkSummary(events),
       });
     },
   );

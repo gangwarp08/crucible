@@ -105,6 +105,9 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
       return { type, ts, payload: { ms: 45_000 } };
     case "integrity.multiple_faces":
       return { type, ts, payload: { count: 2 } };
+    // Geo/network slice — browser timezone snapshot (payload required).
+    case "integrity.client_env":
+      return { type, ts, payload: { tz_offset_minutes: -330, tz_name: "Asia/Kolkata" } };
     default:
       return { type, ts } as IntegrityEvent;
   }
@@ -116,7 +119,10 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
 
   // [a] shared schema — taxonomy round-trip + malformed rejection
   console.log("\n[a] IntegrityEventSchema");
-  check("taxonomy has the 10 types (8 P1 + 2 P6.3 webcam)", INTEGRITY_EVENT_TYPES.length === 10);
+  check(
+    "taxonomy has the 11 client-postable types (8 P1 + 2 P6.3 webcam + 1 geo/network client_env)",
+    INTEGRITY_EVENT_TYPES.length === 11,
+  );
   for (const t of INTEGRITY_EVENT_TYPES) {
     const r = IntegrityEventSchema.safeParse(sampleEvent(t, Date.now()));
     check(`accepts ${t}`, r.success, r.success ? "" : JSON.stringify(r.error.issues[0]));
@@ -132,6 +138,14 @@ function sampleEvent(type: (typeof INTEGRITY_EVENT_TYPES)[number], ts: number): 
     ["face_absent non-int ms rejected", { type: "integrity.face_absent", payload: { ms: 1.5 } }],
     ["face_absent stray key rejected", { type: "integrity.face_absent", payload: { ms: 1000, raw: "x" } }],
     ["multiple_faces count=1 rejected", { type: "integrity.multiple_faces", payload: { count: 1 } }],
+    // Geo/network slice — client_env payload is REQUIRED and strictly shaped;
+    // the SERVER-authored types are not in the client-postable union at all
+    // (the ingest route also 400s them explicitly — verify-geo-integrity.ts).
+    ["client_env without payload rejected", { type: "integrity.client_env" }],
+    ["client_env non-int offset rejected", { type: "integrity.client_env", payload: { tz_offset_minutes: 1.5, tz_name: "Europe/London" } }],
+    ["client_env stray key rejected", { type: "integrity.client_env", payload: { tz_offset_minutes: 0, tz_name: null, ip: "1.2.3.4" } }],
+    ["server-authored integrity.geo rejected", { type: "integrity.geo", payload: { country: "US", region: null, city: null, ip_hash: "cafe" } }],
+    ["server-authored integrity.ip_change rejected", { type: "integrity.ip_change", payload: { change_count: 1, prev_ip_hash: "a", new_ip_hash: "b", country_changed: false, new_country: null } }],
   ];
   // Signal-only shape (what lib/webcam-presence.ts actually sends) must parse.
   check("face_absent with NO payload accepted (signal-only browser shape)",

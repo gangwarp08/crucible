@@ -12,10 +12,11 @@
 
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { IntegrityEventSchema } from "@crucible/shared";
+import { IntegrityEventSchema, SERVER_INTEGRITY_EVENT_TYPES } from "@crucible/shared";
 import { sessionRegistry } from "../services/registry.js";
 import { requireSessionToken } from "../services/session-token.js";
 import { logEvent } from "../services/telemetry.js";
+import { recordNetworkObservation } from "../services/geo-integrity.js";
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -46,7 +47,18 @@ const LOW_SIGNAL_TYPES = new Set([
   "integrity.window_blur",
   "integrity.idle_gap",
   "integrity.fullscreen_exit",
+  // Geo/network slice: the once-per-session browser-timezone snapshot is
+  // chatter-class — it must never crowd out the high-signal types.
+  "integrity.client_env",
 ]);
+
+// Server-authored integrity types (integrity.geo / integrity.ip_change /
+// integrity.rate_capped — see SERVER_INTEGRITY_EVENT_TYPES). These describe
+// what the SERVER observed about the connection; a client posting one is by
+// definition spoofing. They are outside IntegrityEventSchema, so Zod would
+// already reject them with a generic union error — this explicit pre-check
+// exists to return an unambiguous 400 instead of a confusing schema dump.
+const SERVER_AUTHORED = new Set<string>(SERVER_INTEGRITY_EVENT_TYPES);
 
 const WINDOW_MS = 60_000;
 
@@ -149,6 +161,30 @@ export async function integrityRoutes(server: FastifyInstance) {
       if (!entry || entry.status === "completed") {
         limiter.delete(sessionId); // prune limiter state for dead sessions
         return reply.status(409).send({ error: "session_not_live" });
+      }
+
+      // Geo/network slice: every authenticated batch is also a network
+      // observation — the SERVER-observed connection address (request.ip,
+      // X-Forwarded-For-aware via trustProxy) feeds geoip + ip-change
+      // detection. Fire-and-forget: derived values only, never throws,
+      // never blocks or breaks the candidate flow.
+      void recordNetworkObservation(sessionId, request.ip, "integrity_batch");
+
+      // Server-authored types get an explicit, unambiguous 400 (they'd fail
+      // the Zod union below anyway — see SERVER_AUTHORED above).
+      const rawEvents = (request.body as { events?: unknown } | null)?.events;
+      if (Array.isArray(rawEvents)) {
+        const spoofed = rawEvents.find(
+          (e): e is { type: string } =>
+            typeof e === "object" && e !== null &&
+            SERVER_AUTHORED.has((e as { type?: unknown }).type as string),
+        );
+        if (spoofed) {
+          return reply.status(400).send({
+            error: "server_authored_integrity_type",
+            message: `${spoofed.type} is appended server-side only and cannot be posted by the client`,
+          });
+        }
       }
 
       const bodyParse = BodySchema.safeParse(request.body);

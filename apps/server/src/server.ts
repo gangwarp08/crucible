@@ -28,6 +28,15 @@ import { startDeadlineReaper } from "./services/deadline-reaper.js";
 
 export async function buildServer() {
   const server = Fastify({
+    // Railway terminates TLS and forwards to this service through its edge
+    // proxy — without trustProxy, request.ip is the proxy's address for every
+    // request. Trusting X-Forwarded-For makes request.ip the real client
+    // address, which feeds (a) rate-limit keying and (b) the geo/network
+    // integrity channel (services/geo-integrity.ts — derived values only, the
+    // raw IP is never persisted). Safe here because the platform proxy always
+    // sits in front and sets the header; direct-to-container traffic isn't
+    // exposed on Railway.
+    trustProxy: true,
     logger: {
       level: env.NODE_ENV === "production" ? "info" : "debug",
     },

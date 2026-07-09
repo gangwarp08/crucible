@@ -12,6 +12,7 @@ import {
   getSuspicionReport,
   type SuspicionReport,
   type SuspicionIdentity,
+  type SuspicionNetwork,
   type IntegrityTimelineEvent,
   type ReviewEvent,
 } from "@/lib/api";
@@ -86,6 +87,14 @@ function identitySummary(id: SuspicionIdentity): { text: string; tone: string } 
   return { text: `${consented} · identity not verified (not attempted)`, tone: color.text.secondary };
 }
 
+/** "City, REGION, CC" from whatever geo fields exist; null when none do. */
+function formatLocation(net: SuspicionNetwork): string | null {
+  const parts = [net.city, net.region, net.country].filter(
+    (p): p is string => typeof p === "string" && p.length > 0,
+  );
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
 export default function SuspicionPanel({ sessionId, events, sessionStart }: Props) {
   const [fetch, setFetch] = useState<Fetch>({ kind: "loading" });
 
@@ -112,6 +121,7 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
       : events.filter((e) => e.type.startsWith("integrity.") || e.type.startsWith("identity."));
 
   const identity = deriveIdentity(report, events);
+  const network = report?.network ?? null;
 
   // Older server deploy (no route) and nothing recorded → stay invisible.
   if (report === null && integrityEvents.length === 0 && identity === null) return null;
@@ -192,6 +202,37 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
           <span style={{ fontSize: 12, fontFamily: font.mono, color: identitySummary(identity).tone }}>
             {identitySummary(identity).text}
           </span>
+        </div>
+      )}
+
+      {/* Geo/network row group (geo/network slice) — renders only when the
+          server reports a network block (sessions recorded after the slice).
+          Derived values only (coarse geo, counts, a boolean — never an IP);
+          informational like everything in this panel, never scored. */}
+      {network !== null && (
+        <div style={{ padding: "10px 16px", borderBottom: `1px solid ${color.border.subtle}` }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: color.text.secondary }}>Network</span>
+            <span style={{ fontSize: 10, color: color.text.muted, fontFamily: font.mono, marginLeft: "auto" }}>
+              informational — not scored
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 14, rowGap: 4, fontSize: 11 }}>
+            <span style={netLabel}>location at start</span>
+            <span style={netValue}>{formatLocation(network) ?? "unknown"}</span>
+            <span style={netLabel}>IP changes</span>
+            <span style={{ ...netValue, color: network.ipChanges > 0 ? color.warn.base : color.text.secondary }}>
+              {network.ipChanges}
+            </span>
+            <span style={netLabel}>countries seen</span>
+            <span style={{ ...netValue, color: network.countries.length > 1 ? color.warn.base : color.text.secondary }}>
+              {network.countries.length > 0 ? network.countries.join(", ") : "unknown"}
+            </span>
+            <span style={netLabel}>timezone mismatch</span>
+            <span style={{ ...netValue, color: network.tzMismatch ? color.warn.base : color.text.secondary }}>
+              {network.tzMismatch ? "yes — browser timezone contradicts IP country" : "no"}
+            </span>
+          </div>
         </div>
       )}
 
@@ -300,4 +341,18 @@ const td: React.CSSProperties = {
   fontFamily: font.mono,
   fontVariantNumeric: "tabular-nums",
   fontSize: 11,
+};
+
+const netLabel: React.CSSProperties = {
+  color: color.text.muted,
+  fontSize: 10,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  alignSelf: "baseline",
+};
+
+const netValue: React.CSSProperties = {
+  fontFamily: font.mono,
+  fontVariantNumeric: "tabular-nums",
+  color: color.text.secondary,
 };
