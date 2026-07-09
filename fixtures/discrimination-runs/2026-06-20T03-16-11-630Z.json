@@ -1,0 +1,1678 @@
+{
+  "startedAt": "2026-06-20T00:45:50.380Z",
+  "finishedAt": "2026-06-20T03:16:11.630Z",
+  "durationMs": 9021250,
+  "scenarioSlug": "fde-db-triage-pro",
+  "runsPerArchetype": 15,
+  "trials": [
+    {
+      "archetype": "STRONG",
+      "trial": 1,
+      "sessionId": "41958729-844b-4290-8751-d49d9307491f",
+      "evalId": "edfe7c89-834a-4213-9249-0f978b30bac7",
+      "overall": 4.51,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 4
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 2,
+      "sessionId": "08a4d4b8-514c-40ae-af0f-16e3ee12db46",
+      "evalId": "a389f589-90de-4bdb-86dc-d7c08711729a",
+      "overall": 4.51,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 4
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 3,
+      "sessionId": "77a359be-7886-4821-af6d-34d0c7ed6fc4",
+      "evalId": "d9480369-b719-41be-a5ea-ac2df79a9a11",
+      "overall": 4.51,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 4
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 4,
+      "sessionId": "8b203843-1b8a-4c1c-ad15-6807569cce08",
+      "evalId": "c092234d-7f52-4d28-aecb-71d1007f3f99",
+      "overall": 4.76,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 5,
+      "sessionId": "b7cbd70c-f02f-433c-b93e-ee1032103301",
+      "evalId": "ab0d5bf1-b309-467d-a47a-576b7b43391b",
+      "overall": 4.58,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 6,
+      "sessionId": "2bd2f91a-eade-424f-8d15-507bedff81f7",
+      "evalId": "8daddf3b-9bfa-4ed7-b96b-ff8ad8cce11f",
+      "overall": 4.8,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 5,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 7,
+      "sessionId": "44759efa-8141-4d25-b0f0-762325fb9a1d",
+      "evalId": "fc47019d-f7d1-4544-b7af-d943e3d5f726",
+      "overall": 4.88,
+      "competencies": {
+        "problem_framing": 5,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 8,
+      "sessionId": "8bcff8f1-aa8a-421b-a780-56e0f50801df",
+      "evalId": "8867592f-8f58-4e20-9b29-5e82af9fa138",
+      "overall": 4.92,
+      "competencies": {
+        "ai_orchestration": 4,
+        "problem_framing": 5,
+        "customer_engagement": 5,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 9,
+      "sessionId": "6642f623-761d-4c47-b8c6-9be25b33591a",
+      "evalId": "9423546e-15b2-4b00-8b69-33e09d7501a0",
+      "overall": 4.76,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 10,
+      "sessionId": "e701bb88-c27b-4d89-a335-f8859baba5b0",
+      "evalId": "7fe5fe75-2252-49ca-a6d9-98b12c0b9892",
+      "overall": 4.62,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 5,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 11,
+      "sessionId": "b0fe6bc3-2d3e-4327-ba20-f861537174c0",
+      "evalId": "687a7b07-ef24-4afd-9df5-1c52ca222899",
+      "overall": 4.51,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 4,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 4
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 12,
+      "sessionId": "355452a4-de4b-4bf1-8435-12349d9bbaa4",
+      "evalId": "20d990ca-9f61-4540-8d46-6e19466904e3",
+      "overall": 4.76,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 13,
+      "sessionId": "fff94e82-d877-4b17-be02-a2a6ce99959e",
+      "evalId": "f7e7bb2c-9ce3-4df8-9be3-8df18694b019",
+      "overall": 4.76,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 14,
+      "sessionId": "1f2cb208-6f5d-4273-9d29-1d770becf1cb",
+      "evalId": "f2480563-1274-4b63-a143-c60b221d16d5",
+      "overall": 4.92,
+      "competencies": {
+        "problem_framing": 5,
+        "customer_engagement": 5,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "STRONG",
+      "trial": 15,
+      "sessionId": "c90ed496-ea6e-410a-b210-b3f42413ea4f",
+      "evalId": "4fdd16ad-a8fd-4d85-8576-46f98bfa59a5",
+      "overall": 4.76,
+      "competencies": {
+        "problem_framing": 4,
+        "customer_engagement": 4,
+        "data_fluency": 5,
+        "design_under_constraints": 5,
+        "execution": 5,
+        "ai_orchestration": 4,
+        "teamwork": 5,
+        "outcome_communication": 5
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 1,
+      "sessionId": "b477b115-4a94-44e9-8363-1d97829b01a3",
+      "evalId": "2132f32a-3b4e-457f-9c11-f92268294dbb",
+      "overall": 2.66,
+      "competencies": {
+        "teamwork": 2,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 2,
+      "sessionId": "f6f6b565-c092-4278-b38e-939ddfaa474f",
+      "evalId": "5ccf6eba-1c6f-4f53-a26d-e76bcb1dd72d",
+      "overall": 2.54,
+      "competencies": {
+        "problem_framing": 2,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 3,
+      "sessionId": "8b4f1da2-c4ba-4a2d-95d2-5174e5841a13",
+      "evalId": "53bc51fc-64ea-4537-9f02-54e66a4e0bd9",
+      "overall": 2.62,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 2,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 4,
+      "sessionId": "5ca2aa27-f179-4672-9241-bad2fac1e686",
+      "evalId": "fbd33281-35e9-4489-ba6e-e5ff62f90090",
+      "overall": 2.5,
+      "competencies": {
+        "problem_framing": 2,
+        "customer_engagement": 2,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 5,
+      "sessionId": "55c5832f-72cf-4e69-9deb-efccf9e738c7",
+      "evalId": "f11dc5fa-53b3-4d1f-90a4-5c915d713798",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 6,
+      "sessionId": "e22990a3-c9f2-488f-b8ec-5ab86c78d74e",
+      "evalId": "f248e9f5-c70b-4174-8f73-82c01d6837a6",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 7,
+      "sessionId": "15bc3cfd-274e-42ed-a69c-02a2d9bd2b78",
+      "evalId": "a99766a9-6d74-4171-81b6-68c97562cb93",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 8,
+      "sessionId": "fd9b13ba-ae60-444c-a54d-931862357585",
+      "evalId": "951e99fd-dd74-4a6f-bec4-c3457cd42bdf",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 9,
+      "sessionId": "d3d359ca-b934-4399-8313-366ccca2fef4",
+      "evalId": "a91f973e-93ac-46bd-bffa-4c0f306a1c34",
+      "overall": 2.38,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 2,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 10,
+      "sessionId": "d8340af1-a8d2-4c21-8b75-7fb35342e5d2",
+      "evalId": "7536c961-9e77-45f8-be30-06658171d069",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 11,
+      "sessionId": "28ef2366-9f7b-494d-8dfe-9143cd8dfffd",
+      "evalId": "c17dc4c2-223e-4a15-9c9a-eedcfa94e166",
+      "overall": 2.5,
+      "competencies": {
+        "problem_framing": 2,
+        "customer_engagement": 2,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 12,
+      "sessionId": "bcaaaa13-daf1-4feb-a262-6d0c59d88e58",
+      "evalId": "f0abdd09-906b-474a-bd98-e8bf81a15469",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 13,
+      "sessionId": "0bcfff7f-49dc-4fe4-aa8c-50643dbcd9bc",
+      "evalId": "5bb4a582-86ae-4d16-9e8a-7c492e79447c",
+      "overall": 2.5,
+      "competencies": {
+        "problem_framing": 2,
+        "customer_engagement": 2,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 14,
+      "sessionId": "213a36fb-75bc-4070-8844-bfe52b9e483a",
+      "evalId": null,
+      "overall": null,
+      "competencies": {},
+      "status": "missing"
+    },
+    {
+      "archetype": "MEDIAN",
+      "trial": 15,
+      "sessionId": "4b3a771f-553d-4560-970a-83f1cb31c03d",
+      "evalId": "899a42f0-83ad-4cb4-8287-86cf066f7f79",
+      "overall": 2.66,
+      "competencies": {
+        "problem_framing": 3,
+        "customer_engagement": 3,
+        "data_fluency": 3,
+        "design_under_constraints": 3,
+        "execution": 3,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 3
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 1,
+      "sessionId": "5361e52d-51ba-4ae2-a542-d130a70abec9",
+      "evalId": "8532336c-65f0-432c-afc2-1907b00bbf04",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 2,
+      "sessionId": "da207812-fa83-4102-a409-8208bd905df1",
+      "evalId": "28153b38-d9bf-4606-aeb1-e14118b878f0",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 3,
+      "sessionId": "25326a8e-8a41-405d-9691-63cd1c9689d9",
+      "evalId": "caca6703-29c8-4aa7-bfe9-bc2d3a3933f6",
+      "overall": 1,
+      "competencies": {
+        "design_under_constraints": 1,
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 4,
+      "sessionId": "5137203e-8697-4ce0-87f2-ac4e4bc070ec",
+      "evalId": "3f2f3825-2cc2-4269-94d8-c0311d1a7734",
+      "overall": 1.22,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 2,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 2,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 5,
+      "sessionId": "6774f31f-1cc2-412b-950b-62648e2ff9c5",
+      "evalId": "5e3fff07-e990-4ce6-8cdd-fc6a92b789c3",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 6,
+      "sessionId": "798cd120-d701-43ba-9889-d33917ad5290",
+      "evalId": "f1c415db-08f2-4426-bb43-1356bac92f4b",
+      "overall": 1,
+      "competencies": {
+        "customer_engagement": 1,
+        "problem_framing": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 7,
+      "sessionId": "817436a9-9076-4f05-a44f-f0ea67f58b50",
+      "evalId": "ef2a7ed7-fb7f-4014-90ca-15bc5b0193ee",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 8,
+      "sessionId": "2589f784-ac4d-4cf5-af5d-7402850edc53",
+      "evalId": null,
+      "overall": null,
+      "competencies": {},
+      "status": "missing"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 9,
+      "sessionId": "81762334-81fe-4dbe-b93b-092287f17a70",
+      "evalId": "5b9e8c3b-9cb2-4d2c-9d37-be11df3dd2e0",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 10,
+      "sessionId": "fe885ac1-e60e-4222-9fa7-fbcdccdeeca8",
+      "evalId": "0ca64d46-1dca-45ca-81d6-72c17de151ab",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 11,
+      "sessionId": "c1be0176-a025-45df-9f26-2197be0a4f72",
+      "evalId": "7e3b4a2c-8ead-4c03-9cae-da65bdeb0c69",
+      "overall": 1,
+      "competencies": {
+        "problem_framing": 1,
+        "customer_engagement": 1,
+        "data_fluency": 1,
+        "design_under_constraints": 1,
+        "execution": 1,
+        "ai_orchestration": 1,
+        "teamwork": 1,
+        "outcome_communication": 1
+      },
+      "status": "complete"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 12,
+      "sessionId": "",
+      "evalId": null,
+      "overall": null,
+      "competencies": {},
+      "status": "error"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 13,
+      "sessionId": "",
+      "evalId": null,
+      "overall": null,
+      "competencies": {},
+      "status": "error"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 14,
+      "sessionId": "dccb4fe6-0398-43ad-892c-5f3ca57e8285",
+      "evalId": null,
+      "overall": null,
+      "competencies": {},
+      "status": "missing"
+    },
+    {
+      "archetype": "WEAK",
+      "trial": 15,
+      "sessionId": "",
+      "evalId": null,
+      "overall": null,
+      "competencies": {},
+      "status": "error"
+    }
+  ],
+  "summaries": [
+    {
+      "archetype": "STRONG",
+      "label": "Strong FDE",
+      "blurb": "Probes the brief with a clarifying question to the customer (Dana) before writing SQL, reads the docs, verifies all three reported issues with data, pushes back on the teammate (Sam) with evidence when his hint is wrong, and ships a ranked deliverable that explicitly distinguishes signal from noise.",
+      "trials": [
+        {
+          "archetype": "STRONG",
+          "trial": 1,
+          "sessionId": "41958729-844b-4290-8751-d49d9307491f",
+          "evalId": "edfe7c89-834a-4213-9249-0f978b30bac7",
+          "overall": 4.51,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 4
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 2,
+          "sessionId": "08a4d4b8-514c-40ae-af0f-16e3ee12db46",
+          "evalId": "a389f589-90de-4bdb-86dc-d7c08711729a",
+          "overall": 4.51,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 4
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 3,
+          "sessionId": "77a359be-7886-4821-af6d-34d0c7ed6fc4",
+          "evalId": "d9480369-b719-41be-a5ea-ac2df79a9a11",
+          "overall": 4.51,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 4
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 4,
+          "sessionId": "8b203843-1b8a-4c1c-ad15-6807569cce08",
+          "evalId": "c092234d-7f52-4d28-aecb-71d1007f3f99",
+          "overall": 4.76,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 5,
+          "sessionId": "b7cbd70c-f02f-433c-b93e-ee1032103301",
+          "evalId": "ab0d5bf1-b309-467d-a47a-576b7b43391b",
+          "overall": 4.58,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 6,
+          "sessionId": "2bd2f91a-eade-424f-8d15-507bedff81f7",
+          "evalId": "8daddf3b-9bfa-4ed7-b96b-ff8ad8cce11f",
+          "overall": 4.8,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 5,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 7,
+          "sessionId": "44759efa-8141-4d25-b0f0-762325fb9a1d",
+          "evalId": "fc47019d-f7d1-4544-b7af-d943e3d5f726",
+          "overall": 4.88,
+          "competencies": {
+            "problem_framing": 5,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 8,
+          "sessionId": "8bcff8f1-aa8a-421b-a780-56e0f50801df",
+          "evalId": "8867592f-8f58-4e20-9b29-5e82af9fa138",
+          "overall": 4.92,
+          "competencies": {
+            "ai_orchestration": 4,
+            "problem_framing": 5,
+            "customer_engagement": 5,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 9,
+          "sessionId": "6642f623-761d-4c47-b8c6-9be25b33591a",
+          "evalId": "9423546e-15b2-4b00-8b69-33e09d7501a0",
+          "overall": 4.76,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 10,
+          "sessionId": "e701bb88-c27b-4d89-a335-f8859baba5b0",
+          "evalId": "7fe5fe75-2252-49ca-a6d9-98b12c0b9892",
+          "overall": 4.62,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 5,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 11,
+          "sessionId": "b0fe6bc3-2d3e-4327-ba20-f861537174c0",
+          "evalId": "687a7b07-ef24-4afd-9df5-1c52ca222899",
+          "overall": 4.51,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 4,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 4
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 12,
+          "sessionId": "355452a4-de4b-4bf1-8435-12349d9bbaa4",
+          "evalId": "20d990ca-9f61-4540-8d46-6e19466904e3",
+          "overall": 4.76,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 13,
+          "sessionId": "fff94e82-d877-4b17-be02-a2a6ce99959e",
+          "evalId": "f7e7bb2c-9ce3-4df8-9be3-8df18694b019",
+          "overall": 4.76,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 14,
+          "sessionId": "1f2cb208-6f5d-4273-9d29-1d770becf1cb",
+          "evalId": "f2480563-1274-4b63-a143-c60b221d16d5",
+          "overall": 4.92,
+          "competencies": {
+            "problem_framing": 5,
+            "customer_engagement": 5,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "STRONG",
+          "trial": 15,
+          "sessionId": "c90ed496-ea6e-410a-b210-b3f42413ea4f",
+          "evalId": "4fdd16ad-a8fd-4d85-8576-46f98bfa59a5",
+          "overall": 4.76,
+          "competencies": {
+            "problem_framing": 4,
+            "customer_engagement": 4,
+            "data_fluency": 5,
+            "design_under_constraints": 5,
+            "execution": 5,
+            "ai_orchestration": 4,
+            "teamwork": 5,
+            "outcome_communication": 5
+          },
+          "status": "complete"
+        }
+      ],
+      "overallRuns": [
+        4.51,
+        4.51,
+        4.51,
+        4.76,
+        4.58,
+        4.8,
+        4.88,
+        4.92,
+        4.76,
+        4.62,
+        4.51,
+        4.76,
+        4.76,
+        4.92,
+        4.76
+      ],
+      "overallMean": 4.703999999999999,
+      "overallStdev": 0.15169518308578084,
+      "overallCi": {
+        "lower": 4.61998565275587,
+        "upper": 4.788014347244128,
+        "half": 0.08401434724412933
+      },
+      "competencyMeans": {
+        "design_under_constraints": 4.6,
+        "teamwork": 5,
+        "data_fluency": 5,
+        "execution": 5,
+        "problem_framing": 4.2,
+        "outcome_communication": 4.733333333333333,
+        "ai_orchestration": 4,
+        "customer_engagement": 4.266666666666667
+      },
+      "competencyStdevs": {
+        "design_under_constraints": 0.5070925528371099,
+        "teamwork": 0,
+        "data_fluency": 0,
+        "execution": 0,
+        "problem_framing": 0.4140393356054125,
+        "outcome_communication": 0.4577377082170635,
+        "ai_orchestration": 0,
+        "customer_engagement": 0.4577377082170635
+      }
+    },
+    {
+      "archetype": "MEDIAN",
+      "label": "Median FDE",
+      "blurb": "Competent SQL but does not probe ambiguity. Acknowledges the teammate neutrally without verifying his hint. Finds the two real issues (revenue + churn) but does not investigate the third. Ships a workable two-issue deliverable with a caveat about the unverified third.",
+      "trials": [
+        {
+          "archetype": "MEDIAN",
+          "trial": 1,
+          "sessionId": "b477b115-4a94-44e9-8363-1d97829b01a3",
+          "evalId": "2132f32a-3b4e-457f-9c11-f92268294dbb",
+          "overall": 2.66,
+          "competencies": {
+            "teamwork": 2,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 2,
+          "sessionId": "f6f6b565-c092-4278-b38e-939ddfaa474f",
+          "evalId": "5ccf6eba-1c6f-4f53-a26d-e76bcb1dd72d",
+          "overall": 2.54,
+          "competencies": {
+            "problem_framing": 2,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 3,
+          "sessionId": "8b4f1da2-c4ba-4a2d-95d2-5174e5841a13",
+          "evalId": "53bc51fc-64ea-4537-9f02-54e66a4e0bd9",
+          "overall": 2.62,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 2,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 4,
+          "sessionId": "5ca2aa27-f179-4672-9241-bad2fac1e686",
+          "evalId": "fbd33281-35e9-4489-ba6e-e5ff62f90090",
+          "overall": 2.5,
+          "competencies": {
+            "problem_framing": 2,
+            "customer_engagement": 2,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 5,
+          "sessionId": "55c5832f-72cf-4e69-9deb-efccf9e738c7",
+          "evalId": "f11dc5fa-53b3-4d1f-90a4-5c915d713798",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 6,
+          "sessionId": "e22990a3-c9f2-488f-b8ec-5ab86c78d74e",
+          "evalId": "f248e9f5-c70b-4174-8f73-82c01d6837a6",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 7,
+          "sessionId": "15bc3cfd-274e-42ed-a69c-02a2d9bd2b78",
+          "evalId": "a99766a9-6d74-4171-81b6-68c97562cb93",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 8,
+          "sessionId": "fd9b13ba-ae60-444c-a54d-931862357585",
+          "evalId": "951e99fd-dd74-4a6f-bec4-c3457cd42bdf",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 9,
+          "sessionId": "d3d359ca-b934-4399-8313-366ccca2fef4",
+          "evalId": "a91f973e-93ac-46bd-bffa-4c0f306a1c34",
+          "overall": 2.38,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 2,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 10,
+          "sessionId": "d8340af1-a8d2-4c21-8b75-7fb35342e5d2",
+          "evalId": "7536c961-9e77-45f8-be30-06658171d069",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 11,
+          "sessionId": "28ef2366-9f7b-494d-8dfe-9143cd8dfffd",
+          "evalId": "c17dc4c2-223e-4a15-9c9a-eedcfa94e166",
+          "overall": 2.5,
+          "competencies": {
+            "problem_framing": 2,
+            "customer_engagement": 2,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 12,
+          "sessionId": "bcaaaa13-daf1-4feb-a262-6d0c59d88e58",
+          "evalId": "f0abdd09-906b-474a-bd98-e8bf81a15469",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 13,
+          "sessionId": "0bcfff7f-49dc-4fe4-aa8c-50643dbcd9bc",
+          "evalId": "5bb4a582-86ae-4d16-9e8a-7c492e79447c",
+          "overall": 2.5,
+          "competencies": {
+            "problem_framing": 2,
+            "customer_engagement": 2,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 14,
+          "sessionId": "213a36fb-75bc-4070-8844-bfe52b9e483a",
+          "evalId": null,
+          "overall": null,
+          "competencies": {},
+          "status": "missing"
+        },
+        {
+          "archetype": "MEDIAN",
+          "trial": 15,
+          "sessionId": "4b3a771f-553d-4560-970a-83f1cb31c03d",
+          "evalId": "899a42f0-83ad-4cb4-8287-86cf066f7f79",
+          "overall": 2.66,
+          "competencies": {
+            "problem_framing": 3,
+            "customer_engagement": 3,
+            "data_fluency": 3,
+            "design_under_constraints": 3,
+            "execution": 3,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 3
+          },
+          "status": "complete"
+        }
+      ],
+      "overallRuns": [
+        2.66,
+        2.54,
+        2.62,
+        2.5,
+        2.66,
+        2.66,
+        2.66,
+        2.66,
+        2.38,
+        2.66,
+        2.5,
+        2.66,
+        2.5,
+        2.66
+      ],
+      "overallMean": 2.594285714285714,
+      "overallStdev": 0.0922967026425177,
+      "overallCi": {
+        "lower": 2.541004278520766,
+        "upper": 2.6475671500506617,
+        "half": 0.053281435764947815
+      },
+      "competencyMeans": {
+        "design_under_constraints": 3,
+        "teamwork": 2,
+        "data_fluency": 3,
+        "execution": 3,
+        "problem_framing": 2.5714285714285716,
+        "outcome_communication": 3,
+        "ai_orchestration": 1,
+        "customer_engagement": 2.642857142857143
+      },
+      "competencyStdevs": {
+        "design_under_constraints": 0,
+        "teamwork": 0,
+        "data_fluency": 0,
+        "execution": 0,
+        "problem_framing": 0.646206172658864,
+        "outcome_communication": 0,
+        "ai_orchestration": 0,
+        "customer_engagement": 0.49724515809884684
+      }
+    },
+    {
+      "archetype": "WEAK",
+      "label": "Weak FDE",
+      "blurb": "Accepts the teammate's misleading hint without verification. Runs one naive aggregate query. Does not read docs, does not ask the customer anything, does not engage the AI assistant. Submits an incomplete deliverable that prioritizes the wrong issue.",
+      "trials": [
+        {
+          "archetype": "WEAK",
+          "trial": 1,
+          "sessionId": "5361e52d-51ba-4ae2-a542-d130a70abec9",
+          "evalId": "8532336c-65f0-432c-afc2-1907b00bbf04",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 2,
+          "sessionId": "da207812-fa83-4102-a409-8208bd905df1",
+          "evalId": "28153b38-d9bf-4606-aeb1-e14118b878f0",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 3,
+          "sessionId": "25326a8e-8a41-405d-9691-63cd1c9689d9",
+          "evalId": "caca6703-29c8-4aa7-bfe9-bc2d3a3933f6",
+          "overall": 1,
+          "competencies": {
+            "design_under_constraints": 1,
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 4,
+          "sessionId": "5137203e-8697-4ce0-87f2-ac4e4bc070ec",
+          "evalId": "3f2f3825-2cc2-4269-94d8-c0311d1a7734",
+          "overall": 1.22,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 2,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 2,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 5,
+          "sessionId": "6774f31f-1cc2-412b-950b-62648e2ff9c5",
+          "evalId": "5e3fff07-e990-4ce6-8cdd-fc6a92b789c3",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 6,
+          "sessionId": "798cd120-d701-43ba-9889-d33917ad5290",
+          "evalId": "f1c415db-08f2-4426-bb43-1356bac92f4b",
+          "overall": 1,
+          "competencies": {
+            "customer_engagement": 1,
+            "problem_framing": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 7,
+          "sessionId": "817436a9-9076-4f05-a44f-f0ea67f58b50",
+          "evalId": "ef2a7ed7-fb7f-4014-90ca-15bc5b0193ee",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 8,
+          "sessionId": "2589f784-ac4d-4cf5-af5d-7402850edc53",
+          "evalId": null,
+          "overall": null,
+          "competencies": {},
+          "status": "missing"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 9,
+          "sessionId": "81762334-81fe-4dbe-b93b-092287f17a70",
+          "evalId": "5b9e8c3b-9cb2-4d2c-9d37-be11df3dd2e0",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 10,
+          "sessionId": "fe885ac1-e60e-4222-9fa7-fbcdccdeeca8",
+          "evalId": "0ca64d46-1dca-45ca-81d6-72c17de151ab",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 11,
+          "sessionId": "c1be0176-a025-45df-9f26-2197be0a4f72",
+          "evalId": "7e3b4a2c-8ead-4c03-9cae-da65bdeb0c69",
+          "overall": 1,
+          "competencies": {
+            "problem_framing": 1,
+            "customer_engagement": 1,
+            "data_fluency": 1,
+            "design_under_constraints": 1,
+            "execution": 1,
+            "ai_orchestration": 1,
+            "teamwork": 1,
+            "outcome_communication": 1
+          },
+          "status": "complete"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 12,
+          "sessionId": "",
+          "evalId": null,
+          "overall": null,
+          "competencies": {},
+          "status": "error"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 13,
+          "sessionId": "",
+          "evalId": null,
+          "overall": null,
+          "competencies": {},
+          "status": "error"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 14,
+          "sessionId": "dccb4fe6-0398-43ad-892c-5f3ca57e8285",
+          "evalId": null,
+          "overall": null,
+          "competencies": {},
+          "status": "missing"
+        },
+        {
+          "archetype": "WEAK",
+          "trial": 15,
+          "sessionId": "",
+          "evalId": null,
+          "overall": null,
+          "competencies": {},
+          "status": "error"
+        }
+      ],
+      "overallRuns": [
+        1,
+        1,
+        1,
+        1.22,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "overallMean": 1.0219999999999998,
+      "overallStdev": 0.06957010852370435,
+      "overallCi": {
+        "lower": 0.9722359999999998,
+        "upper": 1.0717639999999997,
+        "half": 0.049764
+      },
+      "competencyMeans": {
+        "design_under_constraints": 1,
+        "teamwork": 1.1,
+        "data_fluency": 1,
+        "execution": 1,
+        "problem_framing": 1,
+        "outcome_communication": 1,
+        "ai_orchestration": 1,
+        "customer_engagement": 1.1
+      },
+      "competencyStdevs": {
+        "design_under_constraints": 0,
+        "teamwork": 0.31622776601683794,
+        "data_fluency": 0,
+        "execution": 0,
+        "problem_framing": 0,
+        "outcome_communication": 0,
+        "ai_orchestration": 0,
+        "customer_engagement": 0.31622776601683794
+      }
+    }
+  ],
+  "verdict": {
+    "rankOrderHolds": true,
+    "pairwiseGapsExceedNoise": true,
+    "strongAlwaysAboveWeak": true,
+    "ciNonOverlap": true,
+    "perCompetencyConsistency": 1,
+    "notes": []
+  }
+}

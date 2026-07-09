@@ -197,41 +197,7 @@ export default function CostsDashboard() {
         </span>
       </section>
 
-      {/* b. LiteLLM gateway */}
-      <Panel
-        title="LiteLLM gateway"
-        subtitle="Model spend as the gateway accounts it — daily totals (last 30 days), per-model split, and the top per-key (≈ per-session) spenders."
-      >
-        <LitellmPanel data={litellm} />
-      </Panel>
-
-      {/* c. Internal usage */}
-      <Panel
-        title="Internal usage"
-        subtitle="Our own accounting: sessions.spend_usd per session, budget utilization against the per-session cap, and sandbox time by scenario."
-        headerRight={
-          <DateFilter
-            from={from}
-            to={to}
-            setFrom={setFrom}
-            setTo={setTo}
-            onApply={applyFilters}
-            busy={internalBusy}
-          />
-        }
-      >
-        {internalError !== null && (
-          <div style={{ padding: "10px 16px", fontSize: 12, color: color.error.base, borderBottom: `1px solid ${color.border.subtle}` }}>
-            {internalError}{" "}
-            <RetryButton onClick={applyFilters} />
-          </div>
-        )}
-        <div style={{ opacity: internalBusy ? 0.5 : 1 }}>
-          <InternalPanel data={internal} />
-        </div>
-      </Panel>
-
-      {/* d. Fixed-plan services */}
+      {/* b. Fixed-plan services */}
       <Panel
         title="Fixed services"
         subtitle="Static plan estimates with link-outs — no provider billing APIs are queried. Edit the FIXED_SERVICES constant on the server to update a card."
@@ -285,6 +251,40 @@ export default function CostsDashboard() {
               </a>
             </div>
           ))}
+        </div>
+      </Panel>
+
+      {/* c. LiteLLM gateway */}
+      <Panel
+        title="LiteLLM gateway"
+        subtitle="Model spend as the gateway accounts it — daily totals (last 30 days), per-model split, and the top per-key (≈ per-session) spenders."
+      >
+        <LitellmPanel data={litellm} />
+      </Panel>
+
+      {/* d. Internal usage */}
+      <Panel
+        title="Internal usage"
+        subtitle="Our own accounting: sessions.spend_usd per session, budget utilization against the per-session cap, and sandbox time by scenario."
+        headerRight={
+          <DateFilter
+            from={from}
+            to={to}
+            setFrom={setFrom}
+            setTo={setTo}
+            onApply={applyFilters}
+            busy={internalBusy}
+          />
+        }
+      >
+        {internalError !== null && (
+          <div style={{ padding: "10px 16px", fontSize: 12, color: color.error.base, borderBottom: `1px solid ${color.border.subtle}` }}>
+            {internalError}{" "}
+            <RetryButton onClick={applyFilters} />
+          </div>
+        )}
+        <div style={{ opacity: internalBusy ? 0.5 : 1 }}>
+          <InternalPanel data={internal} />
         </div>
       </Panel>
 
