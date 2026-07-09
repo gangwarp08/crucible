@@ -133,6 +133,18 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
   const factors = report?.factors ?? [];
   const startMs = new Date(sessionStart).getTime();
 
+  // Detector v4 (operator decision 2026-07-09): copy/paste events no longer
+  // contribute to the score — too noisy — so they arrive with no factor row.
+  // The counts stay recruiter-visible: derived here from the raw integrity
+  // event stream and rendered alongside the factor table, labeled "not
+  // scored". (Rows also cover pre-v4 servers whose factors still include
+  // paste_burst/copy_source — those keep rendering as scored factors above.)
+  const scoredKinds = new Set(factors.map((f) => f.kind));
+  const notScored = [
+    { kind: "paste_burst", count: integrityEvents.filter((e) => e.type === "integrity.paste_burst").length },
+    { kind: "copy", count: integrityEvents.filter((e) => e.type === "integrity.copy").length },
+  ].filter((r) => r.count > 0 && !scoredKinds.has(r.kind) && !scoredKinds.has(`${r.kind}_source`));
+
   return (
     <section
       style={{
@@ -239,8 +251,9 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
         </div>
       )}
 
-      {/* Factor breakdown */}
-      {factors.length > 0 && (
+      {/* Factor breakdown — scored factors first, then the v4 informational
+          copy/paste counts (visible, counted, never contributing points). */}
+      {(factors.length > 0 || notScored.length > 0) && (
         <div style={{ borderBottom: `1px solid ${color.border.subtle}` }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
             <thead>
@@ -257,6 +270,15 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
                   <td style={{ ...td, textAlign: "right" }}>{f.count}</td>
                   <td style={{ ...td, textAlign: "right", color: color.text.primary }}>
                     +{Number(f.contribution).toFixed(1)}
+                  </td>
+                </tr>
+              ))}
+              {notScored.map((f) => (
+                <tr key={f.kind} style={{ borderBottom: `1px solid ${color.border.subtle}` }}>
+                  <td style={td}>{f.kind}</td>
+                  <td style={{ ...td, textAlign: "right" }}>{f.count}</td>
+                  <td style={{ ...td, textAlign: "right", color: color.text.muted, fontStyle: "italic" }}>
+                    not scored
                   </td>
                 </tr>
               ))}

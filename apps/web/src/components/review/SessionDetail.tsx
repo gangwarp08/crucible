@@ -7,6 +7,8 @@ import Scorecard from "./Scorecard";
 import ShareReportModal from "./ShareReportModal";
 import OutcomeInvitePanel from "./OutcomeInvitePanel";
 import TranscriptPanel from "./TranscriptPanel";
+import PersonaMessagesPanel from "./PersonaMessagesPanel";
+import SqlHistoryPanel from "./SqlHistoryPanel";
 import FilesDiffPanel from "./FilesDiffPanel";
 import Timeline from "./Timeline";
 import CostPanel from "./CostPanel";
@@ -78,9 +80,14 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
             alignItems: "start",
           }}
         >
-          {/* Left column: transcript + terminal + files diff */}
+          {/* Left column: transcript + persona chat + SQL history + terminal
+              + files diff. The persona and SQL panels read straight from the
+              detail bundle's full event list (message.* / db.query rows) and
+              stay invisible for sessions without that traffic. */}
           <div style={{ minWidth: 0 }}>
             <TranscriptPanel transcript={detail.transcript} />
+            <PersonaMessagesPanel events={detail.events} />
+            <SqlHistoryPanel events={detail.events} sessionStart={detail.session.created_at} />
             <TerminalReplay events={detail.events} />
             <FilesDiffPanel fileSnapshots={detail.fileSnapshots} />
           </div>

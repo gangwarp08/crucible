@@ -16,7 +16,6 @@ import {
   computeSuspicionScore,
   SUSPICION_DETECTOR_VERSION,
   SUSPICION_WEIGHTS,
-  PASTE_CHARS_THRESHOLD,
   IDLE_MS_THRESHOLD,
   type SuspicionEventInput,
 } from "../src/services/suspicion-score.js";
@@ -40,7 +39,9 @@ function ev(
 
 console.log("verify-suspicion-score — P1.2");
 console.log(`suspicion detector version: ${SUSPICION_DETECTOR_VERSION}\n`);
-check("detector version is 3 (geo/network factors)", SUSPICION_DETECTOR_VERSION === "3");
+check("detector version is 4 (copy/paste informational only)", SUSPICION_DETECTOR_VERSION === "4");
+check("copy/paste factors removed from the weight table",
+  !("paste_burst" in SUSPICION_WEIGHTS) && !("copy_source" in SUSPICION_WEIGHTS));
 
 // ── [a] clean run scores 0 ──
 console.log("[a] clean run");
@@ -82,9 +83,15 @@ console.log("\n[b] noisy run");
   check("score clamped to <=100", r.score <= 100, `score=${r.score}`);
   const kinds = r.factors.map((f) => f.kind).sort();
   check(
-    "all seven factor kinds fire",
-    ["blur", "copy_source", "devtools", "focus_flurry", "fullscreen_exit", "idle_gap", "paste_burst"]
+    "all five scored factor kinds fire",
+    ["blur", "devtools", "focus_flurry", "fullscreen_exit", "idle_gap"]
       .every((k) => kinds.includes(k)),
+    kinds.join(","),
+  );
+  // v4: copy/paste events are present in the stream but produce NO factor.
+  check(
+    "copy/paste events produce no factor (v4 — informational only)",
+    !kinds.includes("paste_burst") && !kinds.includes("copy_source"),
     kinds.join(","),
   );
 }
@@ -93,17 +100,18 @@ console.log("\n[b] noisy run");
 console.log("\n[c] factor arithmetic");
 {
   seq = 0;
-  // 2 blurs (2*8=16) + 1 big paste (12) + 1 devtools (15) = 43 — under clamp.
+  // 2 blurs (2*8=16) + 1 devtools (15) = 31 — under clamp. The big paste
+  // rides along but contributes 0 (v4 — informational only).
   const mid = [
     ev("integrity.tab_blur", 0),
     ev("integrity.window_blur", 5_000),
-    ev("integrity.paste_burst", 10_000, { chars: PASTE_CHARS_THRESHOLD + 100, target: "editor" }),
+    ev("integrity.paste_burst", 10_000, { chars: 2_000, target: "editor" }),
     ev("integrity.devtools", 20_000),
   ];
   const r = computeSuspicionScore(mid);
   const sum = r.factors.reduce((s, f) => s + f.contribution, 0);
   check("factors sum === score", sum === r.score, `sum=${sum} score=${r.score}`);
-  check("expected mid score 43", r.score === 43, `score=${r.score}`);
+  check("expected mid score 31 (paste contributes 0)", r.score === 31, `score=${r.score}`);
   for (const f of r.factors) {
     check(
       `${f.kind}: contribution = min(count*weight, cap)`,
@@ -250,17 +258,36 @@ console.log("\n[c] factor arithmetic");
     JSON.stringify(r));
 }
 
-// ── [d] thresholds — sub-threshold events contribute nothing ──
+// ── [d] thresholds + v4 copy/paste neutrality ──
 console.log("\n[d] thresholds");
 {
   seq = 0;
   const sub = [
-    ev("integrity.paste_burst", 0, { chars: PASTE_CHARS_THRESHOLD, target: "editor" }), // not > threshold
-    ev("integrity.idle_gap", 1_000, { ms: IDLE_MS_THRESHOLD }),                          // not > threshold
-    ev("integrity.copy", 2_000, { source: "other", chars: 900 }),                         // not brief/docs
+    ev("integrity.idle_gap", 1_000, { ms: IDLE_MS_THRESHOLD }), // not > threshold
   ];
   const r = computeSuspicionScore(sub);
-  check("sub-threshold paste/idle/copy(other) → score 0", r.score === 0, `score=${r.score}`);
+  check("sub-threshold idle → score 0", r.score === 0, `score=${r.score}`);
+}
+// v4: a copy/paste-only stream contributes NOTHING to the score — regardless
+// of size or source — but the raw counts remain derivable from the same event
+// stream (which is exactly how the SuspicionPanel surfaces them, "not scored").
+{
+  seq = 0;
+  const copyPasteOnly = [
+    ev("integrity.paste_burst", 0, { chars: 50_000, target: "editor" }),
+    ev("integrity.paste_burst", 5_000, { chars: 2_000, target: "chat" }),
+    ev("integrity.copy", 10_000, { source: "brief", chars: 900 }),
+    ev("integrity.copy", 15_000, { source: "docs", chars: 400 }),
+    ev("integrity.copy", 20_000, { source: "other", chars: 100 }),
+  ];
+  const r = computeSuspicionScore(copyPasteOnly);
+  check("copy/paste-only stream → score 0 (v4)", r.score === 0, `score=${r.score}`);
+  check("copy/paste-only stream → no factors", r.factors.length === 0,
+    JSON.stringify(r.factors));
+  const pasteCount = copyPasteOnly.filter((e) => e.type === "integrity.paste_burst").length;
+  const copyCount = copyPasteOnly.filter((e) => e.type === "integrity.copy").length;
+  check("counts still derivable from raw events (2 pastes, 3 copies)",
+    pasteCount === 2 && copyCount === 3, `paste=${pasteCount} copy=${copyCount}`);
 }
 
 // ── [e] focus-flurry boundary — 4 pairs no, 5 pairs yes ──
