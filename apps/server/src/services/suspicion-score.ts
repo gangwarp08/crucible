@@ -88,7 +88,7 @@ export const FLURRY_WINDOW_MS = 60_000;
 
 // ── Timezone → country (geo_tz_mismatch, detector v3) ──────────────────────
 // DELIBERATELY CONSERVATIVE map of major IANA zones to their ISO-3166 alpha-2
-// country (matching geoip-lite's `country`). Known limits, all resolved in
+// country (matching the GeoLite2 country ISO code). Known limits, all resolved in
 // favor of NOT flagging:
 //   - coverage is a curated shortlist of high-population zones, not the full
 //     tzdb — an unlisted zone (e.g. Europe/Podgorica) produces NO factor;
@@ -293,7 +293,11 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
  *  shared-report allowlist has no network field; verify-geo-integrity.ts
  *  asserts it). */
 export interface NetworkSummary {
-  /** Geo of the FIRST observed address (session start). */
+  /** Geo of the FIRST observed address (session start). Sessions recorded
+   *  after the country-only mmdb swap always have region/city null (we
+   *  deliberately ship the ~9MB GeoLite2-Country DB — nothing scores on
+   *  sub-country precision); older sessions may still carry persisted
+   *  region/city values, so the fields stay in the shape. */
   country: string | null;
   region: string | null;
   city: string | null;

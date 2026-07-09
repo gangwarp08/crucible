@@ -87,7 +87,10 @@ function identitySummary(id: SuspicionIdentity): { text: string; tone: string } 
   return { text: `${consented} · identity not verified (not attempted)`, tone: color.text.secondary };
 }
 
-/** "City, REGION, CC" from whatever geo fields exist; null when none do. */
+/** Location string from whatever geo fields exist; null when none do.
+ *  Sessions recorded after the country-only mmdb swap have region/city null,
+ *  so this typically renders just the country code — empty fields are
+ *  filtered, never rendered as "null". */
 function formatLocation(net: SuspicionNetwork): string | null {
   const parts = [net.city, net.region, net.country].filter(
     (p): p is string => typeof p === "string" && p.length > 0,

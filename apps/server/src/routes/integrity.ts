@@ -165,7 +165,7 @@ export async function integrityRoutes(server: FastifyInstance) {
 
       // Geo/network slice: every authenticated batch is also a network
       // observation — the SERVER-observed connection address (request.ip,
-      // X-Forwarded-For-aware via trustProxy) feeds geoip + ip-change
+      // X-Forwarded-For-aware via trustProxy) feeds the country lookup + ip-change
       // detection. Fire-and-forget: derived values only, never throws,
       // never blocks or breaks the candidate flow.
       void recordNetworkObservation(sessionId, request.ip, "integrity_batch");

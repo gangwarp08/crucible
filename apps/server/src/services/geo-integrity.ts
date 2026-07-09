@@ -4,9 +4,15 @@
 // creation (routes/sessions.ts) and on every integrity-batch POST
 // (routes/integrity.ts). It derives:
 //
-//   - coarse geo (country/region/city) via geoip-lite — an in-process lookup
-//     against the bundled MaxMind-lite database. NO external calls, so no IP
-//     ever leaves this process.
+//   - coarse geo (country ONLY) via the `maxmind` reader over a vendored
+//     GeoLite2-Country mmdb (apps/server/data/, ~9MB) — an in-process lookup,
+//     NO external calls, so no IP ever leaves this process. The integrity.geo
+//     payload keeps its {country, region, city, ip_hash} shape for stability,
+//     but region/city are now ALWAYS null: we deliberately ship the
+//     country-only database (~9MB disk / ~9MB RSS) instead of the city one
+//     (geoip-lite was ~110MB disk / 60-120MB RSS), because nothing downstream
+//     uses sub-country precision — the suspicion factors and network summary
+//     only ever compare countries.
 //   - an "ip identity": sha256(sessionId + ip) truncated to 16 hex chars. The
 //     sessionId acts as a per-session salt, so the same IP hashes differently
 //     in different sessions — cross-session correlation is impossible and the
@@ -32,9 +38,43 @@
 // recruiter, NEVER feeds evidence/evaluations.
 
 import { createHash } from "crypto";
-import geoip from "geoip-lite";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import maxmind, { type CountryResponse, type Reader } from "maxmind";
 import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
+
+// ── Country lookup (vendored GeoLite2-Country mmdb) ─────────────────────────
+// Resolved relative to this module so it works from both src/ (tsx) and dist/
+// (tsc build): {src|dist}/services → ../../data. Same pattern as
+// dataset-seed.ts's REPO_ROOT resolver.
+const here = dirname(fileURLToPath(import.meta.url));
+const MMDB_PATH = resolve(here, "../../data/GeoLite2-Country.mmdb");
+
+// Lazy-opened once, shared across all observations. `null` after a failed
+// open ⇒ we retry on the next observation rather than caching the failure
+// forever (the file could appear after a deploy fix).
+let readerPromise: Promise<Reader<CountryResponse>> | null = null;
+
+function getReader(): Promise<Reader<CountryResponse>> {
+  if (readerPromise === null) {
+    readerPromise = maxmind.open<CountryResponse>(MMDB_PATH);
+    readerPromise.catch(() => { readerPromise = null; });
+  }
+  return readerPromise;
+}
+
+/** Country ISO code for an IP, or null when unresolvable (private/unroutable
+ *  addresses, gaps in the DB). Falls back to registered_country when the
+ *  located country is absent (e.g. 1.1.1.1 carries only AU registration) —
+ *  matching geoip-lite's previous behavior. Throws only if the mmdb itself
+ *  can't be opened; callers treat that as "observation failed" (logged,
+ *  session unaffected). */
+async function lookupCountry(ip: string): Promise<string | null> {
+  const reader = await getReader();
+  const hit = reader.get(ip);
+  return hit?.country?.iso_code ?? hit?.registered_country?.iso_code ?? null;
+}
 
 /** Stop appending integrity.ip_change after this many per session — a
  *  rotating-proxy client can't grow the events table unboundedly. (The
@@ -117,19 +157,21 @@ async function observe(sessionId: string, ip: string, _source: NetworkObservatio
   // Common case: same address as last time — nothing to record.
   if (state.hasGeo && state.lastHash === ipHash) return;
 
-  // geoip-lite returns null for private/unroutable addresses (localhost, LAN)
-  // and empty strings for unknown region/city — normalize all of those to null.
-  const geo = geoip.lookup(ip);
-  const country = geo?.country || null;
+  // Unresolvable addresses (localhost, LAN, DB gaps) → country null, same
+  // conservative semantics as before. A reader-open failure throws here and
+  // the observation is skipped + logged by the chain's catch — never breaks
+  // the candidate flow.
+  const country = await lookupCountry(ip);
 
   if (!state.hasGeo) {
     // First observation → the one-time integrity.geo marker. Appended even
     // when the lookup came back empty: the ip_hash still anchors ip-change
-    // detection for the rest of the session.
+    // detection for the rest of the session. region/city are permanently
+    // null — country-only DB (see header).
     await appendEvent(sessionId, "integrity.geo", "system", {
       country,
-      region: geo?.region || null,
-      city: geo?.city || null,
+      region: null,
+      city: null,
       ip_hash: ipHash,
     });
     state.hasGeo = true;

@@ -59,7 +59,7 @@ export type IntegrityEventType = (typeof INTEGRITY_EVENT_TYPES)[number];
 // part of IntegrityEventSchema (the client-postable union): the ingest route
 // rejects them with an explicit 400 (routes/integrity.ts) on top of the Zod
 // rejection. Payloads carry DERIVED VALUES ONLY — a per-session-salted ip hash
-// and coarse geoip fields; the raw IP is never persisted or logged.
+// and a coarse geo country; the raw IP is never persisted or logged.
 //
 //   integrity.geo        {country, region, city, ip_hash}
 //   integrity.ip_change  {change_count, prev_ip_hash, new_ip_hash,

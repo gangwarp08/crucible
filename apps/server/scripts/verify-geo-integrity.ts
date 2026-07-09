@@ -4,8 +4,9 @@
  * Infra-light (Supabase service-role + in-process Fastify inject — no E2B, no
  * LLM, no listening server). Asserts:
  *   [a] recordNetworkObservation: integrity.geo appended ONCE on the first
- *       observation (geoip country + per-session-salted ip_hash, actor
- *       "system"); same-IP repeats are no-ops; a distinct IP appends
+ *       observation (GeoLite2-Country mmdb country + per-session-salted
+ *       ip_hash, actor "system"; region/city always null — country-only DB);
+ *       same-IP repeats are no-ops; a distinct IP appends
  *       integrity.ip_change with correct change_count / prev/new hashes /
  *       country_changed; concurrent same-IP observations don't double-append.
  *   [b] restart statelessness (state rebuilt from event rows after
@@ -39,7 +40,6 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !SUPABASE_KEY) { console.error("Missing SUPABASE env"); process.exit(1); }
 
 // Dynamic imports AFTER dotenv — src modules transitively import env.ts.
-const geoip = (await import("geoip-lite")).default;
 const {
   recordNetworkObservation,
   resetGeoIntegrityState,
@@ -76,11 +76,16 @@ const check = (m: string, ok: boolean, detail?: string) =>
 const SID_A = "00000000-0000-4000-8000-00000000b201"; // service-level tests (NOT in registry → direct path)
 const SID_B = "00000000-0000-4000-8000-00000000b202"; // route-inject tests (fake registry entry)
 
-// Fixed public IPs with stable geoip-lite results (8.8.8.8 → US, 1.1.1.1 → AU,
-// 81.2.69.142 → GB) + TEST-NET-3 addresses that geoip-lite cannot resolve.
+// Fixed public IPs with stable GeoLite2-Country results (8.8.8.8 → US,
+// 1.1.1.1 → AU via registered_country, 81.2.69.142 → GB) + TEST-NET-3
+// addresses the DB cannot resolve. Hard-coded expectations double as the
+// known-IP sanity assertions for the vendored mmdb + reader wiring.
 const IP1 = "8.8.8.8";
+const IP1_COUNTRY = "US";
 const IP2 = "1.1.1.1";
+const IP2_COUNTRY = "AU";
 const IP3 = "81.2.69.142";
+const IP3_COUNTRY = "GB";
 const capIps = Array.from({ length: 12 }, (_, i) => `203.0.113.${i + 1}`);
 const ALL_IPS = [IP1, IP2, IP3, ...capIps, "127.0.0.1"];
 
@@ -139,10 +144,11 @@ async function readEvents(id: string): Promise<EventRow[]> {
   const geoRows = rows.filter((r) => r.type === "integrity.geo");
   check("first observation appends exactly one integrity.geo", geoRows.length === 1 && rows.length === 1);
   const g = geoRows[0];
-  const expectGeo1 = geoip.lookup(IP1);
   check("geo actor is 'system'", g?.actor === "system", g?.actor);
-  check(`geo country matches geoip-lite (${expectGeo1?.country})`,
-    g?.payload["country"] === (expectGeo1?.country || null), JSON.stringify(g?.payload));
+  check(`geo country is ${IP1_COUNTRY} (known-IP mmdb assertion: ${IP1})`,
+    g?.payload["country"] === IP1_COUNTRY, JSON.stringify(g?.payload));
+  check("geo region/city are null (country-only DB)",
+    g?.payload["region"] === null && g?.payload["city"] === null, JSON.stringify(g?.payload));
   check("geo ip_hash = sha256(sessionId+ip)[0:16]",
     g?.payload["ip_hash"] === hashSessionIp(SID_A, IP1), String(g?.payload["ip_hash"]));
   check("geo payload has exactly the agreed keys",
@@ -156,20 +162,16 @@ async function readEvents(id: string): Promise<EventRow[]> {
   await recordNetworkObservation(SID_A, IP2, "integrity_batch");
   rows = await readEvents(SID_A);
   const change1 = rows.find((r) => r.type === "integrity.ip_change");
-  const expectGeo2 = geoip.lookup(IP2);
-  const expectChanged12 =
-    (expectGeo1?.country || null) !== null && (expectGeo2?.country || null) !== null &&
-    expectGeo1!.country !== expectGeo2!.country;
   check("distinct IP appends integrity.ip_change", change1 !== undefined && rows.length === 2);
   check("ip_change actor is 'system'", change1?.actor === "system");
   check("ip_change change_count=1", change1?.payload["change_count"] === 1);
   check("ip_change prev/new hashes correct",
     change1?.payload["prev_ip_hash"] === hashSessionIp(SID_A, IP1) &&
     change1?.payload["new_ip_hash"] === hashSessionIp(SID_A, IP2));
-  check(`ip_change country_changed=${expectChanged12} (US→AU)`,
-    change1?.payload["country_changed"] === expectChanged12, JSON.stringify(change1?.payload));
-  check("ip_change new_country matches geoip-lite",
-    change1?.payload["new_country"] === (expectGeo2?.country || null));
+  check("ip_change country_changed=true (US→AU)",
+    change1?.payload["country_changed"] === true, JSON.stringify(change1?.payload));
+  check(`ip_change new_country is ${IP2_COUNTRY} (known-IP mmdb assertion: ${IP2})`,
+    change1?.payload["new_country"] === IP2_COUNTRY, JSON.stringify(change1?.payload));
 
   // Concurrent observations of the SAME new IP → serialized → ONE ip_change.
   await Promise.all([
@@ -270,7 +272,7 @@ async function readEvents(id: string): Promise<EventRow[]> {
     (goodEnv.json() as { accepted?: number }).accepted === 1, goodEnv.body);
 
   // Each authenticated POST is also a network observation. Inject uses
-  // 127.0.0.1 → geoip null → a geo marker with null fields but a real hash.
+  // 127.0.0.1 → unresolvable in the mmdb → a geo marker with null fields but a real hash.
   await recordNetworkObservation(SID_B, "127.0.0.1", "integrity_batch"); // awaits the serialized chain tail
   await flushTelemetry(SID_B);
   const rowsB = await readEvents(SID_B);
@@ -303,11 +305,11 @@ async function readEvents(id: string): Promise<EventRow[]> {
   const net = suspBody.network;
   check("network block present", net !== null && typeof net === "object", JSON.stringify(suspBody.network));
   check("network.country = first observed country",
-    net?.country === (expectGeo1?.country || null), JSON.stringify(net));
+    net?.country === IP1_COUNTRY, JSON.stringify(net));
+  check("network.region/city are null (country-only DB)",
+    net?.region === null && net?.city === null, JSON.stringify(net));
   check("network.ip_changes = 10", net?.ip_changes === 10);
-  const expectedCountries = [expectGeo1?.country, expectGeo2?.country, geoip.lookup(IP3)?.country]
-    .filter((c): c is string => typeof c === "string" && c.length > 0)
-    .filter((c, i, a) => a.indexOf(c) === i);
+  const expectedCountries = [IP1_COUNTRY, IP2_COUNTRY, IP3_COUNTRY];
   const gotCountries = net && Array.isArray(net.countries) ? net.countries : null;
   check("network.countries lists the distinct countries in first-seen order",
     gotCountries !== null && JSON.stringify(gotCountries) === JSON.stringify(expectedCountries),

@@ -24,13 +24,12 @@
     "dotenv": "^16.4.0",
     "e2b": "^1.13.2",
     "fastify": "^5.0.0",
-    "geoip-lite": "^2.0.3",
     "ioredis": "^5.4.0",
+    "maxmind": "^5.0.6",
     "undici": "^6.19.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/geoip-lite": "^1.4.4",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.16.0",
