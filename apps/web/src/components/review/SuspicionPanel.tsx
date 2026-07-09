@@ -29,7 +29,8 @@ interface Props {
 
 // Suspicion is 0–100 where HIGH is bad — the inverse of the 1–5 competency
 // scale — so scoreColor() can't be reused directly; same palette, inverted.
-function suspicionColor(score: number): string {
+// Exported: SessionDetail's overview header reuses it for the suspicion chip.
+export function suspicionColor(score: number): string {
   if (score >= 60) return color.error.base;
   if (score >= 30) return color.warn.base;
   if (score >= 10) return color.accent.base;

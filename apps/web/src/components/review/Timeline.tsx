@@ -69,7 +69,16 @@ function describe(ev: ReviewEvent): EventDescriptor {
  *  evidence chip to the underlying event row (`event-${seq}`). Returns true
  *  if the element was found, false if not — Scorecard uses this to grey out
  *  evidence whose seq isn't in the loaded events window. */
+/** Fired (with the target DOM id as detail) before scrollToHighlight resolves
+ *  its element. SessionDetail listens: its evidence tabs hide inactive panels,
+ *  so it switches to the tab that owns `turn-*` / `file-*` targets and retries
+ *  the scroll once the panel is visible. */
+export const REVEAL_EVENT = "review:reveal-scroll-target";
+
 export function scrollToHighlight(id: string): boolean {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent<string>(REVEAL_EVENT, { detail: id }));
+  }
   const el = document.getElementById(id);
   if (!el) return false;
   el.scrollIntoView({ behavior: "smooth", block: "center" });
