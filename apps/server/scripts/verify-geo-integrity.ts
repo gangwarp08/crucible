@@ -13,7 +13,7 @@
  *       resetGeoIntegrityState) + the 10-ip_change cap + PRIVACY: the raw IP
  *       literal appears in NO event payload; unknown-geo changes are
  *       conservatively country_changed=false.
- *   [c] suspicion detector v3 factors (hand-computed) over the persisted rows.
+ *   [c] suspicion detector v4 factors (hand-computed) over the persisted rows.
  *   [d] ingest route: client-posted integrity.geo / integrity.ip_change →
  *       explicit 400; integrity.client_env accepted; each authenticated POST
  *       also records a network observation.
@@ -209,12 +209,12 @@ async function readEvents(id: string): Promise<EventRow[]> {
   const leaked = ALL_IPS.filter((ip) => serializedRows.includes(ip));
   check("PRIVACY: no raw IP literal in any event row", leaked.length === 0, leaked.join(","));
 
-  // ── [c] suspicion detector v3 over the persisted rows (hand-computed) ────
-  console.log("\n[c] suspicion factors (detector v3)");
+  // ── [c] suspicion detector v4 over the persisted rows (hand-computed) ────
+  console.log("\n[c] suspicion factors (detector v4)");
   const suspicionInput = rows as unknown as SuspicionEventInput[];
   const expectedCountryChanges = changes.filter((c) => c.payload["country_changed"] === true).length;
   const s = computeSuspicionScore(suspicionInput);
-  check("suspicion version is 3", s.version === "3", s.version);
+  check("suspicion version is 4", s.version === "4", s.version);
   const fIp = s.factors.find((f) => f.kind === "ip_change");
   const fCc = s.factors.find((f) => f.kind === "country_change");
   check(`ip_change factor: count 10 → contribution capped at ${SUSPICION_WEIGHTS.ip_change.cap}`,
@@ -318,7 +318,7 @@ async function readEvents(id: string): Promise<EventRow[]> {
   check("shape has exactly the agreed keys",
     JSON.stringify(Object.keys(net ?? {}).sort()) ===
     JSON.stringify(["city", "countries", "country", "ip_changes", "region", "tz_mismatch"]));
-  check("reported detector version is 3", suspBody.suspicion?.version === "3");
+  check("reported detector version is 4", suspBody.suspicion?.version === "4");
   await reviewApp.close();
 
   // ── [f] public shared report — zero geo/network material ─────────────────
@@ -336,7 +336,7 @@ async function readEvents(id: string): Promise<EventRow[]> {
     check("serialized shared report contains NO geo/network material",
       leakedReport.length === 0, leakedReport.join(","));
     check("shared report still carries score+version only",
-      typeof report.suspicion.score === "number" && report.suspicion.version === "3");
+      typeof report.suspicion.score === "number" && report.suspicion.version === "4");
   } catch (err) {
     fail(`buildSharedReport threw: ${err instanceof Error ? err.message : String(err)}`);
   }

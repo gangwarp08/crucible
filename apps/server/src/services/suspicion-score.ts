@@ -24,8 +24,14 @@
  *  geo_tz_mismatch factors over the new server-authored integrity.geo /
  *  integrity.ip_change events and the client's integrity.client_env timezone
  *  snapshot. Inert for every pre-slice session (those events don't exist), but
- *  scores across the boundary are not comparable, hence the bump. */
-export const SUSPICION_DETECTOR_VERSION = "3";
+ *  scores across the boundary are not comparable, hence the bump.
+ *  "3" → "4": operator decision 2026-07-09 — copy/paste informational only.
+ *  The paste_burst and copy_source factors were removed from scoring (too
+ *  noisy: heavy legitimate editor use fired them constantly). The
+ *  integrity.paste_burst / integrity.copy events remain in the taxonomy,
+ *  ingest, and review timeline unchanged, and the SuspicionPanel still shows
+ *  their raw counts labeled "not scored" — they just contribute 0 points. */
+export const SUSPICION_DETECTOR_VERSION = "4";
 
 export interface SuspicionFactor {
   kind: string;
@@ -58,12 +64,13 @@ export interface SuspicionEventInput {
 // CALIBRATION-PENDING defaults (spec P1 open question): proposed for cohort 1,
 // expected to be tuned once real cohort data exists. Each factor contributes
 // min(count * weight, cap); the total is clamped to 100.
+// NOTE (detector v4): paste_burst and copy_source are deliberately ABSENT.
+// integrity.paste_burst / integrity.copy stay in the taxonomy and ingest but
+// contribute 0 points — informational only (operator decision 2026-07-09).
 export const SUSPICION_WEIGHTS = {
   blur:            { weight: 8,  cap: 40 }, // tab_blur + window_blur count
-  paste_burst:     { weight: 12, cap: 36 }, // paste_burst with chars > PASTE_CHARS_THRESHOLD
   idle_gap:        { weight: 5,  cap: 20 }, // idle_gap with ms > IDLE_MS_THRESHOLD
   devtools:        { weight: 15, cap: 30 }, // best-effort signal — deliberately capped low-ish
-  copy_source:     { weight: 6,  cap: 24 }, // copy from brief/docs (candidate exfiltrating prompt material)
   fullscreen_exit: { weight: 4,  cap: 12 },
   focus_flurry:    { weight: 10, cap: 20 }, // >=5 blur/focus pairs inside 60s (tab-cycling)
   rate_capped:     { weight: 10, cap: 20 }, // server-authored ingest-cap marker — flooding raises suspicion, not hides it
@@ -81,7 +88,6 @@ export const SUSPICION_WEIGHTS = {
   geo_tz_mismatch: { weight: 8,  cap: 8  }, // browser timezone confidently contradicts the IP country (fires at most once)
 } as const;
 
-export const PASTE_CHARS_THRESHOLD = 500;
 export const IDLE_MS_THRESHOLD = 120_000;
 export const FLURRY_PAIRS = 5;
 export const FLURRY_WINDOW_MS = 60_000;
@@ -175,10 +181,8 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
     .sort((a, b) => a.seq - b.seq);
 
   let blurCount = 0;
-  let pasteCount = 0;
   let idleCount = 0;
   let devtoolsCount = 0;
-  let copyCount = 0;
   let fullscreenCount = 0;
   let rateCappedCount = 0;
   let faceAbsentCount = 0;
@@ -213,17 +217,14 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
           openBlurMs = null;
         }
         break;
-      case "integrity.paste_burst":
-        if (typeof p["chars"] === "number" && p["chars"] > PASTE_CHARS_THRESHOLD) pasteCount++;
-        break;
+      // integrity.paste_burst / integrity.copy deliberately have NO case:
+      // detector v4 dropped them from scoring (informational only — the review
+      // panel surfaces their raw counts from the event stream, "not scored").
       case "integrity.idle_gap":
         if (typeof p["ms"] === "number" && p["ms"] > IDLE_MS_THRESHOLD) idleCount++;
         break;
       case "integrity.devtools":
         devtoolsCount++;
-        break;
-      case "integrity.copy":
-        if (p["source"] === "brief" || p["source"] === "docs") copyCount++;
         break;
       case "integrity.fullscreen_exit":
         fullscreenCount++;
@@ -266,10 +267,8 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
 
   const all: SuspicionFactor[] = [
     factor("blur", blurCount),
-    factor("paste_burst", pasteCount),
     factor("idle_gap", idleCount),
     factor("devtools", devtoolsCount),
-    factor("copy_source", copyCount),
     factor("fullscreen_exit", fullscreenCount),
     factor("focus_flurry", countFlurries(pairTimesMs)),
     factor("rate_capped", rateCappedCount),
