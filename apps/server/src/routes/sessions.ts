@@ -14,6 +14,7 @@ import {
 } from "../services/session-link.js";
 import { getDefaultOrg, orgsTableKnownToExist, sessionOrgIdFromLink } from "../services/orgs.js";
 import { resolveScenarioForBand, type DifficultyBand } from "../services/difficulty-routing.js";
+import { recordNetworkObservation } from "../services/geo-integrity.js";
 import { env } from "../env.js";
 
 // Optional body. Missing body, empty body, and {} are all "no scenario" — the
@@ -202,6 +203,12 @@ export async function sessionRoutes(server: FastifyInstance) {
         throw err;
       }
     }
+
+    // Geo/network slice: first network observation for this session — appends
+    // the one-time integrity.geo marker (system-authored, derived values only;
+    // the raw IP is never persisted). AFTER createSandbox so the session row
+    // exists. Fire-and-forget: it never throws and never delays the 201.
+    void recordNetworkObservation(sessionId, request.ip, "session_create");
 
     const entry = sessionRegistry.get(sessionId)!;
     // Mint a session-bound JWT. The token is the ONLY thing that lets the

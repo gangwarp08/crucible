@@ -21,6 +21,17 @@
 // only — seq numbers are meaningless without the (internal-only) event
 // stream. (verify-identity-verify.ts asserts the serialized report contains
 // no identity material.)
+//
+// Geo/network slice: the same MUST-NEVER rule covers ALL network/geo
+// material — country/region/city, ip hashes (integrity.geo ip_hash,
+// integrity.ip_change prev/new_ip_hash), ip-change counts, distinct-country
+// lists, browser timezone name/offset (integrity.client_env), and the
+// tz-mismatch flag. Those are recruiter-only (the review suspicion endpoint's
+// `network` block). Structural exclusion here: the integrity.% event rows
+// fetched below feed ONLY computeSuspicionScore, whose output is reduced to
+// {score, version} by the .strict() SharedReportSchema — no event payload,
+// factor breakdown, or network summary can leave through this report.
+// (verify-geo-integrity.ts greps the serialized report for geo material.)
 
 import { z } from "zod";
 import { supabase } from "./supabase.js";

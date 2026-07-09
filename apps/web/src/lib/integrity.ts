@@ -57,6 +57,9 @@ export function useIntegrityMonitor(sessionId: string, enabled: boolean): void {
   // Survives enable/disable cycles so devtools is emitted at most once per
   // mounted workspace even if the session flips active → locked → active.
   const devtoolsSeenRef = useRef(false);
+  // Same once-per-mounted-workspace latch for the session-start client_env
+  // snapshot (geo/network slice).
+  const clientEnvSentRef = useRef(false);
 
   useEffect(() => {
     if (!enabled || !sessionId || typeof window === "undefined") return;
@@ -75,6 +78,25 @@ export function useIntegrityMonitor(sessionId: string, enabled: boolean): void {
       const batch = queue.splice(0, MAX_BATCH);
       void postIntegrityEvents(sessionId, batch); // never throws
     };
+
+    // ── Client environment snapshot (geo/network slice) — emitted ONCE ──────
+    // The browser's own timezone, cross-checked server-side against the
+    // IP-derived country (informational only, like every signal here). Any
+    // Intl failure degrades to tz_name: null — never blocks the candidate.
+    if (!clientEnvSentRef.current) {
+      clientEnvSentRef.current = true;
+      let tzName: string | null = null;
+      try {
+        // `|| null` also catches a hypothetical empty string (schema: min 1).
+        tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+      } catch {
+        tzName = null;
+      }
+      enqueue("integrity.client_env", {
+        tz_offset_minutes: Math.round(new Date().getTimezoneOffset()),
+        tz_name: tzName,
+      });
+    }
 
     // ── Blur/focus with sub-300ms noise suppression ──────────────────────────
     // A blur is only committed after BLUR_FOCUS_IGNORE_MS; a focus arriving

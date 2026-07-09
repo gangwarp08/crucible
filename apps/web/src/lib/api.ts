@@ -529,6 +529,19 @@ export interface SuspicionIdentity {
   matchConfidence: number | null;
 }
 
+/** Geo/network block (recruiter-only, informational) — derived values only:
+ *  coarse geo of the first observed address, ip-change count, distinct
+ *  countries, tz-mismatch flag. Null for sessions that predate the slice and
+ *  on older servers. */
+export interface SuspicionNetwork {
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  ipChanges: number;
+  countries: string[];
+  tzMismatch: boolean;
+}
+
 export interface SuspicionReport {
   /** 0–100; deterministic aggregation of integrity events (suspicion-score.ts).
    *  min(100, sum of factor contributions). */
@@ -540,6 +553,8 @@ export interface SuspicionReport {
   events: IntegrityTimelineEvent[];
   /** P6 identity status; null on v1 sessions and pre-v2 servers. */
   identity: SuspicionIdentity | null;
+  /** Geo/network summary; null pre-slice / on older servers. */
+  network: SuspicionNetwork | null;
 }
 
 /** Tolerant parse of the suspicion route's OPTIONAL identity block (older /
@@ -556,6 +571,23 @@ function parseSuspicionIdentity(raw: unknown): SuspicionIdentity | null {
   return { consent, verified, matchConfidence };
 }
 
+/** Tolerant parse of the suspicion route's OPTIONAL network block (older
+ *  servers simply don't send one → null, panel renders no network rows). */
+function parseSuspicionNetwork(raw: unknown): SuspicionNetwork | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    country: typeof o["country"] === "string" ? o["country"] : null,
+    region: typeof o["region"] === "string" ? o["region"] : null,
+    city: typeof o["city"] === "string" ? o["city"] : null,
+    ipChanges: typeof o["ip_changes"] === "number" ? o["ip_changes"] : 0,
+    countries: Array.isArray(o["countries"])
+      ? o["countries"].filter((c): c is string => typeof c === "string")
+      : [],
+    tzMismatch: o["tz_mismatch"] === true,
+  };
+}
+
 /** Fetch the server-computed Suspicion Score for a session
  *  (GET /api/review/sessions/:id/suspicion → { suspicion, events }).
  *  Returns null on ANY failure — including 404 from older deploys without the
@@ -570,6 +602,7 @@ export async function getSuspicionReport(sessionId: string): Promise<SuspicionRe
       suspicion?: { score?: unknown; factors?: SuspicionFactor[]; version?: unknown };
       events?: IntegrityTimelineEvent[];
       identity?: unknown;
+      network?: unknown;
     };
     if (typeof body.suspicion?.score !== "number") return null;
     return {
@@ -578,6 +611,7 @@ export async function getSuspicionReport(sessionId: string): Promise<SuspicionRe
       version: typeof body.suspicion.version === "string" ? body.suspicion.version : "?",
       events: body.events ?? [],
       identity: parseSuspicionIdentity(body.identity),
+      network: parseSuspicionNetwork(body.network),
     };
   } catch {
     return null;

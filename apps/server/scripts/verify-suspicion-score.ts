@@ -40,6 +40,7 @@ function ev(
 
 console.log("verify-suspicion-score — P1.2");
 console.log(`suspicion detector version: ${SUSPICION_DETECTOR_VERSION}\n`);
+check("detector version is 3 (geo/network factors)", SUSPICION_DETECTOR_VERSION === "3");
 
 // ── [a] clean run scores 0 ──
 console.log("[a] clean run");
@@ -172,6 +173,70 @@ console.log("\n[c] factor arithmetic");
   check("multiple_faces: 5 signals → capped at 36",
     mfMany?.count === 5 && mfMany.contribution === SUSPICION_WEIGHTS.multiple_faces.cap,
     JSON.stringify(mfMany));
+}
+// Geo/network factors (detector v3): ip_change / country_change over the
+// server-authored integrity.ip_change events, geo_tz_mismatch over
+// integrity.geo + integrity.client_env.
+{
+  seq = 0;
+  const one = computeSuspicionScore([
+    ev("integrity.geo", 0, { country: "US", region: null, city: null, ip_hash: "a".repeat(16) }),
+    ev("integrity.ip_change", 10_000, {
+      change_count: 1, prev_ip_hash: "a".repeat(16), new_ip_hash: "b".repeat(16),
+      country_changed: false, new_country: "US",
+    }),
+  ]);
+  const ic = one.factors.find((f) => f.kind === "ip_change");
+  check("ip_change: 1 event → contribution 10",
+    ic?.count === 1 && ic.contribution === SUSPICION_WEIGHTS.ip_change.weight,
+    JSON.stringify(ic));
+  check("same-country change → no country_change factor",
+    !one.factors.some((f) => f.kind === "country_change"));
+
+  seq = 0;
+  const many = computeSuspicionScore([
+    ev("integrity.geo", 0, { country: "US", region: null, city: null, ip_hash: "h0" }),
+    ...Array.from({ length: 4 }, (_, i) =>
+      ev("integrity.ip_change", (i + 1) * 10_000, {
+        change_count: i + 1, prev_ip_hash: `h${i}`, new_ip_hash: `h${i + 1}`,
+        country_changed: i < 2, new_country: i < 2 ? "DE" : "US",
+      })),
+  ]);
+  const icMany = many.factors.find((f) => f.kind === "ip_change");
+  const ccMany = many.factors.find((f) => f.kind === "country_change");
+  check("ip_change: 4 events → capped at 30",
+    icMany?.count === 4 && icMany.contribution === SUSPICION_WEIGHTS.ip_change.cap,
+    JSON.stringify(icMany));
+  check("country_change: 2 border-crossings → capped at 30 (2*15)",
+    ccMany?.count === 2 && ccMany.contribution === SUSPICION_WEIGHTS.country_change.cap,
+    JSON.stringify(ccMany));
+}
+// geo_tz_mismatch — conservative: fires ONLY when IP country + a MAPPED
+// browser timezone confidently disagree; missing/unmapped data never flags.
+{
+  const geoUS = { country: "US", region: null, city: null, ip_hash: "cafe" };
+  const cases: Array<[string, Record<string, unknown> | null, Record<string, unknown> | null, boolean]> = [
+    ["US ip + Asia/Kolkata tz → fires",        geoUS, { tz_offset_minutes: -330, tz_name: "Asia/Kolkata" }, true],
+    ["US ip + America/Chicago tz → no factor", geoUS, { tz_offset_minutes: 300, tz_name: "America/Chicago" }, false],
+    ["US ip + unmapped tz → no factor (uncertain)", geoUS, { tz_offset_minutes: 0, tz_name: "Atlantic/St_Helena" }, false],
+    ["US ip + null tz_name → no factor",       geoUS, { tz_offset_minutes: 0, tz_name: null }, false],
+    ["US ip + NO client_env → no factor",      geoUS, null, false],
+    ["unknown ip country + Asia/Kolkata → no factor",
+      { country: null, region: null, city: null, ip_hash: "cafe" },
+      { tz_offset_minutes: -330, tz_name: "Asia/Kolkata" }, false],
+  ];
+  for (const [name, geoPayload, envPayload, expectFire] of cases) {
+    seq = 0;
+    const evs: SuspicionEventInput[] = [ev("integrity.geo", 0, geoPayload ?? {})];
+    if (envPayload) evs.push(ev("integrity.client_env", 1_000, envPayload));
+    const r = computeSuspicionScore(evs);
+    const f = r.factors.find((x) => x.kind === "geo_tz_mismatch");
+    check(name,
+      expectFire
+        ? f?.count === 1 && f.contribution === SUSPICION_WEIGHTS.geo_tz_mismatch.cap
+        : f === undefined,
+      JSON.stringify(f ?? null));
+  }
 }
 // identity.* (P6 consent/verification events) must NOT contribute to the
 // suspicion score — it aggregates integrity.* only.

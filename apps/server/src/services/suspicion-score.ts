@@ -19,8 +19,13 @@
  *  without recorded v2 consent), but a v2 session's score is not comparable
  *  to a v1 score, hence the bump. NOTE: this is the SUSPICION detector
  *  version — a separate namespace from the evidence DETECTOR_VERSION; P6
- *  touches no competency-scoring version. */
-export const SUSPICION_DETECTOR_VERSION = "2";
+ *  touches no competency-scoring version.
+ *  "2" → "3": geo/network slice added the ip_change, country_change and
+ *  geo_tz_mismatch factors over the new server-authored integrity.geo /
+ *  integrity.ip_change events and the client's integrity.client_env timezone
+ *  snapshot. Inert for every pre-slice session (those events don't exist), but
+ *  scores across the boundary are not comparable, hence the bump. */
+export const SUSPICION_DETECTOR_VERSION = "3";
 
 export interface SuspicionFactor {
   kind: string;
@@ -67,12 +72,74 @@ export const SUSPICION_WEIGHTS = {
   // recruiter-only, never touches the competency score.
   face_absent:     { weight: 6,  cap: 24 }, // nobody visible for a sustained stretch
   multiple_faces:  { weight: 12, cap: 36 }, // >=2 faces — someone else in frame
+  // Geo/network factors (detector v3) — server-authored integrity.geo /
+  // integrity.ip_change plus the client's integrity.client_env timezone
+  // snapshot. Same posture as everything here: informational, recruiter-only,
+  // never touches the competency score.
+  ip_change:       { weight: 10, cap: 30 }, // per integrity.ip_change event (session hopped addresses)
+  country_change:  { weight: 15, cap: 30 }, // per ip_change with country_changed=true (crossed a border mid-session)
+  geo_tz_mismatch: { weight: 8,  cap: 8  }, // browser timezone confidently contradicts the IP country (fires at most once)
 } as const;
 
 export const PASTE_CHARS_THRESHOLD = 500;
 export const IDLE_MS_THRESHOLD = 120_000;
 export const FLURRY_PAIRS = 5;
 export const FLURRY_WINDOW_MS = 60_000;
+
+// ── Timezone → country (geo_tz_mismatch, detector v3) ──────────────────────
+// DELIBERATELY CONSERVATIVE map of major IANA zones to their ISO-3166 alpha-2
+// country (matching the GeoLite2 country ISO code). Known limits, all resolved in
+// favor of NOT flagging:
+//   - coverage is a curated shortlist of high-population zones, not the full
+//     tzdb — an unlisted zone (e.g. Europe/Podgorica) produces NO factor;
+//   - zones plausibly used across borders or that carry no country signal
+//     (UTC, Etc/*, GMT offsets) are excluded on purpose;
+//   - VPN exit vs. real location is indistinguishable at this layer — which
+//     is exactly why the factor is worth only 8 points, capped at one firing,
+//     informational-never-scored like the whole channel.
+// The mismatch NEVER fires on missing data: it needs a known IP country AND a
+// mapped browser timezone that confidently disagrees.
+const TZ_COUNTRY: Record<string, string> = {
+  // United States
+  "America/New_York": "US", "America/Chicago": "US", "America/Denver": "US",
+  "America/Los_Angeles": "US", "America/Phoenix": "US", "America/Detroit": "US",
+  "America/Anchorage": "US", "Pacific/Honolulu": "US",
+  // Canada
+  "America/Toronto": "CA", "America/Vancouver": "CA", "America/Edmonton": "CA",
+  "America/Winnipeg": "CA", "America/Halifax": "CA", "America/Montreal": "CA",
+  // Latin America
+  "America/Mexico_City": "MX", "America/Sao_Paulo": "BR",
+  "America/Argentina/Buenos_Aires": "AR", "America/Bogota": "CO",
+  "America/Santiago": "CL", "America/Lima": "PE",
+  // Europe
+  "Europe/London": "GB", "Europe/Dublin": "IE", "Europe/Paris": "FR",
+  "Europe/Berlin": "DE", "Europe/Madrid": "ES", "Europe/Rome": "IT",
+  "Europe/Amsterdam": "NL", "Europe/Brussels": "BE", "Europe/Zurich": "CH",
+  "Europe/Vienna": "AT", "Europe/Lisbon": "PT", "Europe/Warsaw": "PL",
+  "Europe/Prague": "CZ", "Europe/Budapest": "HU", "Europe/Bucharest": "RO",
+  "Europe/Athens": "GR", "Europe/Stockholm": "SE", "Europe/Oslo": "NO",
+  "Europe/Copenhagen": "DK", "Europe/Helsinki": "FI", "Europe/Istanbul": "TR",
+  "Europe/Kyiv": "UA", "Europe/Kiev": "UA", "Europe/Moscow": "RU",
+  // Middle East / Africa
+  "Asia/Jerusalem": "IL", "Asia/Dubai": "AE", "Asia/Riyadh": "SA",
+  "Africa/Cairo": "EG", "Africa/Lagos": "NG", "Africa/Nairobi": "KE",
+  "Africa/Johannesburg": "ZA",
+  // Asia-Pacific
+  "Asia/Kolkata": "IN", "Asia/Calcutta": "IN", "Asia/Karachi": "PK",
+  "Asia/Dhaka": "BD", "Asia/Shanghai": "CN", "Asia/Tokyo": "JP",
+  "Asia/Seoul": "KR", "Asia/Singapore": "SG", "Asia/Hong_Kong": "HK",
+  "Asia/Taipei": "TW", "Asia/Manila": "PH", "Asia/Jakarta": "ID",
+  "Asia/Bangkok": "TH", "Asia/Ho_Chi_Minh": "VN",
+  "Australia/Sydney": "AU", "Australia/Melbourne": "AU",
+  "Australia/Brisbane": "AU", "Australia/Perth": "AU", "Australia/Adelaide": "AU",
+  "Pacific/Auckland": "NZ",
+};
+
+/** Country for an IANA timezone name, or null when the map doesn't cover it
+ *  (which downstream treats as "uncertain — do not flag"). */
+export function countryForTimezone(tzName: string): string | null {
+  return TZ_COUNTRY[tzName] ?? null;
+}
 
 function factor(kind: keyof typeof SUSPICION_WEIGHTS, count: number): SuspicionFactor {
   const { weight, cap } = SUSPICION_WEIGHTS[kind];
@@ -116,6 +183,12 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
   let rateCappedCount = 0;
   let faceAbsentCount = 0;
   let multipleFacesCount = 0;
+  let ipChangeCount = 0;
+  let countryChangeCount = 0;
+  // geo_tz_mismatch inputs (detector v3): first recorded IP country + first
+  // browser-reported IANA timezone. Both are needed; missing either → no factor.
+  let geoCountry: string | null = null;
+  let clientTzName: string | null = null;
 
   // blur→focus pairing for the flurry factor: a tab_blur "opens" a pair, the
   // next tab_focus closes it. Pair time = the blur's timestamp.
@@ -167,10 +240,29 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
       case "integrity.multiple_faces":
         multipleFacesCount++;
         break;
+      // Geo/network slice (detector v3). integrity.geo / integrity.ip_change
+      // are SERVER-authored (services/geo-integrity.ts — derived values only);
+      // integrity.client_env is the browser's own timezone snapshot.
+      case "integrity.geo":
+        if (geoCountry === null && typeof p["country"] === "string") geoCountry = p["country"];
+        break;
+      case "integrity.ip_change":
+        ipChangeCount++;
+        if (p["country_changed"] === true) countryChangeCount++;
+        break;
+      case "integrity.client_env":
+        if (clientTzName === null && typeof p["tz_name"] === "string") clientTzName = p["tz_name"];
+        break;
       default:
         break; // unknown integrity.* subtype — contributes nothing
     }
   }
+
+  // geo_tz_mismatch: fires (once) ONLY when the IP country is known, the
+  // browser timezone maps to a country in the conservative TZ_COUNTRY table,
+  // and the two confidently disagree. Missing/unmapped data never flags.
+  const tzCountry = clientTzName !== null ? countryForTimezone(clientTzName) : null;
+  const tzMismatch = geoCountry !== null && tzCountry !== null && tzCountry !== geoCountry;
 
   const all: SuspicionFactor[] = [
     factor("blur", blurCount),
@@ -183,9 +275,88 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
     factor("rate_capped", rateCappedCount),
     factor("face_absent", faceAbsentCount),
     factor("multiple_faces", multipleFacesCount),
+    factor("ip_change", ipChangeCount),
+    factor("country_change", countryChangeCount),
+    factor("geo_tz_mismatch", tzMismatch ? 1 : 0),
   ];
   const factors = all.filter((f) => f.count > 0);
   const score = Math.min(100, factors.reduce((s, f) => s + f.contribution, 0));
 
   return { score, factors, version: SUSPICION_DETECTOR_VERSION };
+}
+
+// ── Network summary (geo/network slice — review surface) ───────────────────
+
+/** RECRUITER-ONLY network block for the review suspicion endpoint. Derived
+ *  values only — coarse geo strings, counts, and a boolean; ip hashes stay in
+ *  the raw event rows. Must NEVER reach the public shared report (the
+ *  shared-report allowlist has no network field; verify-geo-integrity.ts
+ *  asserts it). */
+export interface NetworkSummary {
+  /** Geo of the FIRST observed address (session start). Sessions recorded
+   *  after the country-only mmdb swap always have region/city null (we
+   *  deliberately ship the ~9MB GeoLite2-Country DB — nothing scores on
+   *  sub-country precision); older sessions may still carry persisted
+   *  region/city values, so the fields stay in the shape. */
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  /** integrity.ip_change events recorded (capped server-side at 10). */
+  ip_changes: number;
+  /** Distinct countries observed across the session, in first-seen order. */
+  countries: string[];
+  /** Browser timezone confidently contradicts the IP country (same
+   *  conservative rule as the geo_tz_mismatch factor). */
+  tz_mismatch: boolean;
+}
+
+/**
+ * Pure derivation of the review-surface network block from a session's event
+ * stream. Returns null when the session predates the geo/network slice (no
+ * integrity.geo / integrity.ip_change rows) so the panel can stay invisible.
+ */
+export function computeNetworkSummary(events: SuspicionEventInput[]): NetworkSummary | null {
+  const sorted = events
+    .filter((e) => typeof e.type === "string" && e.type.startsWith("integrity."))
+    .slice()
+    .sort((a, b) => a.seq - b.seq);
+
+  let geo: { country: string | null; region: string | null; city: string | null } | null = null;
+  let ipChanges = 0;
+  const countries: string[] = [];
+  let clientTzName: string | null = null;
+  const seeCountry = (c: unknown): void => {
+    if (typeof c === "string" && c.length > 0 && !countries.includes(c)) countries.push(c);
+  };
+
+  for (const e of sorted) {
+    const p = e.payload ?? {};
+    if (e.type === "integrity.geo") {
+      if (geo === null) {
+        geo = {
+          country: typeof p["country"] === "string" ? p["country"] : null,
+          region: typeof p["region"] === "string" ? p["region"] : null,
+          city: typeof p["city"] === "string" ? p["city"] : null,
+        };
+      }
+      seeCountry(p["country"]);
+    } else if (e.type === "integrity.ip_change") {
+      ipChanges++;
+      seeCountry(p["new_country"]);
+    } else if (e.type === "integrity.client_env") {
+      if (clientTzName === null && typeof p["tz_name"] === "string") clientTzName = p["tz_name"];
+    }
+  }
+
+  if (geo === null && ipChanges === 0) return null; // pre-slice session
+
+  const tzCountry = clientTzName !== null ? countryForTimezone(clientTzName) : null;
+  return {
+    country: geo?.country ?? null,
+    region: geo?.region ?? null,
+    city: geo?.city ?? null,
+    ip_changes: ipChanges,
+    countries,
+    tz_mismatch: geo?.country != null && tzCountry !== null && tzCountry !== geo.country,
+  };
 }
