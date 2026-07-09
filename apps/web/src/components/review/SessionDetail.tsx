@@ -214,8 +214,17 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
             </div>
           </div>
 
-          {/* Right rail: integrity, timeline, cost, real-world outcomes. */}
+          {/* Right rail: partner feedback first (operator request), then
+              integrity, timeline, cost. */}
           <div className="sd-rail">
+            <OutcomeInvitePanel
+              sessionId={detail.session.id}
+              overallScore={
+                detail.evaluation && detail.evaluation.status === "complete"
+                  ? Number(detail.evaluation.overall_score)
+                  : null
+              }
+            />
             {/* Proctoring v1 — informational integrity signals, never scored.
                 Renders nothing on older servers without the suspicion route. */}
             <SuspicionPanel
@@ -228,14 +237,6 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
               cost={detail.cost}
               totalSpend={detail.session.spend_usd}
               budget={detail.session.budget_usd}
-            />
-            <OutcomeInvitePanel
-              sessionId={detail.session.id}
-              overallScore={
-                detail.evaluation && detail.evaluation.status === "complete"
-                  ? Number(detail.evaluation.overall_score)
-                  : null
-              }
             />
           </div>
         </div>

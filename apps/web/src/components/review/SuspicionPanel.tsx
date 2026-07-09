@@ -165,6 +165,9 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
           justifyContent: "space-between",
           alignItems: "center",
           gap: 12,
+          // The badge must never truncate in the narrow right rail — let the
+          // header wrap onto a second line instead.
+          flexWrap: "wrap",
         }}
       >
         <span style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -180,7 +183,7 @@ export default function SuspicionPanel({ sessionId, events, sessionStart }: Prop
             border: `1px solid ${color.warn.base}`,
             borderRadius: radius.sm,
             padding: "2px 8px",
-            whiteSpace: "nowrap",
+            lineHeight: 1.5,
           }}
         >
           integrity signal — informational, not scored
