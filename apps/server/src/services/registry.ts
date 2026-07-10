@@ -18,10 +18,71 @@ export interface PersonaTurn {
 }
 
 /** Per-channel beat-tracking flags. Mirrored into scenarioState.personas so
- *  recruiter review + future analysis can see when each reveal fired. */
+ *  recruiter review + future analysis can see when each reveal fired.
+ *
+ *  The `client`/`team` boolean maps are the ORIGINAL family-1 (fde-db-triage)
+ *  reveal flags. They are LIVE and calibrated against cohort-1 data — do NOT
+ *  rename, remove, or repurpose them.
+ *
+ *  `firedBeatIds` (added for the scenario-driven generic persona path) tracks
+ *  reveals by scenario BEAT ID rather than the fixed family-1 flag names. It is
+ *  purely additive: family-1 sessions never populate it (they route through the
+ *  hardcoded builders, which use the boolean flags above), and generic sessions
+ *  never touch the boolean flags. Kept as a string[] on the wire (Set is not
+ *  JSON-serialisable) but exposed as a Set in memory for O(1) membership. */
 export interface PersonaState {
   client: { revealed_specifics: boolean; requirement_changed: boolean };
   team:   { gave_refund_hint: boolean; gave_webhook_clue: boolean; gave_shortcut_pitch: boolean };
+  /** Generic-path only: ids of scenario beats already revealed/fired. Empty for
+   *  the family-1 (fde-db-triage) path, which uses the boolean flags above. */
+  firedBeatIds: Set<string>;
+}
+
+/** A fresh PersonaState for a brand-new session. All family-1 flags false and
+ *  the generic firedBeatIds set empty. Callers that persist to jsonb should
+ *  serialise firedBeatIds via `personaStateToJson`. */
+export function freshPersonaState(): PersonaState {
+  return {
+    client: { revealed_specifics: false, requirement_changed: false },
+    team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
+    firedBeatIds: new Set<string>(),
+  };
+}
+
+/** Serialise PersonaState for the recruiter-visible scenarioState.personas
+ *  jsonb: the Set becomes a string[] under `fired_beat_ids`. */
+export function personaStateToJson(state: PersonaState): Record<string, unknown> {
+  return {
+    client: { ...state.client },
+    team: { ...state.team },
+    fired_beat_ids: [...state.firedBeatIds],
+  };
+}
+
+/** Reconstruct PersonaState from the scenarioState.personas jsonb (rehydrate
+ *  path). Tolerates rows written before firedBeatIds existed (absent →
+ *  empty Set) and rows missing either channel map (→ fresh defaults). */
+export function personaStateFromJson(raw: unknown): PersonaState {
+  const fresh = freshPersonaState();
+  if (!raw || typeof raw !== "object") return fresh;
+  const obj = raw as Record<string, unknown>;
+  const client = (obj["client"] as Partial<PersonaState["client"]>) ?? {};
+  const team = (obj["team"] as Partial<PersonaState["team"]>) ?? {};
+  const firedRaw = obj["fired_beat_ids"];
+  return {
+    client: {
+      revealed_specifics: Boolean(client.revealed_specifics),
+      requirement_changed: Boolean(client.requirement_changed),
+    },
+    team: {
+      gave_refund_hint: Boolean(team.gave_refund_hint),
+      gave_webhook_clue: Boolean(team.gave_webhook_clue),
+      gave_shortcut_pitch: Boolean(team.gave_shortcut_pitch),
+    },
+    firedBeatIds: new Set(
+      Array.isArray(firedRaw) ? firedRaw.filter((x): x is string => typeof x === "string") : [],
+    ),
+  };
 }
 
 /** One scheduled proactive beat. Lives inside scenarioState.scheduled_beats
@@ -36,9 +97,16 @@ export interface ScheduledBeat {
   id: string;                                       // curveball id from scenario.json
   kind?: "persona" | "verification";               // default "persona" when absent
   channel: "client" | "team" | "verifier";
-  beat?: "refund_hint" | "requirement_change" | "shortcut_pitch";  // persona kind only — the reveal flag set
+  beat?: "refund_hint" | "requirement_change" | "shortcut_pitch";  // family-1 persona kind only — the reveal flag set
   due_ts: string;                                   // ISO 8601 absolute
   fired: boolean;
+  // ── Scenario-driven generic path (non-family-1) ──────────────────────────
+  // When present, this beat is fired through the generic persona builders,
+  // NOT the hardcoded family-1 beat prompts. `generic` marks the routing;
+  // `payload_message` is the curveball's literal message the persona relays
+  // in-voice. Family-1 beats leave both absent so their path is untouched.
+  generic?: boolean;
+  payload_message?: string;                         // curveball payload.message, delivered in-voice
 }
 
 /** L4 interactive verification (Slice 5.4b). Near the deadline the verifier
