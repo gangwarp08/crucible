@@ -25,7 +25,7 @@
  ],
  "brief": "You're the forward-deployed engineer assigned to Atlas Freight, a logistics company. Their ContactHub contact sync is bleeding records and this time more than one thing may be wrong: ops sees contacts disappearing overnight, the on-call engineer is adamant the auth tokens are the problem, and the provider has shipped several API changes in the last month. Leadership wants an exact, evidence-backed account before the ops review: what is actually wrong, how big each cause is, and what gets fixed first. You have read access to a copy of the integration's sync database — the API request log from the nightly run, the provider's full contact export, and the local synced copy — plus an internal channel with your teammate. Quantify every contributor before you rank them; verify before you trust anything, yours or anyone else's. Your client (Priya, Operations Director) is in the client channel.",
  "constraints": {
-  "time_minutes": 90,
+  "time_minutes": 60,
   "tokens": 50000,
   "compute_minutes": 30,
   "money_usd": 25,
