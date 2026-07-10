@@ -57,6 +57,10 @@ export interface LiveEventRow {
 export const LIVE_EVENT_BATCH = 200;
 /** Poll cadence for both the events tail and the status snapshot. */
 export const LIVE_POLL_INTERVAL_MS = 1000;
+/** SSE keepalive cadence. The poll writes only on change, so an idle active
+ *  session is silent; a comment heartbeat this often keeps proxies (Railway
+ *  edge) from reaping the streaming connection. */
+export const LIVE_HEARTBEAT_MS = 15_000;
 
 /** Read the current status snapshot for a session (status + budget/spend +
  *  deadline). Returns null when the row is gone or Supabase is unavailable. */
