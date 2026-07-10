@@ -848,6 +848,164 @@ export async function getReviewSessionDetail(id: string): Promise<ReviewSessionD
   return res.json() as Promise<ReviewSessionDetail>;
 }
 
+// ─── Live session monitoring (SSE, read-only) ────────────────────────────────
+// GET /api/review/sessions/:id/live streams Server-Sent Events while a session
+// is in progress. We use fetch() + a ReadableStream reader (NOT EventSource) so
+// the X-Org-Key stays in the request HEADER — EventSource can't set headers, and
+// we refuse to put the org key in the URL (it would leak into access logs). A
+// small line-parser turns the streamed body into SSE frames.
+
+/** Status frame — mirrors the server's `event: status` payload. */
+export interface LiveStatus {
+  status: string | null;
+  spend_usd: number;
+  budget_usd: number;
+  deadline: string | null;
+  ended_at: string | null;
+}
+
+/** One event row pushed on the live feed — same shape as ReviewEvent's core
+ *  fields (no id/session_id; the client keys by seq). */
+export interface LiveEvent {
+  seq: number;
+  type: string;
+  actor: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface LiveStreamHandlers {
+  onStatus?: (status: LiveStatus) => void;
+  onEvents?: (events: LiveEvent[]) => void;
+  /** Terminal — the session has ended; the stream is closed after this. */
+  onEnd?: (reason: string) => void;
+  /** Transient transport error (stream dropped). The caller decides whether to
+   *  reconnect from the last seq it saw. Not called on a clean onEnd. */
+  onError?: (err: Error) => void;
+  /** Endpoint missing (older server) — the caller should hide the live UI. */
+  onUnsupported?: () => void;
+}
+
+/** Handle returned by openSessionLiveStream — call close() to abort the fetch
+ *  and stop all callbacks (idempotent). */
+export interface LiveStreamHandle {
+  close: () => void;
+}
+
+/** Parse one SSE block ("event: X\ndata: {...}") into {event, data}. Multiple
+ *  data: lines are concatenated with \n per the SSE spec. */
+function parseSseBlock(block: string): { event: string; data: string } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith(":")) continue; // comment / heartbeat
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+  }
+  if (dataLines.length === 0) return null;
+  return { event, data: dataLines.join("\n") };
+}
+
+/**
+ * Open a read-only live SSE stream for a session. Returns immediately with a
+ * handle whose close() aborts the underlying fetch. `since` is the last seq the
+ * caller already has (0 to start from the beginning) — the server replays rows
+ * with seq > since, then follows. All parsing/dispatch happens asynchronously;
+ * callbacks fire as frames arrive.
+ */
+export function openSessionLiveStream(
+  sessionId: string,
+  since: number,
+  handlers: LiveStreamHandlers,
+): LiveStreamHandle {
+  const controller = new AbortController();
+  let closed = false;
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    controller.abort();
+  };
+
+  const qs = since > 0 ? `?since=${encodeURIComponent(String(since))}` : "";
+  void (async () => {
+    let res: Response;
+    try {
+      res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/live${qs}`, {
+        headers: { ...orgKeyHeader(), Accept: "text/event-stream" },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (!closed) handlers.onError?.(err instanceof Error ? err : new Error(String(err)));
+      return;
+    }
+
+    // Older server without the route → let the caller hide the live control.
+    if (res.status === 404) {
+      // 404 here is ambiguous (missing route vs. foreign session). The caller
+      // only opens this for a session it just loaded via the review detail, so
+      // a 404 in practice means the endpoint doesn't exist on this server.
+      if (!closed) handlers.onUnsupported?.();
+      return;
+    }
+    if (!res.ok || !res.body) {
+      if (!closed) {
+        handlers.onError?.(new Error(`Live stream error ${res.status}`));
+      }
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const dispatch = (event: string, data: string) => {
+      let parsed: unknown;
+      try { parsed = JSON.parse(data); } catch { return; }
+      if (event === "status") {
+        handlers.onStatus?.(parsed as LiveStatus);
+      } else if (event === "events") {
+        const rows = (parsed as { events?: LiveEvent[] }).events;
+        if (Array.isArray(rows) && rows.length > 0) handlers.onEvents?.(rows);
+      } else if (event === "end") {
+        const reason = (parsed as { reason?: unknown }).reason;
+        handlers.onEnd?.(typeof reason === "string" ? reason : "completed");
+        close();
+      }
+    };
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE frames are separated by a blank line (\n\n). Process every
+        // complete frame; keep the trailing partial in the buffer.
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const block = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          const frame = parseSseBlock(block);
+          if (frame) dispatch(frame.event, frame.data);
+        }
+      }
+    } catch (err) {
+      // Abort (from close()) surfaces as an AbortError — that's a clean stop,
+      // not a transport failure.
+      if (!closed && !(err instanceof DOMException && err.name === "AbortError")) {
+        handlers.onError?.(err instanceof Error ? err : new Error(String(err)));
+      }
+      return;
+    }
+
+    // Stream ended without an explicit "end" frame (server closed the socket).
+    // Treat as a transient drop so the caller can reconnect-from-last-seq.
+    if (!closed) handlers.onError?.(new Error("Live stream closed"));
+  })();
+
+  return { close };
+}
+
 // ─── Partner outcome-invite links ───────────────────────────────────────────
 // Admin generates a per-session link (open /api/review routes); the partner
 // opens <origin>/feedback/<token> and submits outcomes (token-gated /api routes).

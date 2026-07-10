@@ -5,10 +5,13 @@ import Link from "next/link";
 import {
   getSuspicionReport,
   postEvaluate,
+  type LiveStatus,
   type ReviewEvent,
   type ReviewSessionDetail,
   type SuspicionReport,
 } from "@/lib/api";
+import { useLiveSession } from "./useLiveSession";
+import LiveStatusStrip from "./LiveStatusStrip";
 import { color, font, radius, scoreColor } from "@/styles/tokens";
 import Stat from "@/components/ui/Stat";
 import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
@@ -89,15 +92,62 @@ const LAYOUT_CSS = `
 }
 `;
 
+/** A running session is watchable; 'completed' is terminal. Kept in sync with
+ *  the server's isLiveStatus (services/live-stream.ts). */
+function isWatchableStatus(status: string | null | undefined): boolean {
+  return status === "active" || status === "submitted" || status === "defending";
+}
+
 export default function SessionDetail({ detail, onRefetch }: Props) {
   const [tab, setTab] = useState<EvidenceTab>("chat");
   const tabRef = useRef(tab);
   tabRef.current = tab;
 
-  const messages = detail.transcript.filter((t) => t.role !== "system").length;
-  const personaCount = personaMessageCount(detail.events);
-  const sqlCount = sqlQueryCount(detail.events);
-  const ptyFrames = detail.events.filter((e) => e.type === "pty.output").length;
+  // ── Live monitoring (read-only) ──────────────────────────────────────────
+  // Watchable only while the session is running. The hook merges streamed
+  // events into the loaded seed, deduped by seq; while live we swap the merged
+  // list in for every panel and overlay a live status snapshot.
+  const watchable = isWatchableStatus(detail.session.status);
+  const initialLiveStatus: LiveStatus = {
+    status: detail.session.status,
+    spend_usd: Number(detail.session.spend_usd ?? 0),
+    budget_usd: Number(detail.session.budget_usd ?? 0),
+    deadline: detail.session.deadline ?? null,
+    ended_at: detail.session.ended_at ?? null,
+  };
+  const live = useLiveSession(detail.session.id, detail.events, initialLiveStatus);
+
+  // On the terminal "end" frame, leave live mode and refetch the full detail
+  // (evaluation, final transcript, cost ledger) — the completed view. The
+  // effect keys ONLY off live.ended; stop/onRefetch are read through refs so
+  // their (unstable) identities don't retrigger it.
+  const stopRef = useRef(live.stop);
+  stopRef.current = live.stop;
+  const refetchRef = useRef(onRefetch);
+  refetchRef.current = onRefetch;
+  useEffect(() => {
+    if (!live.ended) return;
+    stopRef.current();
+    void refetchRef.current();
+  }, [live.ended]);
+
+  // While live, panels read the merged event list and the live spend/status.
+  const events = live.active ? live.events : detail.events;
+  const liveSession = live.active
+    ? {
+        ...detail.session,
+        status: live.status?.status ?? detail.session.status,
+        spend_usd: live.status?.spend_usd ?? detail.session.spend_usd,
+      }
+    : detail.session;
+  const viewDetail: ReviewSessionDetail = live.active
+    ? { ...detail, session: liveSession, events }
+    : detail;
+
+  const messages = viewDetail.transcript.filter((t) => t.role !== "system").length;
+  const personaCount = personaMessageCount(events);
+  const sqlCount = sqlQueryCount(events);
+  const ptyFrames = events.filter((e) => e.type === "pty.output").length;
 
   // Cross-tab scroll links: Timeline rows and Scorecard evidence chips call
   // scrollToHighlight() whose targets (`turn-*` in the AI-chat transcript,
@@ -139,7 +189,7 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
     // as a disabled tab instead of an empty pane.
     { id: "persona", label: "Team/Client", badge: personaCount, disabled: personaCount === 0 },
     { id: "sql", label: "SQL", badge: sqlCount, disabled: sqlCount === 0 },
-    { id: "files", label: "Files", badge: detail.fileSnapshots.length },
+    { id: "files", label: "Files", badge: viewDetail.fileSnapshots.length },
     { id: "terminal", label: "Terminal", badge: ptyFrames },
   ];
 
@@ -155,20 +205,30 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
     >
       <style>{LAYOUT_CSS}</style>
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <OverviewHeader detail={detail} onRefetch={onRefetch} />
+        <OverviewHeader
+          detail={viewDetail}
+          onRefetch={onRefetch}
+          watchable={watchable}
+          liveActive={live.active}
+          onWatchLive={live.start}
+        />
+
+        {live.active && (
+          <LiveStatusStrip status={live.status} connection={live.connection} onStop={live.stop} />
+        )}
 
         <div className="sd-grid">
           {/* Main column: assessment first, then the heavy evidence panels
               behind tabs. */}
           <div style={{ minWidth: 0 }}>
             <Scorecard
-              evaluation={detail.evaluation}
-              sessionId={detail.session.id}
-              defenseOutcome={detail.session.defense_outcome ?? null}
-              verificationCapStatus={detail.session.verification_cap_status ?? null}
-              scorable={detail.session.scorable ?? null}
-              exclusionReason={detail.session.exclusion_reason ?? null}
-              events={detail.events}
+              evaluation={viewDetail.evaluation}
+              sessionId={viewDetail.session.id}
+              defenseOutcome={viewDetail.session.defense_outcome ?? null}
+              verificationCapStatus={viewDetail.session.verification_cap_status ?? null}
+              scorable={viewDetail.session.scorable ?? null}
+              exclusionReason={viewDetail.session.exclusion_reason ?? null}
+              events={events}
               onRefetch={onRefetch}
             />
 
@@ -198,19 +258,19 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
                   mount effect rewrites every pty.output frame — so remounting
                   loses nothing but scrollback position. */}
             <div id="panel-chat" style={{ display: tab === "chat" ? "block" : "none" }}>
-              <TranscriptPanel transcript={detail.transcript} />
+              <TranscriptPanel transcript={viewDetail.transcript} />
             </div>
             <div id="panel-persona" style={{ display: tab === "persona" ? "block" : "none" }}>
-              <PersonaMessagesPanel events={detail.events} />
+              <PersonaMessagesPanel events={events} />
             </div>
             <div id="panel-sql" style={{ display: tab === "sql" ? "block" : "none" }}>
-              <SqlHistoryPanel events={detail.events} sessionStart={detail.session.created_at} />
+              <SqlHistoryPanel events={events} sessionStart={viewDetail.session.created_at} />
             </div>
             <div id="panel-files" style={{ display: tab === "files" ? "block" : "none" }}>
-              <FilesDiffPanel fileSnapshots={detail.fileSnapshots} />
+              <FilesDiffPanel fileSnapshots={viewDetail.fileSnapshots} />
             </div>
             <div id="panel-terminal">
-              {tab === "terminal" && <TerminalReplay events={detail.events} />}
+              {tab === "terminal" && <TerminalReplay events={events} />}
             </div>
           </div>
 
@@ -218,25 +278,25 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
               integrity, timeline, cost. */}
           <div className="sd-rail">
             <OutcomeInvitePanel
-              sessionId={detail.session.id}
+              sessionId={viewDetail.session.id}
               overallScore={
-                detail.evaluation && detail.evaluation.status === "complete"
-                  ? Number(detail.evaluation.overall_score)
+                viewDetail.evaluation && viewDetail.evaluation.status === "complete"
+                  ? Number(viewDetail.evaluation.overall_score)
                   : null
               }
             />
             {/* Proctoring v1 — informational integrity signals, never scored.
                 Renders nothing on older servers without the suspicion route. */}
             <SuspicionPanel
-              sessionId={detail.session.id}
-              events={detail.events}
-              sessionStart={detail.session.created_at}
+              sessionId={viewDetail.session.id}
+              events={events}
+              sessionStart={viewDetail.session.created_at}
             />
-            <Timeline events={detail.events} sessionStart={detail.session.created_at} />
+            <Timeline events={events} sessionStart={viewDetail.session.created_at} />
             <CostPanel
-              cost={detail.cost}
-              totalSpend={detail.session.spend_usd}
-              budget={detail.session.budget_usd}
+              cost={viewDetail.cost}
+              totalSpend={liveSession.spend_usd}
+              budget={viewDetail.session.budget_usd}
             />
           </div>
         </div>
@@ -252,7 +312,15 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
 
 type RunState = { kind: "idle" } | { kind: "running" } | { kind: "error"; message: string };
 
-function OverviewHeader({ detail, onRefetch }: Props) {
+interface OverviewHeaderProps extends Props {
+  /** Session is running → offer the "Watch live" control. */
+  watchable: boolean;
+  /** Live mode is currently on (button hidden; the strip owns the stop control). */
+  liveActive: boolean;
+  onWatchLive: () => void;
+}
+
+function OverviewHeader({ detail, onRefetch, watchable, liveActive, onWatchLive }: OverviewHeaderProps) {
   const { session } = detail;
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -330,6 +398,37 @@ function OverviewHeader({ detail, onRefetch }: Props) {
         )}
 
         <div style={{ flex: 1 }} />
+
+        {/* Read-only live monitoring — only for a running session, and only
+            while not already watching (the strip owns the stop control). */}
+        {watchable && !liveActive && (
+          <button
+            onClick={onWatchLive}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: color.error.soft,
+              color: color.error.base,
+              border: `1px solid ${color.error.base}`,
+              borderRadius: radius.lg,
+              padding: "6px 14px",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: color.error.base,
+                display: "inline-block",
+              }}
+            />
+            Watch live
+          </button>
+        )}
 
         <button
           onClick={() => void reevaluate()}

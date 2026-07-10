@@ -55,6 +55,14 @@ import {
   ReportShareError,
   MAX_SHARE_TTL_HOURS,
 } from "../services/report-share.js";
+import {
+  readLiveStatus,
+  readEventsSince,
+  statusChanged,
+  isTerminalStatus,
+  LIVE_POLL_INTERVAL_MS,
+  type LiveStatusSnapshot,
+} from "../services/live-stream.js";
 
 const LIST_LIMIT = 100;
 
@@ -908,4 +916,181 @@ export async function reviewRoutes(server: FastifyInstance) {
       return reply.status(500).send({ error: "equating check failed" });
     }
   });
+
+  // ─── Live session monitoring (SSE, READ-ONLY) ───────────────────────────────
+  // GET /api/review/sessions/:id/live — a Server-Sent Events feed a recruiter/
+  // admin watches while a session is in progress. Behind requireOrg (plugin
+  // preHandler); a foreign session reads as 404 (no existence leak), matching
+  // sessionOrgGate everywhere else. There is NO event bus on the registry, so
+  // this POLLS the events table (seq tail) + the sessions row every ~1s.
+  //
+  // ORG KEY OVER THE HEADER: the browser can't set X-Org-Key on an EventSource,
+  // so the web client uses a fetch()+ReadableStream reader and keeps the key in
+  // the X-Org-Key header (never a query param / URL — no key in logs). Nothing
+  // special is needed here: requireOrg reads the header as on every other
+  // /api/review route.
+  //
+  // Emits:
+  //   event: status  {status, spend_usd, budget_usd, deadline, ended_at} — on
+  //                   connect + whenever any field changes.
+  //   event: events  {events:[{seq,type,actor,payload,created_at}]} — new rows
+  //                   with seq > lastSeq, ascending, capped batch.
+  //   event: end     {reason} — once the session is terminal; then close.
+  //
+  // ?since=<seq> (default 0) lets the client catch up then follow. Total stream
+  // lifetime is capped defensively (deadline + grace) so a wedged client can't
+  // hold a poll loop open forever.
+  const LiveQuerySchema = z.object({
+    since: z.coerce.number().int().min(0).optional(),
+  });
+  const LIVE_STREAM_GRACE_MS = 5 * 60_000; // auto-close this long past the deadline
+  const LIVE_MAX_LIFETIME_MS = 4 * 60 * 60_000; // absolute ceiling (4h) if no deadline
+
+  server.get<{ Params: { id: string }; Querystring: { since?: string } }>(
+    "/sessions/:id/live",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      const qParse = LiveQuerySchema.safeParse(request.query);
+      if (!qParse.success) {
+        return reply.status(400).send({ error: "Invalid ?since (must be a non-negative integer)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const sessionId = idParse.data.id;
+
+      // P2 tenant gate — foreign/missing session → 404 (no existence leak),
+      // identical to sessionOrgGate semantics used across this plugin.
+      const gate = await sessionOrgGate(sessionId, request.org);
+      if (gate.status === "error") return reply.status(500).send({ error: "Failed to load session" });
+      if (gate.status === "not_found") return reply.status(404).send({ error: "Session not found" });
+
+      // Take over the socket: we write the raw SSE stream ourselves.
+      reply.hijack();
+      const raw = reply.raw;
+      raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        // Disable proxy buffering (nginx / Railway edge) so events flush live.
+        "X-Accel-Buffering": "no",
+      });
+
+      // Resume point. Per-session seq is 0-indexed (first event is seq 0), and
+      // the tail query is strict `seq > lastSeq`. So an ABSENT ?since means
+      // "from the very beginning" — start at -1 so seq 0 is included. An
+      // EXPLICIT ?since=N keeps strict "give me only what's after N" semantics
+      // (?since=0 → skip seq 0, resume after it).
+      let lastSeq = qParse.data.since ?? -1;
+      let lastStatus: LiveStatusSnapshot | null = null;
+      let closed = false;
+      let polling = false;
+      // Assigned once the loop/ceiling are armed; cleanup() clears whichever
+      // are set, so an early terminal close (before arming) is safe.
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let lifetimeTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const send = (event: string, data: unknown): boolean => {
+        if (closed || raw.writableEnded) return false;
+        try {
+          raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        if (pollTimer !== null) clearInterval(pollTimer);
+        if (lifetimeTimer !== null) clearTimeout(lifetimeTimer);
+        if (!raw.writableEnded) {
+          try { raw.end(); } catch { /* already gone */ }
+        }
+      };
+
+      const finish = (reason: string) => {
+        send("end", { reason });
+        cleanup();
+      };
+
+      // Stop the loop the moment the client goes away.
+      request.raw.on("close", cleanup);
+      raw.on("close", cleanup);
+      raw.on("error", cleanup);
+
+      const poll = async () => {
+        if (closed || polling) return; // never overlap ticks
+        polling = true;
+        try {
+          const snap = await readLiveStatus(sessionId);
+          if (closed) return;
+          if (snap === null) {
+            // Row vanished (deleted mid-stream) — end gracefully.
+            finish("gone");
+            return;
+          }
+          if (statusChanged(lastStatus, snap)) {
+            lastStatus = snap;
+            send("status", snap);
+          }
+
+          const rows = await readEventsSince(sessionId, lastSeq);
+          if (closed) return;
+          if (rows.length > 0) {
+            lastSeq = rows[rows.length - 1]!.seq;
+            send("events", { events: rows });
+          }
+
+          // Terminal → drain once more (done above) then end. Only stop when
+          // the batch was NOT full, so a completed session with a big event
+          // backlog is fully delivered before "end".
+          if (isTerminalStatus(snap.status) && rows.length === 0) {
+            finish(snap.status ?? "completed");
+          }
+        } catch (err) {
+          server.log.error({ err, sessionId }, "[review] live poll failed");
+          // Transient DB blip — keep the loop alive; the client also
+          // reconnects-from-last-seq on a dropped stream.
+        } finally {
+          polling = false;
+        }
+      };
+
+      // Defensive lifetime ceiling: deadline + grace, else a hard 4h cap.
+      const initialSnap = await readLiveStatus(sessionId);
+      if (closed) return; // client already left during the gate/read
+      let lifetimeMs = LIVE_MAX_LIFETIME_MS;
+      const deadlineMs = initialSnap?.deadline ? Date.parse(initialSnap.deadline) : NaN;
+      if (!Number.isNaN(deadlineMs)) {
+        const untilDeadline = deadlineMs - Date.now() + LIVE_STREAM_GRACE_MS;
+        lifetimeMs = Math.max(LIVE_POLL_INTERVAL_MS, Math.min(LIVE_MAX_LIFETIME_MS, untilDeadline));
+      }
+      lifetimeTimer = setTimeout(() => finish("timeout"), lifetimeMs);
+
+      // Prime the connection with the current status immediately, then follow.
+      if (initialSnap) {
+        lastStatus = initialSnap;
+        send("status", initialSnap);
+        if (isTerminalStatus(initialSnap.status)) {
+          // Already ended: catch the client up on any tail then close.
+          const rows = await readEventsSince(sessionId, lastSeq);
+          if (rows.length > 0) {
+            lastSeq = rows[rows.length - 1]!.seq;
+            send("events", { events: rows });
+          }
+          finish(initialSnap.status ?? "completed");
+          return;
+        }
+      }
+
+      pollTimer = setInterval(() => void poll(), LIVE_POLL_INTERVAL_MS);
+      // First tail fetch right away (don't wait a full interval for backlog).
+      void poll();
+    },
+  );
 }
