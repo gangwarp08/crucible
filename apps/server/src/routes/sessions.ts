@@ -183,7 +183,14 @@ export async function sessionRoutes(server: FastifyInstance) {
           error: "This assessment is temporarily unavailable. Please pick another or try again later.",
         });
       }
-      throw err;
+      // Any other provisioning failure (e.g. the LiteLLM gateway rejecting
+      // /key/generate) must NOT surface its raw message to the browser — that
+      // text can carry internal gateway/error topology. Log the detail
+      // server-side; return a generic 503. (Security audit 2026-07-10.)
+      request.log.error({ err, scenarioId, effectiveScenarioId }, "sandbox provisioning failed");
+      return reply.status(503).send({
+        error: "Could not start the assessment right now. Please try again in a moment.",
+      });
     }
     // RD6: atomically consume the link + bind it to this session. This is the
     // real single-use guard — if a concurrent start already consumed it we lose

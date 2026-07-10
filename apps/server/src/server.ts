@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyJwt from "@fastify/jwt";
@@ -40,6 +40,24 @@ export async function buildServer() {
     logger: {
       level: env.NODE_ENV === "production" ? "info" : "debug",
     },
+  });
+
+  // Global error handler: unhandled throws must never serialize their raw
+  // `message` to the client (it can carry internal error text — e.g. an
+  // upstream gateway body). Preserve explicit 4xx (validation, auth, Zod)
+  // which are safe and intentional; collapse everything 500+ to a generic
+  // body and log the real error server-side. (Security audit 2026-07-10.)
+  server.setErrorHandler((err: FastifyError, request, reply) => {
+    const status = err.statusCode ?? 500;
+    if (status >= 500) {
+      request.log.error({ err }, "unhandled server error");
+      return reply.status(status).send({ error: "internal_error" });
+    }
+    // Client errors (4xx): keep Fastify's/Zod's own safe message.
+    return reply.status(status).send({
+      error: err.message || "request_error",
+      ...(err.validation ? { validation: err.validation } : {}),
+    });
   });
 
   await server.register(fastifyHelmet);
