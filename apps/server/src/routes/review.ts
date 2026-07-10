@@ -61,6 +61,7 @@ import {
   statusChanged,
   isTerminalStatus,
   LIVE_POLL_INTERVAL_MS,
+  LIVE_HEARTBEAT_MS,
   type LiveStatusSnapshot,
 } from "../services/live-stream.js";
 
@@ -992,6 +993,7 @@ export async function reviewRoutes(server: FastifyInstance) {
       // are set, so an early terminal close (before arming) is safe.
       let pollTimer: ReturnType<typeof setInterval> | null = null;
       let lifetimeTimer: ReturnType<typeof setTimeout> | null = null;
+      let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
       const send = (event: string, data: unknown): boolean => {
         if (closed || raw.writableEnded) return false;
@@ -1008,6 +1010,7 @@ export async function reviewRoutes(server: FastifyInstance) {
         closed = true;
         if (pollTimer !== null) clearInterval(pollTimer);
         if (lifetimeTimer !== null) clearTimeout(lifetimeTimer);
+        if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
         if (!raw.writableEnded) {
           try { raw.end(); } catch { /* already gone */ }
         }
@@ -1091,6 +1094,17 @@ export async function reviewRoutes(server: FastifyInstance) {
       pollTimer = setInterval(() => void poll(), LIVE_POLL_INTERVAL_MS);
       // First tail fetch right away (don't wait a full interval for backlog).
       void poll();
+
+      // SSE heartbeat: the poll only WRITES on a status/event change, so an
+      // active session with nothing happening is silent — and Railway's edge
+      // (and most proxies) reap an idle streaming response after ~30-60s,
+      // which surfaced as the client looping on "reconnecting". A comment line
+      // (":" prefix, ignored by the SSE parser) every 15s keeps the pipe warm
+      // without emitting spurious frames.
+      heartbeatTimer = setInterval(() => {
+        if (closed || raw.writableEnded) return;
+        try { raw.write(`: hb ${Date.now()}\n\n`); } catch { cleanup(); }
+      }, LIVE_HEARTBEAT_MS);
     },
   );
 }
