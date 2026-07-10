@@ -19,12 +19,21 @@ import { ensureWritable } from "../services/guards.js";
 import { transitionSession } from "../services/session-lifecycle.js";
 import { destroySandbox } from "../services/sandbox.js";
 
-const DeliverableDataSchema = z.object({
-  corrected_monthly_revenue: z.string().max(20_000),
-  root_cause_finding:        z.string().max(20_000),
-  client_facing_summary:     z.string().max(20_000),
-  decisions_and_tradeoffs:   z.string().max(20_000),
-});
+// Deliverable components are scenario-defined (scenario.deliverable_spec.
+// components) and differ per family — DB-triage uses corrected_monthly_revenue
+// /root_cause_finding/…, the API-integration family uses reconciled_sync_report
+// /…. So validate the SHAPE generically (a bounded map of component-key →
+// string) rather than hardcoding one family's keys, which silently 400'd every
+// other scenario's submit. Keys are constrained to safe identifiers and the
+// map is size- and count-bounded; which keys a scenario expects is enforced at
+// the content layer (encode/verify), not here.
+const COMPONENT_KEY_RE = /^[a-z][a-z0-9_]{0,63}$/;
+const DeliverableDataSchema = z
+  .record(z.string().regex(COMPONENT_KEY_RE), z.string().max(20_000))
+  .refine((d) => {
+    const n = Object.keys(d).length;
+    return n >= 1 && n <= 24;
+  }, { message: "deliverable must have 1–24 components" });
 
 const DeliverableBodySchema = z.object({
   status: z.enum(["draft", "submitted"]),
