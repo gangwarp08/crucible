@@ -178,7 +178,14 @@ async function createSession(scenario: ScenarioRow): Promise<string> {
   const r = await fetch(`${SERVER_URL}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scenarioId: scenario.id, beatTimingOverridesMs: overrides }),
+    // Include the invite code when the target server has one set (prod parity);
+    // harmless when it doesn't (the route ignores it). Lets calibration run
+    // against an invite-gated server. (env.INVITE_CODE loaded via dotenv above.)
+    body: JSON.stringify({
+      scenarioId: scenario.id,
+      beatTimingOverridesMs: overrides,
+      ...(process.env.INVITE_CODE ? { inviteCode: process.env.INVITE_CODE } : {}),
+    }),
   });
   if (!r.ok) throw new Error(`session create failed: ${r.status} ${await r.text()}`);
   const body = (await r.json()) as { sessionId: string; token?: string };

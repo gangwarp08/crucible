@@ -79,12 +79,23 @@ try:
 finally:
     con.close()
 
-# Re-open read-only and sanity-check the row counts.
+# Re-open read-only and sanity-check the row counts. Derive the table list
+# from the schema itself (sqlite_master) rather than hardcoding a domain's
+# table names — a scenario family with a different schema (e.g. the
+# API-integration family's contacts/sync tables vs the DB-triage family's
+# customers/payments) must build without editing this shared script.
 con = sqlite3.connect("file:%s?mode=ro" % DB, uri=True)
 try:
+    tables = [r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).fetchall()]
+    if not tables:
+        print("build FAILED: no tables created", file=sys.stderr)
+        sys.exit(1)
     counts = {}
-    for tbl in ("customers", "subscriptions", "payments"):
-        counts[tbl] = con.execute("SELECT COUNT(*) FROM " + tbl).fetchone()[0]
+    for tbl in tables:
+        counts[tbl] = con.execute('SELECT COUNT(*) FROM "%s"' % tbl).fetchone()[0]
     print("built ok %s" % counts)
 finally:
     con.close()
