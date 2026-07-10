@@ -96,14 +96,16 @@ export async function seedScenarioDataset(
     throw new Error(`[dataset-seed] chmod 444 ${DB_PATH} failed: ${chmod.stderr}`);
   }
 
-  // Remove the staging copies (schema.sql / seed.sql / *.py) now the DB is
-  // built. The candidate can query customer.db (the task) but the raw seed
-  // SQL let them read every row verbatim, sidestepping the query-runner's
-  // 500-row cap. Not a ground-truth leak (same rows are queryable), but no
-  // reason to leave the unclamped copy on disk. Best-effort — a cleanup
-  // failure must not fail provisioning. (Security audit 2026-07-10.)
+  // Remove the raw seed staging copies now the DB is built: schema.sql +
+  // seed.sql (the row-dump bypass the security audit flagged) and the one-shot
+  // builder. CRITICAL: keep RUNNER_PATH (sql_runner.py) — runSqliteQuery shells
+  // `python3 /tmp/crucible/sql_runner.py` on EVERY query, so deleting it breaks
+  // all candidate SQL. (The original audit fix rm -rf'd the whole STAGING_DIR,
+  // which took the runner with it — a live-query regression; scope the delete
+  // to the seed files only.) Best-effort — cleanup failure must not fail
+  // provisioning.
   await sandbox.commands
-    .run(`rm -rf ${STAGING_DIR}`, { timeoutMs: 5_000 })
+    .run(`rm -f ${SCHEMA_PATH} ${SEED_PATH} ${BUILDER_PATH}`, { timeoutMs: 5_000 })
     .catch(() => { /* best-effort; DB is already built + locked */ });
 
   console.log(
