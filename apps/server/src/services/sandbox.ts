@@ -9,7 +9,12 @@ import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
 import { loadScenarioById, type Scenario } from "./scenarios.js";
 import { seedScenarioDataset } from "./dataset-seed.js";
-import { freshVerificationState, type ScheduledBeat } from "./registry.js";
+import {
+  freshVerificationState,
+  freshPersonaState,
+  personaStateToJson,
+  type ScheduledBeat,
+} from "./registry.js";
 
 // L4 verification (Slice 5.4b) fires this many ms BEFORE the session deadline,
 // so the interactive defense completes while the session is still live (the
@@ -37,8 +42,16 @@ const BEAT_FOR_CURVEBALL: Record<string, ScheduledBeat["beat"]> = {
 interface CurveballJson {
   id?: string;
   trigger?: { time_offset_minutes?: number };
-  payload?: { channel?: string };
+  payload?: { channel?: string; message?: string };
   difficulty_band?: string;
+}
+
+/** Family-1 (fde-db-triage) routes through the hardcoded, calibrated persona
+ *  builders. Everything else routes through the scenario-driven generic path.
+ *  Slug-prefix match so the -iso / -pro family-1 variants stay on the family-1
+ *  path too. Keep this the SINGLE source of truth for the family split. */
+export function isFamilyOneSlug(slug: string): boolean {
+  return slug.startsWith("fde-db-triage");
 }
 
 // Difficulty bands, ordered. A session at band N fires every curveball whose
@@ -68,11 +81,15 @@ function computeScheduledBeats(
   overridesMs: Record<string, number> | undefined,
 ): ScheduledBeat[] {
   const sessionBand = bandLevel(effectiveBandForSession(scenario.difficulty ?? null));
+  const generic = !isFamilyOneSlug(scenario.slug);
   const out: ScheduledBeat[] = [];
   for (const raw of (scenario.curveballs ?? []) as CurveballJson[]) {
     if (!raw?.id) continue;
+    // Family-1 requires a recognised curveball→flag mapping. The generic path
+    // is beat-id-driven and does NOT require a BEAT_FOR_CURVEBALL entry — any
+    // curveball with a valid channel is schedulable there.
     const beat = BEAT_FOR_CURVEBALL[raw.id];
-    if (!beat) continue;
+    if (!generic && !beat) continue;
     // Difficulty gate: skip curveballs whose band is above this session's band.
     if (bandLevel(raw.difficulty_band) > sessionBand) continue;
     const channel = raw.payload?.channel;
@@ -87,9 +104,14 @@ function computeScheduledBeats(
       id: raw.id,
       kind: "persona",
       channel,
-      beat,
+      // Family-1 keeps its calibrated flag mapping. Generic beats leave `beat`
+      // set when a mapping happens to exist (harmless) but are tracked by id.
+      ...(beat ? { beat } : {}),
       due_ts: new Date(baseMs + offsetMs).toISOString(),
       fired: false,
+      ...(generic
+        ? { generic: true, ...(raw.payload?.message ? { payload_message: raw.payload.message } : {}) }
+        : {}),
     });
   }
 
@@ -161,10 +183,7 @@ export async function createSandbox(
       );
       scenarioState = {
         ...scenario.constraints,
-        personas: {
-          client: { revealed_specifics: false, requirement_changed: false },
-          team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
-        },
+        personas: personaStateToJson(freshPersonaState()),
         verification: freshVerificationState(),
         scheduled_beats: scheduledBeats,
         // Frozen snapshot of the starting constraint values, so the HUD can
@@ -266,10 +285,7 @@ export async function createSandbox(
       : null,
     messagingSockets: new Set(),
     channelHistory: { client: [], team: [] },
-    personaState: {
-      client: { revealed_specifics: false, requirement_changed: false },
-      team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
-    },
+    personaState: freshPersonaState(),
     verificationState: freshVerificationState(),
   });
 

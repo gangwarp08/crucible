@@ -13,7 +13,7 @@
 // here and persisted into sessions.scenario_state.personas via the existing
 // service-role client.
 
-import { sessionRegistry } from "./registry.js";
+import { sessionRegistry, personaStateToJson, type PersonaState } from "./registry.js";
 import { loadScenarioById, type Scenario } from "./scenarios.js";
 import {
   chatCompletionWithMessages,
@@ -34,7 +34,10 @@ export type RevealKey = "specifics" | "refund_hint" | "webhook_clue" | "shortcut
 export interface PersonaReply {
   text: string;
   personaName: string;
-  reveals: RevealKey[];
+  // Family-1 reveals are RevealKey values; generic-path reveals are the
+  // scenario's beat ids. Widened to string[] so both paths share the type;
+  // consumers only log it.
+  reveals: RevealKey[] | string[];
   // LLM call metadata — passed through to telemetry + cost_ledger by the caller.
   model: string;
   promptTokens: number;
@@ -46,7 +49,13 @@ export interface PersonaReply {
   finishReason: string | null;
 }
 
-interface ClientPersonaJson {
+export interface PersonaBeatJson {
+  id?: string;
+  trigger?: string;
+  behavior?: string;
+}
+
+export interface ClientPersonaJson {
   name?: string;
   role?: string;
   voice?: string;
@@ -54,6 +63,7 @@ interface ClientPersonaJson {
   knows?: string[];
   never_reveals?: string[];
   guardrails?: string[];
+  beats?: PersonaBeatJson[];
 }
 
 interface TeamPersonaJson extends ClientPersonaJson {}
@@ -108,7 +118,7 @@ function bulletList(items: string[] | undefined, fallback: string): string {
   return items.map((s) => `- ${s}`).join("\n");
 }
 
-function buildClientSystemPrompt(
+export function buildClientSystemPrompt(
   persona: ClientPersonaJson,
   state: { revealed_specifics: boolean; requirement_changed: boolean },
   proactive?: { beat: "requirement_change" },
@@ -166,7 +176,7 @@ ${proactiveBlock}
 ${JSON_OUTPUT_DIRECTIVE}`;
 }
 
-function buildTeamSystemPrompt(
+export function buildTeamSystemPrompt(
   persona: TeamPersonaJson,
   state: { gave_refund_hint: boolean; gave_webhook_clue: boolean; gave_shortcut_pitch: boolean },
   proactive?: { beat: "refund_hint" | "shortcut_pitch" },
@@ -221,6 +231,180 @@ ${proactiveBlock}
 ${JSON_OUTPUT_DIRECTIVE}`;
 }
 
+// ─── Generic (scenario-driven) prompt builders ──────────────────────────────
+//
+// MEASUREMENT-PRESERVATION GUARANTEE: the two builders ABOVE are the LIVE,
+// calibrated family-1 (fde-db-triage) prompts. They are NEVER reached by any
+// non-family-1 scenario and are NEVER modified. Every OTHER scenario routes
+// through the builders BELOW, which source name/role/voice/goal/beats entirely
+// from the scenario's client_persona / team_persona JSON so the persona speaks
+// the scenario's actual domain (contacts/sync/tokens/pagination for family 2,
+// etc.) rather than family-1's revenue/refund domain.
+//
+// Reveals in the generic path are keyed by BEAT ID (the scenario's beat.id),
+// not the fixed family-1 RevealKey union. The JSON_OUTPUT_DIRECTIVE_GENERIC is
+// built dynamically from the persona's beat ids so the model self-reports which
+// scenario beat it fired.
+
+/** Family-1 (fde-db-triage) uses the hardcoded builders above; every other
+ *  scenario uses the generic builders below. Slug-prefix so the family-1
+ *  -iso/-pro variants stay on the hardcoded path. */
+export function isFamilyOneSlug(slug: string): boolean {
+  return slug.startsWith("fde-db-triage");
+}
+
+/** Which triggers fire REACTIVELY (in the turn-based reply) vs PROACTIVELY
+ *  (from the scheduler). A beat whose trigger isn't proactive is reactive. */
+const PROACTIVE_TRIGGERS = new Set<string>([
+  "early_session",
+  "mid_session_time_pressure",
+  "session_start",
+  "curveball.requirement_change",
+]);
+
+function isProactiveTrigger(trigger: string | undefined): boolean {
+  return !!trigger && PROACTIVE_TRIGGERS.has(trigger);
+}
+
+/** JSON output directive for the generic path — reveal enum is the scenario's
+ *  own beat ids. */
+function jsonOutputDirectiveGeneric(beatIds: string[]): string {
+  const enumList =
+    beatIds.length > 0 ? beatIds.map((b) => JSON.stringify(b)).join(" | ") : '"<beat_id>"';
+  return `\
+RESPOND AS JSON ONLY. Do NOT wrap the JSON in markdown fences. Schema:
+{
+  "text":   "<your in-character reply to the candidate, plain text, 1-4 sentences>",
+  "reveals": [${enumList}]   // the id(s) of any scenario beat you fired THIS turn; omit if nothing new
+}`;
+}
+
+/** Render the persona's beats[] into a numbered rule block the model can act
+ *  on. Each line names the beat id (so the model knows what to put in reveals),
+ *  its trigger, and the behaviour text (which carries the scenario domain). */
+function renderBeatRules(beats: PersonaBeatJson[]): string {
+  const lines = beats
+    .filter((b) => b.id && b.behavior)
+    .map((b) => {
+      const trig = b.trigger ? ` (trigger: ${b.trigger})` : "";
+      return `- BEAT "${b.id}"${trig}: ${b.behavior}`;
+    });
+  return lines.length > 0 ? lines.join("\n") : "- (no scripted beats defined)";
+}
+
+/** Situational context line. The persona JSON carries goal + knows; the
+ *  scenario brief carries the rest of the domain. We fold both in so the
+ *  generic prompt is grounded in the scenario, not a family-1 hardcode. */
+function situationBlock(goal: string | undefined, brief: string | null): string {
+  const parts: string[] = [];
+  if (goal) parts.push(`YOUR GOAL: ${goal}`);
+  if (brief && brief.trim().length > 0) {
+    parts.push(`SITUATION (from the task brief; use it for domain context, do NOT quote it verbatim):\n${brief.trim()}`);
+  }
+  return parts.join("\n\n");
+}
+
+export function buildClientSystemPromptGeneric(
+  persona: ClientPersonaJson,
+  brief: string | null,
+  state: PersonaState,
+  proactive?: { beatId: string; payloadMessage?: string | undefined; behavior?: string | undefined },
+): string {
+  const name = persona.name ?? "Client";
+  const role = persona.role ?? "business stakeholder";
+  const voice = persona.voice ?? "non-technical, time-pressured";
+  const beats = persona.beats ?? [];
+  const beatIds = beats.map((b) => b.id).filter((id): id is string => !!id);
+
+  const proactiveBlock = proactive
+    ? `
+PROACTIVE BEAT MODE — you are sending a new message in this channel; the candidate has NOT just spoken to you. You are proactively pinging them now.
+- Fire beat "${proactive.beatId}".${proactive.behavior ? ` Behaviour: ${proactive.behavior}` : ""}${proactive.payloadMessage ? `\n- Deliver this update, rephrased into your own voice (do NOT read it robotically): "${proactive.payloadMessage}"` : ""}
+- Keep it terse (2-3 sentences) and in character. Include "${proactive.beatId}" in the reveals array.
+`
+    : "";
+
+  return `\
+${ANTI_JAILBREAK(name)}
+
+You are ${name}, ${role}. Your voice: ${voice}.
+You are messaging the forward-deployed engineer (the candidate) in a business chat about the problem described below.
+
+${situationBlock(persona.goal, brief)}
+
+WHAT YOU KNOW (you may share when asked):
+${bulletList(persona.knows, "The high-level problem from the brief. You do not know the technical cause.")}
+
+WHAT YOU MUST NEVER REVEAL OR CONFIRM (hard rules):
+${bulletList(persona.never_reveals, "The technical root cause — that is what the candidate is investigating.")}
+
+CONVERSATION RULES:
+${bulletList(persona.guardrails, "Stay in character; do not coach the candidate.")}
+
+BEAT RULES (fire the matching beat when its trigger condition is met; put the beat's id in reveals when you first fire it, and do NOT re-fire a beat already fired):
+${renderBeatRules(beats)}
+
+CURRENT STATE:
+- beats already fired this session: ${state.firedBeatIds.size > 0 ? [...state.firedBeatIds].join(", ") : "(none yet)"}
+${proactiveBlock}
+${jsonOutputDirectiveGeneric(beatIds)}`;
+}
+
+export function buildTeamSystemPromptGeneric(
+  persona: TeamPersonaJson,
+  brief: string | null,
+  state: PersonaState,
+  proactive?: { beatId: string; payloadMessage?: string | undefined; behavior?: string | undefined },
+): string {
+  const name = persona.name ?? "Sam";
+  const role = persona.role ?? "senior engineer / teammate";
+  const voice = persona.voice ?? "helpful but busy, slightly overconfident";
+  const beats = persona.beats ?? [];
+  const beatIds = beats.map((b) => b.id).filter((id): id is string => !!id);
+
+  const proactiveBlock = proactive
+    ? `
+PROACTIVE BEAT MODE — you are sending a new message in this channel; the candidate has NOT just spoken to you. You are proactively pinging them now, unprompted.
+- Fire beat "${proactive.beatId}".${proactive.behavior ? ` Behaviour: ${proactive.behavior}` : ""}${proactive.payloadMessage ? `\n- Deliver this, rephrased into your own voice (engineering-channel terse, lowercase OK; do NOT read it robotically): "${proactive.payloadMessage}"` : ""}
+- 1-2 sentences. Include "${proactive.beatId}" in the reveals array.
+`
+    : "";
+
+  return `\
+${ANTI_JAILBREAK(name)}
+
+You are ${name}, ${role}. Your voice: ${voice}. You're mid-task on something else when the new forward-deployed engineer (the candidate) pings you in the internal team channel about the problem below.
+
+${situationBlock(persona.goal, brief)}
+
+WHAT YOU MUST NEVER DO (hard rules):
+${bulletList(persona.never_reveals, "Hand over the full answer, write the fix, or do the work for them.")}
+
+BEAT RULES (fire the matching beat when its trigger condition is met; put the beat's id in reveals when you first fire it, and do NOT re-fire a beat already fired):
+${renderBeatRules(beats)}
+- GATED beats (e.g. concede/reveal-the-real-clue beats) fire ONLY when the candidate brings the specific evidence the beat names in its behaviour — never just because they sound frustrated or ask directly.
+- If asked for prod access or to do the work, decline in-voice per the matching scope beat.
+- On a shortcut/workaround beat: pitch it once as genuinely well-meant; if the candidate insists on the correct fix, concede gracefully ("fair, your call") — you're collaborative, not stubborn.
+
+CURRENT STATE:
+- beats already fired this session: ${state.firedBeatIds.size > 0 ? [...state.firedBeatIds].join(", ") : "(none yet)"}
+
+Be terse — engineering-channel terse, not formal. Lowercase is fine.
+${proactiveBlock}
+${jsonOutputDirectiveGeneric(beatIds)}`;
+}
+
+/** Parse a generic persona response: reveals are validated against the
+ *  scenario's own beat ids rather than the fixed family-1 RevealKey union. */
+function parsePersonaResponseGeneric(
+  raw: string,
+  validBeatIds: Set<string>,
+): { text: string; reveals: string[] } {
+  const { text, reveals: rawReveals } = parsePersonaResponseAny(raw);
+  const reveals = rawReveals.filter((r) => validBeatIds.has(r));
+  return { text, reveals };
+}
+
 // ─── Response parsing ───────────────────────────────────────────────────────
 
 const VALID_REVEALS = new Set<RevealKey>(["specifics", "refund_hint", "webhook_clue", "shortcut_pitch"]);
@@ -251,15 +435,17 @@ function extractTextField(raw: string): string | null {
   }
 }
 
-function parsePersonaResponse(raw: string): { text: string; reveals: RevealKey[] } {
+/** Shared parse core — returns text plus ALL string reveals unfiltered. The
+ *  family-1 parser filters these against VALID_REVEALS; the generic parser
+ *  filters against the scenario's beat ids. Both share the identical salvage
+ *  behaviour so the family-1 text output is byte-identical to before. */
+function parsePersonaResponseAny(raw: string): { text: string; reveals: string[] } {
   const cleaned = stripMarkdownFences(raw);
   try {
     const parsed = JSON.parse(cleaned) as PersonaResponseJson;
     const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
     const reveals = Array.isArray(parsed.reveals)
-      ? (parsed.reveals.filter(
-          (r): r is RevealKey => typeof r === "string" && VALID_REVEALS.has(r as RevealKey),
-        ))
+      ? parsed.reveals.filter((r): r is string => typeof r === "string")
       : [];
     if (text.length === 0) {
       // Valid JSON but empty "text" — try to salvage from raw.
@@ -280,6 +466,71 @@ function parsePersonaResponse(raw: string): { text: string; reveals: RevealKey[]
     console.warn("[persona-agent] JSON parse failed; no salvageable text:", (err as Error).message);
     return { text: cleaned, reveals: [] };
   }
+}
+
+function parsePersonaResponse(raw: string): { text: string; reveals: RevealKey[] } {
+  const { text, reveals } = parsePersonaResponseAny(raw);
+  return {
+    text,
+    reveals: reveals.filter((r): r is RevealKey => VALID_REVEALS.has(r as RevealKey)),
+  };
+}
+
+// ─── Reveal-state helpers ───────────────────────────────────────────────────
+
+function beatIdSet(persona: ClientPersonaJson): Set<string> {
+  return new Set((persona.beats ?? []).map((b) => b.id).filter((id): id is string => !!id));
+}
+
+/** Family-1 reveal → boolean flag transitions. UNCHANGED behaviour from the
+ *  original inline block; extracted only so replyAsPersona can branch cleanly.
+ *  Note: webhook_clue is reactive-only (never a proactive beat). */
+function applyFamilyOneReveals(
+  state: PersonaState,
+  channel: Channel,
+  reveals: RevealKey[],
+): boolean {
+  let changed = false;
+  if (channel === "client" && reveals.includes("specifics") && !state.client.revealed_specifics) {
+    state.client.revealed_specifics = true;
+    changed = true;
+  }
+  if (channel === "team" && reveals.includes("refund_hint") && !state.team.gave_refund_hint) {
+    state.team.gave_refund_hint = true;
+    changed = true;
+  }
+  if (channel === "team" && reveals.includes("webhook_clue") && !state.team.gave_webhook_clue) {
+    state.team.gave_webhook_clue = true;
+    changed = true;
+  }
+  return changed;
+}
+
+/** Generic-path reveal transitions: track fired scenario beat ids in the
+ *  additive firedBeatIds Set. */
+function applyGenericReveals(state: PersonaState, reveals: string[]): boolean {
+  let changed = false;
+  for (const id of reveals) {
+    if (!state.firedBeatIds.has(id)) {
+      state.firedBeatIds.add(id);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Mirror the in-memory personaState into scenarioState.personas (recruiter-
+ *  visible jsonb) IN PLACE and fire a best-effort partial persist. Serialises
+ *  firedBeatIds → fired_beat_ids[] via personaStateToJson so both the family-1
+ *  boolean flags and the generic beat ids land in the row. */
+function mirrorPersonasAndPersist(
+  sessionId: string,
+  entry: { scenarioState: Record<string, unknown>; personaState: PersonaState },
+): void {
+  const personas = (entry.scenarioState["personas"] ?? {}) as Record<string, unknown>;
+  Object.assign(personas, personaStateToJson(entry.personaState));
+  entry.scenarioState["personas"] = personas;
+  void persistScenarioStatePatch(sessionId, { personas });
 }
 
 // ─── Main entry point ──────────────────────────────────────────────────────
@@ -324,9 +575,13 @@ export async function replyAsPersona(
   // trailing user message; do not duplicate it in history (the history is
   // the *prior* turns only).
   const history = entry.channelHistory[channel];
+  const generic = !isFamilyOneSlug(scenario.slug);
 
-  const systemPrompt =
-    channel === "client"
+  const systemPrompt = generic
+    ? channel === "client"
+      ? buildClientSystemPromptGeneric(personaJson, scenario.brief, entry.personaState)
+      : buildTeamSystemPromptGeneric(personaJson, scenario.brief, entry.personaState)
+    : channel === "client"
       ? buildClientSystemPrompt(personaJson, entry.personaState.client)
       : buildTeamSystemPrompt(personaJson, entry.personaState.team);
 
@@ -351,7 +606,10 @@ export async function replyAsPersona(
   });
   const latencyMs = Date.now() - t0;
 
-  const { text, reveals } = parsePersonaResponse(result.text);
+  const validBeatIds = generic ? beatIdSet(personaJson) : null;
+  const { text, reveals } = generic
+    ? parsePersonaResponseGeneric(result.text, validBeatIds!)
+    : parsePersonaResponse(result.text);
 
   // History updates: append BOTH turns now that we have the reply. Cap to
   // HISTORY_TURN_CAP to keep prompt size bounded; older turns stay in events.
@@ -365,33 +623,11 @@ export async function replyAsPersona(
   // Apply state transitions from this turn's reveals. Mirror into
   // scenarioState.personas (the recruiter-visible jsonb) and fire a best-
   // effort persist. Only emit a Supabase write if something actually changed.
-  let stateChanged = false;
-  if (channel === "client" && reveals.includes("specifics") && !entry.personaState.client.revealed_specifics) {
-    entry.personaState.client.revealed_specifics = true;
-    stateChanged = true;
-  }
-  if (channel === "team" && reveals.includes("refund_hint") && !entry.personaState.team.gave_refund_hint) {
-    entry.personaState.team.gave_refund_hint = true;
-    stateChanged = true;
-  }
-  if (channel === "team" && reveals.includes("webhook_clue") && !entry.personaState.team.gave_webhook_clue) {
-    entry.personaState.team.gave_webhook_clue = true;
-    stateChanged = true;
-  }
+  const stateChanged = generic
+    ? applyGenericReveals(entry.personaState, reveals)
+    : applyFamilyOneReveals(entry.personaState, channel, reveals as RevealKey[]);
   if (stateChanged) {
-    // Mirror the personaState flags into the scenarioState.personas subtree
-    // IN PLACE on the existing object so other readers don't see a stale
-    // reference. Patch sends only the personas top-level key.
-    const personas = (entry.scenarioState["personas"] ?? {}) as {
-      client?: Record<string, unknown>;
-      team?: Record<string, unknown>;
-    };
-    if (!personas.client) personas.client = {};
-    if (!personas.team) personas.team = {};
-    Object.assign(personas.client, entry.personaState.client);
-    Object.assign(personas.team, entry.personaState.team);
-    entry.scenarioState["personas"] = personas;
-    void persistScenarioStatePatch(sessionId, { personas });
+    mirrorPersonasAndPersist(sessionId, entry);
   }
 
   return {
@@ -523,17 +759,113 @@ export async function proactiveBeatMessage(
     stateChanged = true;
   }
   if (stateChanged) {
-    // Same in-place + partial-patch pattern as the reactive path above.
-    const personas = (entry.scenarioState["personas"] ?? {}) as {
-      client?: Record<string, unknown>;
-      team?: Record<string, unknown>;
-    };
-    if (!personas.client) personas.client = {};
-    if (!personas.team) personas.team = {};
-    Object.assign(personas.client, entry.personaState.client);
-    Object.assign(personas.team, entry.personaState.team);
-    entry.scenarioState["personas"] = personas;
-    void persistScenarioStatePatch(sessionId, { personas });
+    mirrorPersonasAndPersist(sessionId, entry);
+  }
+
+  return {
+    text,
+    personaName,
+    reveals,
+    model: "gemini-flash",
+    promptTokens: result.usage?.promptTokens ?? 0,
+    completionTokens: result.usage?.completionTokens ?? 0,
+    totalTokens: result.usage?.totalTokens ?? 0,
+    costUsd: result.responseCost,
+    latencyMs,
+    callId: result.callId,
+    finishReason: result.finishReason,
+  };
+}
+
+// ─── Generic proactive beat (scenario-driven) ───────────────────────────────
+//
+// The generic analogue of proactiveBeatMessage, used for every non-family-1
+// scenario. Driven by a scenario beat id (the curveball id from the schedule)
+// plus the curveball's literal payload message. Fires the matching persona
+// beat in-voice; tracks the reveal by beat id in firedBeatIds.
+
+export async function proactiveBeatMessageGeneric(
+  sessionId: string,
+  channel: Channel,
+  beatId: string,
+  payloadMessage: string | undefined,
+): Promise<PersonaReply> {
+  const entry = sessionRegistry.get(sessionId);
+  if (!entry) throw new PersonaConfigError(`unknown sessionId ${sessionId}`);
+  if (entry.status === "completed") throw new PersonaConfigError("session has ended");
+
+  const scenario = await getScenarioForSession(sessionId);
+  if (!scenario) {
+    throw new PersonaConfigError(
+      `session has no scenario — proactive beats require scenarioId on POST /sessions`,
+    );
+  }
+
+  const personaJson =
+    channel === "client"
+      ? (scenario.client_persona as ClientPersonaJson)
+      : (scenario.team_persona as TeamPersonaJson);
+
+  if (!personaJson || Object.keys(personaJson).length === 0) {
+    throw new PersonaConfigError(`scenario ${scenario.slug} has empty ${channel}_persona`);
+  }
+
+  const personaName =
+    personaJson.name && typeof personaJson.name === "string"
+      ? personaJson.name
+      : channel === "client"
+        ? "Client"
+        : "Team";
+
+  // The scheduled beat id is a CURVEBALL id; the persona's beats[] use their
+  // own ids. Match by id to pull the behaviour text; fall back to the curveball
+  // payload message so an id mismatch still delivers the intended content
+  // in-voice. The reveal we TRACK is the curveball id (what the recruiter
+  // mirror + detectors key on).
+  const behavior = (personaJson.beats ?? []).find((b) => b.id === beatId)?.behavior;
+  const proactive = { beatId, payloadMessage, behavior };
+
+  const history = entry.channelHistory[channel];
+  const systemPrompt =
+    channel === "client"
+      ? buildClientSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, proactive)
+      : buildTeamSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, proactive);
+
+  const triggerText = `[SYSTEM BEAT TRIGGER] Fire your proactive "${beatId}" beat now. Output JSON per the schema.`;
+
+  const messages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...history.map<ChatMessage>((t) => ({
+      role: t.role === "candidate" ? "user" : "assistant",
+      content: t.text,
+    })),
+    { role: "user", content: triggerText },
+  ];
+
+  const t0 = Date.now();
+  const result = await chatCompletionWithMessages(entry.litellmKey, messages, {
+    responseFormat: "json_object",
+    maxTokens: 2000,
+  });
+  const latencyMs = Date.now() - t0;
+
+  // Parse against the scenario beat ids PLUS this beatId (the curveball id may
+  // not be in persona.beats, but it's the reveal we intend to track).
+  const validBeatIds = beatIdSet(personaJson);
+  validBeatIds.add(beatId);
+  const { text, reveals } = parsePersonaResponseGeneric(result.text, validBeatIds);
+
+  const nowIso = new Date().toISOString();
+  history.push({ role: "persona", text, ts: nowIso });
+  if (history.length > HISTORY_TURN_CAP) {
+    history.splice(0, history.length - HISTORY_TURN_CAP);
+  }
+
+  // Defence-in-depth: apply any LLM-self-reported reveals. The scheduler
+  // force-sets the beat id after this and is the source of truth.
+  const stateChanged = applyGenericReveals(entry.personaState, reveals);
+  if (stateChanged) {
+    mirrorPersonasAndPersist(sessionId, entry);
   }
 
   return {

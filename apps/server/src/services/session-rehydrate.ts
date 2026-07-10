@@ -22,8 +22,8 @@ import { env } from "../env.js";
 import {
   sessionRegistry,
   freshVerificationState,
+  personaStateFromJson,
   type SessionEntry,
-  type PersonaState,
   type VerificationState,
 } from "./registry.js";
 import {
@@ -36,11 +36,6 @@ import { mintSessionKey, revokeSessionKeyByAlias } from "./litellm.js";
 import { loadScenarioById } from "./scenarios.js";
 import { expireSession } from "./session.js";
 import { appendEvent } from "./events-direct.js";
-
-const DEFAULT_PERSONA_STATE: PersonaState = {
-  client: { revealed_specifics: false, requirement_changed: false },
-  team:   { gave_refund_hint: false, gave_webhook_clue: false, gave_shortcut_pitch: false },
-};
 
 // In-flight rehydrate promises keyed by sessionId — prevents concurrent
 // requests on the same session from triggering parallel reconnect attempts.
@@ -168,8 +163,7 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
   const nextTranscriptSeq = await loadNextTranscriptSeq(sessionId);
 
   const scenarioState = (row.scenario_state ?? {}) as Record<string, unknown>;
-  const personaStateFromRow =
-    (scenarioState["personas"] as PersonaState | undefined) ?? DEFAULT_PERSONA_STATE;
+  const personaStateFromRow = personaStateFromJson(scenarioState["personas"]);
   // Resume any in-flight verification exchange (Slice 5.4b) from the persisted
   // mirror; absent it, start idle so the scheduled beat can open one later.
   const verificationStateFromRow =
