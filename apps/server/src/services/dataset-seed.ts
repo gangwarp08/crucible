@@ -96,6 +96,16 @@ export async function seedScenarioDataset(
     throw new Error(`[dataset-seed] chmod 444 ${DB_PATH} failed: ${chmod.stderr}`);
   }
 
+  // Remove the staging copies (schema.sql / seed.sql / *.py) now the DB is
+  // built. The candidate can query customer.db (the task) but the raw seed
+  // SQL let them read every row verbatim, sidestepping the query-runner's
+  // 500-row cap. Not a ground-truth leak (same rows are queryable), but no
+  // reason to leave the unclamped copy on disk. Best-effort — a cleanup
+  // failure must not fail provisioning. (Security audit 2026-07-10.)
+  await sandbox.commands
+    .run(`rm -rf ${STAGING_DIR}`, { timeoutMs: 5_000 })
+    .catch(() => { /* best-effort; DB is already built + locked */ });
+
   console.log(
     `[dataset-seed] dataset_ref="${datasetRef}" → ${DB_PATH} :: ${build.stdout.trim()}`,
   );
