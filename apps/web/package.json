@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "copy-monaco": "node scripts/copy-monaco.mjs",
+    "build": "node scripts/copy-monaco.mjs && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
@@ -16,6 +17,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "lucide-react": "^1.17.0",
+    "monaco-editor": "0.55.1",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

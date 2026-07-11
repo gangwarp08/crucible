@@ -1,0 +1,3 @@
+# Self-hosted Monaco editor build, copied from node_modules by
+# scripts/copy-monaco.mjs at build time. Generated, not committed.
+/public/monaco/

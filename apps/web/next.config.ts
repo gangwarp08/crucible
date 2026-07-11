@@ -26,22 +26,21 @@ try {
 // frame-ancestors (clickjacking), connect-src (locks XHR/WebSocket targets to
 // our own server), and object-src 'none'.
 //
-// MONACO_CDN: the candidate IDE (@monaco-editor/react) loads the Monaco editor
-// + its web workers from jsdelivr at runtime (it always has — see
-// Editor.tsx). The editor mounts a <script> from the CDN, fetches its chunks,
-// and spawns blob: workers. So script/connect/font must allow jsdelivr and
-// worker-src must allow blob:, or the editor hangs on "Loading…". (Restoring
-// what worked pre-CSP; self-hosting Monaco under /monaco is the stricter
-// follow-up if we want to drop the CDN dependency.)
-const MONACO_CDN = "https://cdn.jsdelivr.net";
+// MONACO: the candidate IDE (@monaco-editor/react) now loads Monaco from our
+// own origin — Editor.tsx points the loader at /monaco/vs, which is populated
+// at build time by scripts/copy-monaco.mjs (served as a same-origin 'self'
+// asset). No external CDN is involved, so the CSP names no external hosts.
+// Monaco still spawns its web workers as blob: URLs (they importScripts back
+// from same-origin /monaco), so script-src keeps blob: and worker-src /
+// child-src keep 'self' blob:; without those the editor hangs on "Loading…".
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
-  `script-src 'self' 'unsafe-inline' blob: ${MONACO_CDN}`,
+  "script-src 'self' 'unsafe-inline' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  `font-src 'self' data: ${MONACO_CDN}`,
-  `connect-src 'self' ${serverOrigin} ${serverWsOrigin} ${MONACO_CDN}`,
+  "font-src 'self' data:",
+  `connect-src 'self' ${serverOrigin} ${serverWsOrigin}`,
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
   "frame-ancestors 'none'",
