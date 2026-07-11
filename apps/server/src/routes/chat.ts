@@ -106,9 +106,14 @@ export async function chatRoutes(server: FastifyInstance) {
 
     const t0 = Date.now();
 
+    // Rolling context: feed the last 2 exchanges (up to 4 messages) as prior
+    // turns. Best-effort — an empty history behaves exactly as the old
+    // stateless call.
+    const priorTurns = entry.assistantHistory.slice(-4);
+
     try {
       const { text, responseCost, callId, finishReason, usage } =
-        await chatCompletion(entry.litellmKey, prompt);
+        await chatCompletion(entry.litellmKey, prompt, priorTurns);
 
       const latencyMs = Date.now() - t0;
 
@@ -183,6 +188,15 @@ export async function chatRoutes(server: FastifyInstance) {
           balance_after: next,
         });
         void persistScenarioStatePatch(sessionId, { tokens: next });
+      }
+
+      // Update the rolling context window: append this exchange (clean text,
+      // no guard) and trim to the last 4 entries (2 exchanges). In-memory,
+      // best-effort — never persisted, never blocks the turn.
+      entry.assistantHistory.push({ role: "user", text: prompt });
+      entry.assistantHistory.push({ role: "assistant", text });
+      if (entry.assistantHistory.length > 4) {
+        entry.assistantHistory = entry.assistantHistory.slice(-4);
       }
 
       server.log.debug(

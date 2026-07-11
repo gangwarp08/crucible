@@ -183,19 +183,42 @@ interface PostOpts {
   maxTokens?: number;
 }
 
+/** A prior AI-assistant turn supplied for rolling context. Clean text only —
+ *  no guard is appended to historical turns (the guard rides the CURRENT user
+ *  turn, below). */
+export interface AssistantPriorTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+/** Max prior messages fed as context: 2 exchanges = 2 user + 2 assistant. */
+const MAX_PRIOR_TURNS = 4;
+
 /** Single-prompt shape used by the chat HUD / AI assistant route. Hardcodes
- *  the generic-assistant SYSTEM_PROMPT so callers don't need to know it. */
+ *  the generic-assistant SYSTEM_PROMPT so callers don't need to know it.
+ *
+ *  `priorTurns` is an optional rolling context window of earlier exchanges in
+ *  this session (oldest first). It is best-effort: an empty/omitted array makes
+ *  this behave exactly as the original stateless single-prompt call. Capped at
+ *  MAX_PRIOR_TURNS (the last 2 exchanges) and inserted between the system prompt
+ *  and the current user turn. Historical turns carry NO guard — only the current
+ *  user turn does, preserving the recency-defense placement. */
 export async function chatCompletion(
   sessionKey: string,
   prompt: string,
+  priorTurns: AssistantPriorTurn[] = [],
 ): Promise<ChatCompletionResult> {
   // Recency guard appended AFTER the candidate's text within the user turn: the
   // last thing the model reads re-asserts the permanent rules. This survives
   // Gemini's system-message merging (a trailing system turn would be folded back
   // to the top) and works across providers. The clean `prompt` is what gets
   // logged to the transcript — the guard is only in the model call.
+  const priors: ChatMessage[] = priorTurns
+    .slice(-MAX_PRIOR_TURNS)
+    .map((t) => ({ role: t.role, content: t.text }));
   return _postChatCompletion(sessionKey, [
     { role: "system", content: SYSTEM_PROMPT },
+    ...priors,
     { role: "user", content: `${prompt}\n\n${ASSISTANT_GUARD}` },
   ]);
 }

@@ -404,6 +404,7 @@ export async function createSandbox(
     channelHistory: { client: [], team: [] },
     personaState: freshPersonaState(),
     verificationState: freshVerificationState(),
+    assistantHistory: [],
   });
 
   // Persist the sessions row synchronously so FK constraints on telemetry tables

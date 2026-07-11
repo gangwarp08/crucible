@@ -106,6 +106,18 @@ export default function ChatHUD() {
         )}
       </div>
 
+      <div style={{
+        padding: "6px 14px",
+        background: color.bg.elevated,
+        borderBottom: `1px solid ${color.border.subtle}`,
+        flexShrink: 0,
+        fontSize: 11,
+        lineHeight: 1.4,
+        color: color.text.muted,
+      }}>
+        Heads-up: the assistant only remembers your last couple of messages — paste anything important.
+      </div>
+
       {status !== "active" && (
         <div style={{
           padding: "10px 14px",

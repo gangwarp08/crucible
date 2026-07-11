@@ -197,6 +197,14 @@ export interface SessionEntry {
   channelHistory: { client: PersonaTurn[]; team: PersonaTurn[] };
   personaState: PersonaState;
 
+  // AI-assistant rolling context window (in-memory, best-effort). Holds the
+  // last few user/assistant turns so the stateless /chat route can give the
+  // model a short memory. Trimmed to the last 4 entries (2 exchanges) after
+  // each successful turn. Intentionally NOT persisted — a server restart or a
+  // browser refresh starts the window fresh, which is acceptable: it is
+  // supplementary context, never required for a turn to succeed.
+  assistantHistory: Array<{ role: "user" | "assistant"; text: string }>;
+
   // L4 interactive verification (Slice 5.4b). Live state of the near-deadline
   // defense exchange on the "verifier" channel. Mirrored into
   // scenarioState.verification for durability across a restart.
