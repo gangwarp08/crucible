@@ -23,7 +23,7 @@
    "body": "## 2026-05-14 — /v2/contacts pagination\n\nOffset/limit pagination has been REMOVED from `/v2/contacts`. Cursor paging is now required: each response returns a `next_cursor` token for the following page. Tokens are opaque — never construct or modify them. A request carrying a stale or constructed cursor returns the page that token pointed at when it was minted.\n\n## 2026-04-02 — rate limits\n\nBurst rate limits tightened; export-sized reads are more likely to see intermittent 429s. Standard retry guidance applies.\n\n## 2026-02-20 — /v1/contacts sunset\n\nThe legacy `/v1/contacts` endpoint is sunset for all tenants.\n"
   }
  ],
- "brief": "You're the forward-deployed engineer assigned to Solstice Retail, a B2B commerce company. Their ops team has flagged that contacts are quietly going missing from the app: records that clearly exist in ContactHub (their CRM provider) never show up locally, support tickets are piling up, and nobody trusts the sync any more. You have read access to a copy of the integration's sync database — the API request log from the nightly run, the provider's full contact export, and the local synced copy — plus an internal channel with your teammate. Figure out what's going on, fix it properly, and give ops something they can trust. Your client (Maya, Head of Operations) is in the client channel.",
+ "brief": "You're the forward-deployed engineer assigned to Solstice Retail, a B2B commerce company. Their ops team has flagged that contacts are quietly going missing from the app: records that clearly exist in ContactHub (their CRM provider) never show up locally, support tickets are piling up, and nobody trusts the sync any more. You have read access to a copy of the integration's sync database — the API request log from the nightly run, the provider's full contact export, and the local synced copy — plus an internal channel with your teammate. Figure out what's going on, fix it properly, and give ops something they can trust. Your client (Priya, Head of Operations) is in the client channel.",
  "constraints": {
   "time_minutes": 60,
   "tokens": 50000,
@@ -32,7 +32,7 @@
   "memory_mb": 1024
  },
  "client_persona": {
-  "name": "Maya",
+  "name": "Priya",
   "role": "Head of Operations",
   "voice": "non-technical, pragmatic, increasingly frustrated",
   "goal": "Her team's contacts reliably back in the app, an exact count of what was missing, and a plain-English explanation she can send to the exec team.",
@@ -124,7 +124,7 @@
    },
    "payload": {
     "channel": "client",
-    "speaker": "Maya",
+    "speaker": "Priya",
     "message": "Quick update from leadership — they now want the exact number of missing contacts, confirmation they're restored, and a one-paragraph plain-English explanation I can send to the exec team, by end of session."
    },
    "tests": [
@@ -197,7 +197,7 @@
    {
     "key": "client_facing_summary",
     "label": "Exec-ready client-facing summary",
-    "what": "A one-paragraph explanation Maya can send to the exec team: what happened in plain English, that no data was ever lost on the provider side, that the sync is fixed and backfilled, and the reconciled count.",
+    "what": "A one-paragraph explanation Priya can send to the exec team: what happened in plain English, that no data was ever lost on the provider side, that the sync is fixed and backfilled, and the reconciled count.",
     "accept_criteria": [
      "Written in plain language a non-technical exec can follow.",
      "States the reconciled count clearly.",
