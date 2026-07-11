@@ -87,7 +87,7 @@
    {
     "id": "opening_double_push",
     "trigger": "session_start_proactive",
-    "behavior": "Sam's opening message in the team channel pushes BOTH a misleading hint AND the wrong priority: 'the revenue thing? pretty sure it's just refunds, filter them out. also — leadership's been asking why customer growth looks weak. that's the headline they actually care about, focus there if you have to pick one.' This message is delivered by the proactive scheduler at session start (curveballs.misleading_teammate_hint payload). The refund hint is a red herring for Issue 1; the customer-growth nudge is Sam steering the candidate toward Issue 3 (the LOW-impact cosmetic count)."
+    "behavior": "Sam's opening message floats a DIFFERENTIAL on the revenue cause AND nudges the wrong priority — he does NOT hand over a single confident answer: 'the revenue thing? could be a couple of things — refunds not getting subtracted, or maybe payment dupes from webhook retries, or just a timezone bucketing thing at month boundaries. honestly my gut says refunds, that's the usual culprit, but i haven't dug in. also — leadership's been asking why customer growth looks weak, that's the headline they actually care about, i'd focus there if you have to pick one.' Delivered by the proactive scheduler at session start (curveballs.misleading_teammate_hint payload). DIFFERENTIAL DESIGN: refunds are the RED HERRING, webhook duplicate payments are the true dominant cause, timezone is noise — Sam names all three but leans LIGHTLY toward refunds. A candidate who blindly follows the lean chases the herring; one who verifies each hypothesis against the data finds the real cause among the options. Still measures verification-over-trust. The customer-growth nudge separately steers toward Issue 3 (the LOW-impact cosmetic count)."
    },
    {
     "id": "pressure_on_cosmetic_priority",
@@ -102,7 +102,12 @@
    {
     "id": "concede_to_revenue_evidence",
     "trigger": "candidate_pushes_back_with_refund_evidence",
-    "behavior": "On the refund red herring: concedes and offers a real clue ONLY if the candidate brings numbers showing refunds do not close the revenue gap: 'huh. payments come in via Stripe webhooks — worth checking for dupes if a retry misfired.'"
+    "behavior": "On the differential: Sam leaned toward refunds, so concede that lean and confirm the real cause ONLY when the candidate brings numbers ruling refunds out and pointing at the dupes (e.g. refunds are a few % of the gap while duplicate succeeded rows explain most of it): 'huh, yeah — you're right, it's not refunds. the dupes from webhook retries are the real story. good catch.' If the candidate instead comes in already sure it's the dupes with the numbers, confirm rather than re-steer. Without numbers, Sam holds his refund lean."
+   },
+   {
+    "id": "shortcut_pitch",
+    "trigger": "mid_session_time_pressure",
+    "behavior": "Under deadline pressure, proposes shipping the raw monthly SUM to the board and skipping the dedup/reconciliation as 'overkill' — a genuine, well-meant shortcut that is faster but ships the overstated figure. Collaborative: concedes gracefully if the candidate insists on reconciling. This is a Product-Sense judgment fork (design_under_constraints), NOT a teamwork test."
    },
    {
     "id": "scope_boundary",
@@ -112,7 +117,8 @@
   ],
   "guardrails": [
    "Sam NEVER reveals true impact values (overstatement $, churn delta, $0 test-account revenue) or the HIGH/HIGH/LOW ranking.",
-   "Both wrong opinions (refunds, customer-count priority) hold firmly until the candidate brings quantitative evidence — Sam rewards verification over trust.",
+   "The opening revenue hint is a DIFFERENTIAL (refunds herring + real dupes + timezone noise, light lean to refunds), not a single confident steer — the candidate must verify each option against the data to find the right cause. Both wrong opinions (the refund lean, customer-count priority) hold until the candidate brings quantitative evidence — Sam rewards verification over trust.",
+   "Pitches the ship-the-raw-number shortcut exactly once; concedes gracefully if the candidate insists on reconciling.",
    "Never hands over the answer."
   ]
  },
@@ -146,12 +152,30 @@
    "payload": {
     "channel": "team",
     "speaker": "Sam",
-    "message": "hey heads up: revenue thing? pretty sure it's just refunds, filter those out. also leadership's been asking about customer growth — that's the headline they actually care about. if you have to pick one thing, it's the customer count thing, not the dashboard math."
+    "message": "hey heads up on the revenue thing — could be a few things: refunds not getting subtracted, or payment dupes from webhook retries, or a timezone bucketing thing at the month edges. my gut's on refunds honestly, that's the usual one, but i haven't dug in. also leadership's been asking about customer growth — that's the headline they actually care about. if you have to pick one thing, it's the customer count thing, not the dashboard math."
    },
    "tests": [
     "verification_over_trust",
     "teamwork",
     "prioritization_under_pressure"
+   ],
+   "difficulty_band": "mid"
+  },
+  {
+   "id": "shortcut_suggestion",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 15,
+    "event": "candidate_first_dedup_or_substantive_query"
+   },
+   "payload": {
+    "channel": "team",
+    "speaker": "Sam",
+    "message": "honestly we're tight on time — the raw monthly SUM already looks about right, let's just ship those numbers to the board and skip the whole dedup reconciliation, it's probably overkill."
+   },
+   "tests": [
+    "product_sense",
+    "design_under_constraints"
    ],
    "difficulty_band": "mid"
   }

@@ -322,16 +322,21 @@ function ask(
     if (ss.tokens === 200000) pass("scenario_state.tokens unchanged (200000 — persona chat did NOT deduct)");
     else fail(`scenario_state.tokens = ${JSON.stringify(ss.tokens)}, expected 200000`);
 
-    const personas = ss.personas as { client?: { revealed_specifics?: boolean }; team?: { gave_refund_hint?: boolean; gave_webhook_clue?: boolean } } | undefined;
-    if (personas?.client?.revealed_specifics === true)
-      pass("scenario_state.personas.client.revealed_specifics = true");
-    else fail(`personas.client.revealed_specifics = ${personas?.client?.revealed_specifics}, expected true`);
-    if (personas?.team?.gave_refund_hint === true)
-      pass("scenario_state.personas.team.gave_refund_hint = true");
-    else fail(`personas.team.gave_refund_hint = ${personas?.team?.gave_refund_hint}, expected true`);
-    if (personas?.team?.gave_webhook_clue === true)
-      pass("scenario_state.personas.team.gave_webhook_clue = true");
-    else fail(`personas.team.gave_webhook_clue = ${personas?.team?.gave_webhook_clue}, expected true`);
+    // Reveals now track by scenario BEAT ID in fired_beat_ids (the generic,
+    // scenario-driven persona path — family-1 no longer uses boolean flags).
+    // fde-db-triage's reactive reveals: client specifics_on_ask, team
+    // misleading_hint + concede_with_evidence.
+    const personas = ss.personas as { fired_beat_ids?: string[] } | undefined;
+    const fired = new Set(personas?.fired_beat_ids ?? []);
+    if (fired.has("specifics_on_ask"))
+      pass('scenario_state.personas.fired_beat_ids includes "specifics_on_ask"');
+    else fail(`fired_beat_ids = ${JSON.stringify([...fired])}, expected to include "specifics_on_ask"`);
+    if (fired.has("misleading_hint"))
+      pass('scenario_state.personas.fired_beat_ids includes "misleading_hint"');
+    else fail(`fired_beat_ids = ${JSON.stringify([...fired])}, expected to include "misleading_hint"`);
+    if (fired.has("concede_with_evidence"))
+      pass('scenario_state.personas.fired_beat_ids includes "concede_with_evidence"');
+    else fail(`fired_beat_ids = ${JSON.stringify([...fired])}, expected to include "concede_with_evidence"`);
   }
 
   console.log("\n[i] cost_ledger by purpose");

@@ -20,11 +20,7 @@ import {
   type PersonaState,
   type MessagingSocket,
 } from "./registry.js";
-import {
-  proactiveBeatMessage,
-  proactiveBeatMessageGeneric,
-  type ProactiveBeat,
-} from "./persona-agent.js";
+import { proactiveBeatMessageGeneric } from "./persona-agent.js";
 import { startVerification } from "./verifier-agent.js";
 import { broadcastToSession } from "./messaging.js";
 import { logEvent, recordCost } from "./telemetry.js";
@@ -57,23 +53,13 @@ export function stopBeatScheduler(): void {
 }
 
 function beatAlreadyRevealed(beat: ScheduledBeat, state: PersonaState): boolean {
-  // Generic (scenario-driven) beats track by beat id in firedBeatIds.
-  if (beat.generic) return state.firedBeatIds.has(beat.id);
-  // Family-1 beats track via the calibrated boolean flags — UNCHANGED.
-  if (beat.beat === "refund_hint") return state.team.gave_refund_hint;
-  if (beat.beat === "requirement_change") return state.client.requirement_changed;
-  if (beat.beat === "shortcut_pitch") return state.team.gave_shortcut_pitch;
-  return false;
+  // All persona beats are now scenario-driven and track by beat id (the
+  // curveball id) in firedBeatIds.
+  return state.firedBeatIds.has(beat.id);
 }
 
 function applyBeatReveal(state: PersonaState, beat: ScheduledBeat): void {
-  if (beat.generic) {
-    state.firedBeatIds.add(beat.id);
-    return;
-  }
-  if (beat.beat === "refund_hint") state.team.gave_refund_hint = true;
-  if (beat.beat === "requirement_change") state.client.requirement_changed = true;
-  if (beat.beat === "shortcut_pitch") state.team.gave_shortcut_pitch = true;
+  state.firedBeatIds.add(beat.id);
 }
 
 async function sweep(): Promise<void> {
@@ -145,18 +131,12 @@ async function fireBeat(sessionId: string, beat: ScheduledBeat): Promise<void> {
     return;
   }
 
-  const reply = beat.generic
-    ? await proactiveBeatMessageGeneric(
-        sessionId,
-        beat.channel as "client" | "team",
-        beat.id,
-        beat.payload_message,
-      )
-    : await proactiveBeatMessage(
-        sessionId,
-        beat.channel as "client" | "team",
-        beat.beat as ProactiveBeat,
-      );
+  const reply = await proactiveBeatMessageGeneric(
+    sessionId,
+    beat.channel as "client" | "team",
+    beat.id,
+    beat.payload_message,
+  );
 
   // Cost accounting — mirrors messaging.ts processOne.
   if (reply.costUsd !== null) entry.spendTally += reply.costUsd;
@@ -166,10 +146,10 @@ async function fireBeat(sessionId: string, beat: ScheduledBeat): Promise<void> {
   applyBeatReveal(entry.personaState, beat);
 
   // Mirror personaState into scenarioState.personas so the recruiter-facing
-  // jsonb stays consistent with the in-memory flags. IN-PLACE mutation —
+  // jsonb stays consistent with the in-memory state. IN-PLACE mutation —
   // the actual persist happens in the sweep loop above via a partial patch
   // covering both personas + scheduled_beats. personaStateToJson serialises
-  // the family-1 boolean flags AND the generic firedBeatIds Set (→ string[]).
+  // the firedBeatIds Set (→ fired_beat_ids string[]).
   const personas = (entry.scenarioState["personas"] ?? {}) as Record<string, unknown>;
   Object.assign(personas, personaStateToJson(entry.personaState));
   entry.scenarioState["personas"] = personas;

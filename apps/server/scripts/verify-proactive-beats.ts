@@ -341,16 +341,18 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
     if (verifBeats.length === 0) pass("no verification beat (gated off by default)");
     else fail(`verification beats = ${JSON.stringify(verifBeats.map((b) => ({ id: b.id, fired: b.fired })))}, expected 0 (gated)`);
 
-    const personas = ss.personas as {
-      client?: { revealed_specifics?: boolean; requirement_changed?: boolean };
-      team?: { gave_refund_hint?: boolean; gave_webhook_clue?: boolean };
-    } | undefined;
-    if (personas?.team?.gave_refund_hint === true)
-      pass("personas.team.gave_refund_hint = true");
-    else fail(`personas.team.gave_refund_hint = ${personas?.team?.gave_refund_hint}, expected true`);
-    if (personas?.client?.requirement_changed === true)
-      pass("personas.client.requirement_changed = true");
-    else fail(`personas.client.requirement_changed = ${personas?.client?.requirement_changed}, expected true`);
+    // Proactive reveals now track by the fired CURVEBALL id in fired_beat_ids
+    // (generic scenario-driven path — no more family-1 boolean flags). The two
+    // proactive beats are misleading_teammate_hint (team) + requirement_change
+    // (client).
+    const personas = ss.personas as { fired_beat_ids?: string[] } | undefined;
+    const fired = new Set(personas?.fired_beat_ids ?? []);
+    if (fired.has("misleading_teammate_hint"))
+      pass('personas.fired_beat_ids includes "misleading_teammate_hint"');
+    else fail(`fired_beat_ids = ${JSON.stringify([...fired])}, expected to include "misleading_teammate_hint"`);
+    if (fired.has("requirement_change"))
+      pass('personas.fired_beat_ids includes "requirement_change"');
+    else fail(`fired_beat_ids = ${JSON.stringify([...fired])}, expected to include "requirement_change"`);
 
     if (ss.tokens === 200000) pass("scenario_state.tokens unchanged (200000 — proactive cost did NOT deduct)");
     else fail(`scenario_state.tokens = ${JSON.stringify(ss.tokens)}, expected 200000`);
