@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { createSandbox, destroySandbox } from "../services/sandbox.js";
+import { createSandbox, destroySandbox, startSessionClock } from "../services/sandbox.js";
 import { DatasetUnavailableError } from "../services/dataset-seed.js";
 import { sessionRegistry } from "../services/registry.js";
 import { getOrRehydrateSession } from "../services/session-rehydrate.js";
@@ -244,6 +244,13 @@ export async function sessionRoutes(server: FastifyInstance) {
       sandboxId: entry.sandboxId,
       createdAt: entry.createdAt.toISOString(),
       deadline: entry.deadline.toISOString(),
+      // Deferred clock: false until the candidate dismisses the pre-start
+      // orientation (POST /sessions/:id/start stamps clock_started_at). While
+      // false the `deadline` above is the creation-relative SAFETY ceiling, not
+      // the work deadline, and the HUD must not count down against it yet.
+      clockStarted:
+        typeof entry.scenarioState["clock_started_at"] === "string" &&
+        (entry.scenarioState["clock_started_at"] as string).length > 0,
       budget: env.SESSION_BUDGET_USD,
       spend: entry.spendTally,
       status: entry.status,
@@ -285,6 +292,26 @@ export async function sessionRoutes(server: FastifyInstance) {
       clientPersona:      entry.scenarioMeta?.clientPersona ?? null,
       teamPersona:        entry.scenarioMeta?.teamPersona   ?? null,
     };
+  });
+
+  // POST /sessions/:id/start — begin the DEFERRED session clock. Called when
+  // the candidate dismisses the pre-start orientation overlay ("Start the
+  // simulation"). Re-anchors the work deadline to now + SESSION_TIMEOUT_MIN,
+  // re-arms the kill-switch, reschedules proactive beats, and stamps
+  // clock_started_at. IDEMPOTENT: a second call (refresh / double-click) returns
+  // the existing deadline unchanged — it never extends the work time. The
+  // creation-relative safety ceiling still governs an abandoned pre-start
+  // session (see sandbox.ts armExpiryTimer + the deadline-reaper).
+  server.post<{ Params: { id: string } }>("/:id/start", {
+    preHandler: [requireSessionToken((req) => (req.params as { id?: string }).id)],
+  }, async (request, reply) => {
+    // Rehydrate a not-yet-in-memory session (server restart during orientation)
+    // so /start can still arm its clock rather than 404.
+    const entry = await getOrRehydrateSession(request.params.id);
+    if (!entry) return reply.status(404).send({ error: "Session not found" });
+    const result = await startSessionClock(request.params.id);
+    if (!result) return reply.status(404).send({ error: "Session not found" });
+    return reply.status(200).send({ deadline: result.deadline, clockStarted: true });
   });
 
   // DELETE /sessions/:id — manual end: clear timer + run shared teardown.

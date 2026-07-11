@@ -132,6 +132,12 @@ export interface Deliverable {
 export interface SessionInfo {
   sessionId: string;
   deadline: string;
+  // Deferred clock: false until the candidate presses "Start the simulation" in
+  // the orientation overlay. While false `deadline` is the creation-relative
+  // safety ceiling, not the work deadline — the HUD shows a pre-start state
+  // instead of counting down. Optional so an older server (no field) reads as
+  // undefined → treated as already-started by the caller's `!== false` guard.
+  clockStarted?: boolean;
   budget: number;
   spend: number;
   status: "active" | "submitted" | "defending" | "completed";
@@ -277,6 +283,24 @@ function orgKeyHeader(): Record<string, string> {
 
 export async function getSession(sessionId: string): Promise<SessionInfo> {
   return apiFetch<SessionInfo>(`/sessions/${sessionId}`, { sessionId });
+}
+
+export interface StartSessionResult {
+  /** The freshly-anchored work deadline (now + SESSION_TIMEOUT_MIN), ISO. */
+  deadline: string;
+  clockStarted: true;
+}
+
+/** Begin the deferred session clock. Called once when the candidate dismisses
+ *  the pre-start orientation overlay. The server re-anchors the work deadline to
+ *  now and re-arms the kill-switch; the response's `deadline` drives the live
+ *  countdown. Idempotent server-side (a retry returns the same deadline). */
+export async function startSession(sessionId: string): Promise<StartSessionResult> {
+  return apiFetch<StartSessionResult>(`/sessions/${sessionId}/start`, {
+    method: "POST",
+    sessionId,
+    body: JSON.stringify({}),
+  });
 }
 
 /** Manual session end. The server runs the shared teardown + auto-eval. */

@@ -3,7 +3,12 @@ import { env } from "../env.js";
 import { sessionRegistry } from "./registry.js";
 import { mintSessionKey } from "./litellm.js";
 import { expireSession } from "./session.js";
-import { persistSessionCreated, loadSessionRow } from "./db.js";
+import {
+  persistSessionCreated,
+  loadSessionRow,
+  persistSessionUpdate,
+  persistScenarioStatePatch,
+} from "./db.js";
 import { logEvent } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
@@ -73,8 +78,13 @@ export function effectiveBandForSession(scenarioBand: string | null): string | n
 
 /** Compute the proactive-beat schedule from scenario.curveballs at session
  *  start. Per-beat overrides (dev/test) take precedence over the JSON value.
- *  Curveballs without a recognised id or a non-numeric offset are skipped. */
-function computeScheduledBeats(
+ *  Curveballs without a recognised id or a non-numeric offset are skipped.
+ *
+ *  Exported so POST /sessions/:id/start can RE-COMPUTE the schedule relative to
+ *  the moment the candidate presses "Start working" (rather than the creation
+ *  time) — otherwise Sam/Priya's proactive beats would tick down during the
+ *  orientation phase and could fire before the clock even starts. */
+export function computeScheduledBeats(
   scenario: Scenario,
   baseMs: number,
   timeoutMs: number,
@@ -141,6 +151,99 @@ function computeScheduledBeats(
   return out;
 }
 
+/** Arm (or re-arm) the orchestrator kill-switch: a single setTimeout that calls
+ *  expireSession('timeout') when `deadline` is reached. Clears any timer already
+ *  on the registry entry first, so re-arming on POST /sessions/:id/start never
+ *  leaves two timers racing. Returns the timer so createSandbox can set it on
+ *  the fresh entry it is about to insert (the entry does not exist yet at that
+ *  call site). A past/zero-delay deadline fires on the next tick — the standard
+ *  setTimeout clamp — matching the deadline-reaper's own late-fire behaviour. */
+export function armExpiryTimer(sessionId: string, deadline: Date): ReturnType<typeof setTimeout> {
+  const existing = sessionRegistry.get(sessionId);
+  if (existing) clearTimeout(existing.expiryTimer);
+  const delayMs = Math.max(0, deadline.getTime() - Date.now());
+  return setTimeout(() => {
+    void expireSession(sessionId, "timeout");
+  }, delayMs);
+}
+
+export interface StartClockResult {
+  deadline: string;   // ISO — the (fresh, or already-set-and-unchanged) deadline
+  started: true;
+}
+
+/** Begin the DEFERRED session clock. Called by POST /sessions/:id/start when
+ *  the candidate presses "Start working" after orientation.
+ *
+ *  FIRST call: sets deadline = now + SESSION_TIMEOUT_MIN, re-anchors every
+ *  proactive beat so its offset-from-start is measured from now (Sam/Priya do
+ *  NOT message during orientation), re-arms the kill-switch for the new
+ *  deadline, stamps scenarioState.clock_started_at = ISO now, and persists both
+ *  the sessions.deadline column and the scenario_state patch.
+ *
+ *  IDEMPOTENT: if clock_started_at is already set (refresh / double-click), the
+ *  EXISTING deadline is returned unchanged — a second press must NOT extend
+ *  time. The work-time cap is still exactly SESSION_TIMEOUT_MIN; this only moves
+ *  the moment it is measured from (creation → Start). It does not weaken any
+ *  cost/time control: the candidate simply gets the full work time for work. */
+export async function startSessionClock(sessionId: string): Promise<StartClockResult | null> {
+  const entry = sessionRegistry.get(sessionId);
+  if (!entry) return null;
+
+  // Idempotency guard — a clock already started returns its live deadline.
+  const already = entry.scenarioState["clock_started_at"];
+  if (typeof already === "string" && already.length > 0) {
+    return { deadline: entry.deadline.toISOString(), started: true };
+  }
+
+  const now = Date.now();
+  const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
+  const newDeadline = new Date(now + timeoutMs);
+
+  // Re-anchor proactive beats: preserve each beat's offset-from-creation (which
+  // already encodes any dev/test timing override) but slide the whole schedule
+  // so t=0 is `now` rather than session-creation time. Fired beats are left as
+  // fired (their due_ts is moved too, but the scheduler skips fired beats). This
+  // reuses the exact same offset the scenario+overrides produced at creation —
+  // equivalent to re-running computeScheduledBeats with baseMs=now — without
+  // needing to reload the scenario or re-thread the override map.
+  const createdAtMs = entry.createdAt.getTime();
+  const beats = (entry.scenarioState["scheduled_beats"] ?? []) as ScheduledBeat[];
+  const rescheduled: ScheduledBeat[] = Array.isArray(beats)
+    ? beats.map((b) => {
+        const offsetMs = Math.max(0, Date.parse(b.due_ts) - createdAtMs);
+        return { ...b, due_ts: new Date(now + offsetMs).toISOString() };
+      })
+    : [];
+
+  const clockStartedAt = new Date(now).toISOString();
+  entry.scenarioState["scheduled_beats"] = rescheduled;
+  entry.scenarioState["clock_started_at"] = clockStartedAt;
+  entry.deadline = newDeadline;
+
+  // Re-arm the kill-switch for the NEW deadline (clears the creation-time
+  // safety timer first — see armExpiryTimer). Store the new handle on the entry.
+  entry.expiryTimer = armExpiryTimer(sessionId, newDeadline);
+
+  // Persist: the deadline column (so a rehydrate / recruiter view sees the real
+  // work deadline) and the scenario_state keys we own here (clock_started_at +
+  // the re-anchored schedule). Best-effort — the in-memory entry is source of
+  // truth for the live session; these writes are for durability.
+  void persistSessionUpdate(sessionId, { deadline: newDeadline.toISOString() });
+  void persistScenarioStatePatch(sessionId, {
+    clock_started_at: clockStartedAt,
+    scheduled_beats: rescheduled,
+  });
+
+  logEvent(sessionId, "session.clock_started", "system", {
+    deadline: newDeadline.toISOString(),
+    timeoutMin: env.SESSION_TIMEOUT_MIN,
+    beatsRescheduled: rescheduled.length,
+  });
+
+  return { deadline: newDeadline.toISOString(), started: true };
+}
+
 /** Provision a new E2B microVM, mint a per-session LiteLLM key, and register both.
  *  Starts the orchestrator kill-switch timer that calls expireSession at deadline.
  *  Persists the session row to Supabase and emits a session.created event.
@@ -186,6 +289,12 @@ export async function createSandbox(
         personas: personaStateToJson(freshPersonaState()),
         verification: freshVerificationState(),
         scheduled_beats: scheduledBeats,
+        // Deferred clock (orientation overlay): null until the candidate presses
+        // "Start working" (POST /sessions/:id/start), which stamps ISO-now here
+        // and re-arms the deadline + reschedules beats. GET /sessions/:id
+        // surfaces (clock_started_at != null) as `clockStarted` so the web shows
+        // a "Ready" state instead of a live countdown until then.
+        clock_started_at: null,
         // Frozen snapshot of the starting constraint values, so the HUD can
         // show "X / Y" (live / original) without losing the original to the
         // in-place mutations that the token/compute deductions perform on
@@ -247,9 +356,15 @@ export async function createSandbox(
     }
   }
 
-  const expiryTimer = setTimeout(() => {
-    void expireSession(sessionId, "timeout");
-  }, timeoutMs);
+  // SAFETY deadline (do NOT remove): even though the work-time countdown +
+  // proactive beats are DEFERRED until the candidate presses "Start working"
+  // (POST /sessions/:id/start re-arms this timer for the real deadline), a
+  // session abandoned during orientation must still be reaped. This kill-switch
+  // therefore fires at now+timeout so the deadline-reaper cleans up an
+  // orientation-abandoned session. On /start it is cleared and re-armed for the
+  // freshly-computed deadline — the work-time cap remains exactly
+  // SESSION_TIMEOUT_MIN, just measured from /start.
+  const expiryTimer = armExpiryTimer(sessionId, deadline);
 
   sessionRegistry.set(sessionId, {
     sandbox,

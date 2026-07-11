@@ -34,6 +34,10 @@ export interface ScenarioPresentation {
 interface SessionState {
   sessionId: string | null;
   deadline: string | null;   // ISO string
+  // Deferred session clock: false until the candidate presses "Start working".
+  // While false the HUD shows a "Ready — press Start" state; once true the
+  // countdown runs against `deadline`. Reset to false on init for a new session.
+  clockStarted: boolean;
   endedAt: string | null;    // ISO string — set when status flips to "ended"
   messages: Message[];
   spend: number;
@@ -53,7 +57,11 @@ interface SessionState {
     computeMinutesRemaining: number | null,
     scenarioConstraints: ScenarioConstraints | null,
     scenario: ScenarioPresentation,
+    clockStarted: boolean,
   ) => void;
+  /** Mark the deferred clock started and set the fresh work deadline. Called
+   *  after POST /sessions/:id/start returns. */
+  startClock: (deadline: string) => void;
   addMessage: (msg: Message) => void;
   /** Bulk replace the AI assistant message log. Used by Workspace's mount
    *  effect to hydrate the pane from the transcript table on refresh.
@@ -74,6 +82,7 @@ const EMPTY_SCENARIO: ScenarioPresentation = {
 export const useSessionStore = create<SessionState>((set) => ({
   sessionId: null,
   deadline: null,
+  clockStarted: false,
   endedAt: null,
   messages: [],
   spend: 0,
@@ -84,10 +93,11 @@ export const useSessionStore = create<SessionState>((set) => ({
   scenario: EMPTY_SCENARIO,
   status: "active",
 
-  init: (sessionId, deadline, budget, spend, tokensRemaining, computeMinutesRemaining, scenarioConstraints, scenario) =>
+  init: (sessionId, deadline, budget, spend, tokensRemaining, computeMinutesRemaining, scenarioConstraints, scenario, clockStarted) =>
     set({
       sessionId,
       deadline,
+      clockStarted,
       endedAt: null,
       budget,
       spend,
@@ -98,6 +108,8 @@ export const useSessionStore = create<SessionState>((set) => ({
       status: "active",
       messages: [],
     }),
+
+  startClock: (deadline) => set({ deadline, clockStarted: true }),
 
   addMessage: (msg) =>
     set((s) => ({ messages: [...s.messages, msg] })),

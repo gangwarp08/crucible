@@ -45,6 +45,7 @@ type Tone = "default" | "warn" | "error" | "muted";
 export default function ConstraintHUD() {
   const sessionId = useSessionStore((s) => s.sessionId);
   const deadline = useSessionStore((s) => s.deadline);
+  const clockStarted = useSessionStore((s) => s.clockStarted);
   const tokensRemaining = useSessionStore((s) => s.tokensRemaining);
   const computeMinutesRemaining = useSessionStore((s) => s.computeMinutesRemaining);
   const scenarioConstraints = useSessionStore((s) => s.scenarioConstraints);
@@ -53,7 +54,11 @@ export default function ConstraintHUD() {
   const setTokensRemaining = useSessionStore((s) => s.setTokensRemaining);
   const setComputeMinutesRemaining = useSessionStore((s) => s.setComputeMinutesRemaining);
 
-  const remainingSec = useCountdown(deadline, () => {
+  // Deferred clock: before the candidate starts the simulation the deadline is
+  // the creation-relative SAFETY ceiling, not the work deadline — so we must NOT
+  // count down against it. Passing null freezes the countdown; the Time cell
+  // shows the full scenario time as a static "ready" value below.
+  const remainingSec = useCountdown(clockStarted ? deadline : null, () => {
     if (status === "active") setStatus("ended");
   });
 
@@ -74,7 +79,11 @@ export default function ConstraintHUD() {
   }, [sessionId, status, setTokensRemaining, setComputeMinutesRemaining]);
 
   const timeTone: Tone =
-    status !== "active" ? "error" : remainingSec < 120 ? "error" : remainingSec < 300 ? "warn" : "default";
+    !clockStarted ? "muted"
+    : status !== "active" ? "error"
+    : remainingSec < 120 ? "error"
+    : remainingSec < 300 ? "warn"
+    : "default";
 
   const tokensTone: Tone =
     tokensRemaining === null ? "muted"
@@ -95,7 +104,11 @@ export default function ConstraintHUD() {
   const timeBudget     = scenarioConstraints?.time_minutes;
 
   const timeValue =
-    status === "active" ? fmtTime(remainingSec)
+    // Pre-start: the clock hasn't begun — show the full scenario time as a
+    // static "ready" figure (never a live countdown / 00:00) so the candidate
+    // sees what they'll get, not a ticking or zeroed clock.
+    !clockStarted ? (timeBudget ? fmtTime(timeBudget * 60) : "—")
+    : status === "active" ? fmtTime(remainingSec)
     : status === "ended" ? "ENDED"
     : "OFF";
 
