@@ -184,6 +184,12 @@ export interface SessionEntry {
     brief:      string | null;
     role:       string;
     difficulty: string | null;
+    // Client/team persona name+role, copied off the scenario's
+    // client_persona/team_persona JSON so the candidate MESSAGES panel can
+    // label channels with the scenario's actual personas (not family-1's
+    // hardcoded Dana/Sam). Null when the scenario lacks the field.
+    clientPersona: { name: string; role: string } | null;
+    teamPersona:   { name: string; role: string } | null;
   } | null;
 
   // Persona messaging (client / team channels).

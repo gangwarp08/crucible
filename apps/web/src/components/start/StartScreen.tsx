@@ -350,7 +350,7 @@ function ScenarioBody({
       </div>
 
       {scenario.brief && (
-        <Card header="The situation" padding={5} style={{ marginBottom: 28 }}>
+        <Card header={<SectionLabel tone="section">The situation</SectionLabel>} padding={5} style={{ marginBottom: 28 }}>
           <p style={{
             color: color.text.primary,
             fontSize: 14, lineHeight: 1.7, margin: 0,
@@ -362,7 +362,7 @@ function ScenarioBody({
       )}
 
       <section style={{ marginBottom: 28 }}>
-        <SectionLabel>How to approach this</SectionLabel>
+        <SectionLabel tone="section">How to approach this</SectionLabel>
         <ul style={{
           color: color.text.primary,
           fontSize: 14, lineHeight: 1.7,
@@ -397,7 +397,7 @@ function ScenarioBody({
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <SectionLabel>What we score</SectionLabel>
+        <SectionLabel tone="section">What we score</SectionLabel>
         <div style={{ color: color.text.secondary, fontSize: 12, marginTop: 8, marginBottom: 14, lineHeight: 1.6 }}>
           Eight dimensions, weighted by what the role demands. Anchors are
           principle-based: there&apos;s no checklist to game.
@@ -443,7 +443,7 @@ function ScenarioBody({
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <SectionLabel>Your constraints</SectionLabel>
+        <SectionLabel tone="section">Your constraints</SectionLabel>
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(5, 1fr)",
@@ -460,7 +460,7 @@ function ScenarioBody({
 
       {scenario.deliverable_components.length > 0 && (
         <section style={{ marginBottom: 32 }}>
-          <SectionLabel>Your deliverable</SectionLabel>
+          <SectionLabel tone="section">Your deliverable</SectionLabel>
           <div style={{ color: color.text.secondary, fontSize: 12, marginTop: 8, marginBottom: 14, lineHeight: 1.6 }}>
             Submit when you&apos;re confident. Drafts are allowed and the latest version wins.
           </div>
@@ -479,7 +479,7 @@ function ScenarioBody({
       )}
 
       <section style={{ marginBottom: 32 }}>
-        <SectionLabel>Session integrity</SectionLabel>
+        <SectionLabel tone="section">Session integrity</SectionLabel>
         <p style={{ color: color.text.muted, fontSize: 12, margin: "8px 0 0", lineHeight: 1.6 }}>
           During the session we record passive integrity signals from this
           browser tab — tab focus changes, large paste bursts, long idle gaps,

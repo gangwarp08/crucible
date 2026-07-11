@@ -118,7 +118,8 @@ export default function Workspace({ sessionId }: Props) {
   // blank workspace (loading), not the prior session's EndScreen.
   useEffect(() => {
     init(sessionId, "", 0, 0, null, null, null,
-      { title: null, brief: null, role: null, difficulty: null });
+      { title: null, brief: null, role: null, difficulty: null,
+        clientPersona: null, teamPersona: null });
     getSession(sessionId)
       .then((s) => {
         init(
@@ -134,6 +135,8 @@ export default function Workspace({ sessionId }: Props) {
             brief:      s.scenarioBrief,
             role:       s.scenarioRole,
             difficulty: s.scenarioDifficulty,
+            clientPersona: s.clientPersona ?? null,
+            teamPersona:   s.teamPersona ?? null,
           },
         );
         if (s.status === "completed") setStatus("ended");

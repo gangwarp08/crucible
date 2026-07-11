@@ -6,9 +6,14 @@ interface Props {
   children: ReactNode;
   /** default: secondary muted micro-header.
    *  subtle:  even quieter (very muted).
+   *  section: larger, more legible section heading — for the brief/start
+   *           panels where these headers are the primary structure a candidate
+   *           reads (e.g. "The situation", "What we score"). Same mono/uppercase
+   *           look, bumped size with tighter tracking so wide labels don't
+   *           overflow narrow panels.
    *  eyebrow: brand "eyebrow" — mono, lime, with a leading rule.
    *           Use above hero headlines and section openers. */
-  tone?: "default" | "subtle" | "eyebrow";
+  tone?: "default" | "subtle" | "section" | "eyebrow";
   style?: CSSProperties;
 }
 
@@ -45,11 +50,12 @@ export default function SectionLabel({
       </span>
     );
   }
+  const isSection = tone === "section";
   const styles: CSSProperties = {
     fontFamily: font.mono,
-    fontSize: 11,
-    fontWeight: 500,
-    letterSpacing: "0.22em",
+    fontSize: isSection ? 14 : 11,
+    fontWeight: isSection ? 600 : 500,
+    letterSpacing: isSection ? "0.18em" : "0.22em",
     textTransform: "uppercase",
     color: tone === "subtle" ? color.text.muted : color.text.secondary,
     ...style,
