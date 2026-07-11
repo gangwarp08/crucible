@@ -1,13 +1,19 @@
 # GOING-LIVE — activating the dormant builds
 
 *The operator runbook for turning on what was deliberately built OFF: the
-second scenario family (`fde-api-integration`, dormant by data) and
-proctoring v2 (identity + webcam presence, dormant by flag). Context:
-`docs/ARCHITECTURE-REPORT.md` §13.5–13.7.*
+second scenario family (`fde-api-integration`, dormant by data — **now
+ACTIVATED**, §A) and proctoring v2 (identity + webcam presence, dormant by
+flag — **still OFF**, §B). Context: `docs/ARCHITECTURE-REPORT.md` §13.5–13.7.*
 
 Both activations are **manual, checkpointed, and independent** — neither is a
 deploy side-effect, and nothing in CI or the server flips them. Run each
 section top to bottom; every step is copy-paste where possible.
+
+> **Status (as of this refresh):** **Family 2 is LIVE** — migration 0023 is
+> applied, calibration passed, and the `catalog_visible = true` flip has been
+> run. Section A below is retained as the **completed activation record** (and
+> the procedure to re-run on a fresh environment). **Proctoring v2 remains
+> dormant** — section B is still a pending, counsel-gated runbook.
 
 ---
 
@@ -27,6 +33,29 @@ section top to bottom; every step is copy-paste where possible.
 - Both dormant features are **fail-closed**: if any step below goes wrong,
   the system stays in (or degrades to) its current behavior. Stop, fix,
   re-run — nothing candidate-facing breaks mid-runbook.
+
+### Other live ops notes (not part of the dormant runbooks)
+
+- **`ORG_AUTH_REQUIRED` is now `true` in production.** The key-less
+  default-admin fallback on `/api/review/*` is closed on the live server — every
+  review/admin call must carry a valid `X-Org-Key` (admin = the `ORG_ADMIN_KEY`
+  env var; partners = their minted link `…/review?key=<key>`). The code default
+  stays off, so local/dev is unchanged. Before touching org keys, remember the
+  browser sends `X-Org-Key`, which is in the CORS `allowedHeaders`.
+- **Migration 0025 (constraints v2) is applied.** It tightened the in-fiction
+  budgets — tokens 200 000 → 50 000, compute 60 → 30 min, memory 2048 → 1024
+  MiB — and bumped `scenario_version`. `time_minutes` is display-only; the
+  enforced deadline is `SESSION_TIMEOUT_MIN`. Apply via the pooler method below
+  if standing up a fresh DB.
+- **Geo integrity needs the vendored DB.** `apps/server/data/GeoLite2-Country.mmdb`
+  (~8.5 MB, read via the `maxmind` package) ships in the repo — no runtime
+  download, no key. `trustProxy: true` must stay on so `request.ip` is the real
+  client behind Railway's proxy. Raw IPs are never persisted (per-session-salted
+  hash only).
+- **Monaco is self-hosted.** `pnpm build` runs `copy-monaco.mjs` first to vendor
+  the editor into `apps/web/public/monaco/vs`; the CSP in `next.config.ts`
+  allows **no external hosts**. A deploy that skips the copy step leaves the IDE
+  stuck on "Loading…".
 
 ## Applying a migration (the pooler method)
 
@@ -56,7 +85,11 @@ safe to re-run if a step is interrupted.
 
 ---
 
-## A. Activate family 2 (`fde-api-integration`)
+## A. Activate family 2 (`fde-api-integration`) — ✅ DONE
+
+**Status: COMPLETED.** Family 2 is live (0023 applied, calibration green,
+`catalog_visible = true`). The steps below are the activation record — and the
+procedure to reproduce on a fresh environment.
 
 **When:** after *cohort 1 closes* — all cohort-1 session links consumed or
 expired **and** every cohort-1 session has a complete evaluation. Confirm in
