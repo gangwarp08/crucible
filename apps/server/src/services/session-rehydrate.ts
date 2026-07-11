@@ -217,6 +217,9 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
     channelHistory: { client: [], team: [] },
     personaState: personaStateFromRow,
     verificationState: verificationStateFromRow,
+    // Rolling assistant context is in-memory only; a rehydrated session starts
+    // its window fresh (acceptable — see SessionEntry.assistantHistory).
+    assistantHistory: [],
   };
 
   sessionRegistry.set(sessionId, entry);
