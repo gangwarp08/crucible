@@ -9,19 +9,19 @@ import Button from "@/components/ui/Button";
 // once — like a labelled diagram. Each region carries a `data-tour="…"`
 // attribute (Workspace.tsx + children); we read its getBoundingClientRect,
 // draw a numbered lime highlight ring over it, place a callout card in free
-// space, and draw a leader ARROW from the card to the region. A collision pass
-// nudges cards apart so no two callouts (titles) ever overlap. Recomputed on
-// resize and a short post-mount poll (late dynamic panels). A missing anchor is
-// simply skipped.
+// space, and draw a leader ARROW from the card to the region.
+//
+// Cards must never overlap. We MEASURE each card's real rendered height (fonts
+// can wrap unpredictably) and feed those heights into a greedy collision pass,
+// so a taller card simply pushes its neighbours down instead of colliding.
+// Recomputed on resize and a short post-mount poll (late dynamic panels).
 
 interface ToolItem { name: string; desc: string }
 
 interface RegionSpec {
   tour: string;
   title: string;
-  /** Prose body — used for every region except the tab strip. */
   body?: string;
-  /** The tab strip enumerates its tools as distinct rows instead of prose. */
   tools?: ToolItem[];
 }
 
@@ -51,11 +51,11 @@ const REGIONS: RegionSpec[] = [
     title: "Your tools",
     tools: [
       { name: "Brief", desc: "your instructions" },
-      { name: "Docs", desc: "company & domain documentation" },
-      { name: "Messages", desc: "real-time Client & Teammate channels" },
+      { name: "Docs", desc: "company & domain docs" },
+      { name: "Messages", desc: "Client & Teammate channels" },
       { name: "Data", desc: "the live database" },
       { name: "Terminal", desc: "a shell in your workspace" },
-      { name: "Assistant", desc: "an AI helper — counts against your budget" },
+      { name: "Assistant", desc: "AI helper — uses your budget" },
       { name: "Deliverable", desc: "submit your final work" },
     ],
   },
@@ -78,26 +78,26 @@ interface Props {
   onDismiss: () => void;
 }
 
-const CARD_W = 236;
-const GAP = 16;
-const MARGIN = 12;
-const RESERVED_BOTTOM = 176; // keep cards clear of the centre action panel
+const CARD_W = 264;
+const GAP = 18;
+const MARGIN = 14;
+const RESERVED_BOTTOM = 188; // keep cards clear of the centre action panel
 
-/** Rough card height so the collision pass can reason about boxes before the
- *  DOM lays them out. Tuned to the padding + line-height below. */
+/** Rough first-paint height; replaced by the measured height once the card
+ *  renders (see the measure effect below). */
 function estimateHeight(spec: RegionSpec): number {
-  const head = 40;
-  if (spec.tools) return head + spec.tools.length * 20 + 8;
-  const chars = spec.body?.length ?? 0;
-  const lines = Math.max(1, Math.ceil(chars / 34));
-  return head + lines * 17 + 6;
+  if (spec.tools) return 62 + spec.tools.length * 24;
+  const lines = Math.max(1, Math.ceil((spec.body?.length ?? 0) / 32));
+  return 52 + lines * 20;
 }
 
 export default function OrientationOverlay({ showStart, onStart, onDismiss }: Props): React.ReactElement {
   const [rects, setRects] = useState<Record<string, Rect | null>>({});
+  const [heights, setHeights] = useState<Record<string, number>>({});
   const [starting, setStarting] = useState(false);
   const measuredKey = useRef("");
 
+  // Measure every region rect. Poll briefly for late dynamic panels.
   useLayoutEffect(() => {
     let cancelled = false;
     function measure(): void {
@@ -138,75 +138,72 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
   const vw = typeof window !== "undefined" ? window.innerWidth : 1440;
   const vh = typeof window !== "undefined" ? window.innerHeight : 900;
 
-  // Place every callout card so (1) it sits beside its region on the side that
-  // has the most room, (2) it stays inside the viewport, and (3) no two cards
-  // overlap — a greedy vertical de-collision pass. Each placed card records the
-  // point its leader arrow should originate from and the region point it aims at.
   const placed = useMemo(() => {
     const items = REGIONS
       .map((spec, i) => {
         const rect = rects[spec.tour];
         if (!rect) return null;
-        return { spec, rect, num: i + 1, height: estimateHeight(spec) };
+        return { spec, rect, num: i + 1, height: heights[spec.tour] ?? estimateHeight(spec) };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
     const boxes: Array<{
       spec: RegionSpec; rect: Rect; num: number;
-      left: number; top: number; height: number;
-      side: "left" | "right"; // which edge of the card the arrow leaves from
+      left: number; top: number; height: number; side: "left" | "right";
     }> = [];
 
     for (const it of items) {
-      const { rect } = it;
+      const { rect, height } = it;
       const regCx = rect.left + rect.width / 2;
-      // Prefer the side of the region with more horizontal room for the card.
       const roomRight = vw - (rect.left + rect.width);
       const preferRight = roomRight >= CARD_W + GAP + MARGIN
         ? true
         : rect.left >= CARD_W + GAP + MARGIN
           ? false
-          : regCx < vw / 2; // neither side fits cleanly: fall to the roomier half
-      let left = preferRight
-        ? rect.left + rect.width + GAP
-        : rect.left - CARD_W - GAP;
-      // Vertically align the card's centre with the region's, then clamp.
-      let top = rect.top + rect.height / 2 - it.height / 2;
+          : regCx < vw / 2;
+      let left = preferRight ? rect.left + rect.width + GAP : rect.left - CARD_W - GAP;
+      let top = rect.top + rect.height / 2 - height / 2;
       left = Math.max(MARGIN, Math.min(left, vw - CARD_W - MARGIN));
-      top = Math.max(MARGIN, Math.min(top, vh - it.height - RESERVED_BOTTOM));
+      top = Math.max(MARGIN, Math.min(top, vh - height - RESERVED_BOTTOM));
 
-      // De-collide against everything already placed: if this card's box would
-      // overlap a placed one, push it straight down past it. Repeat until clear.
-      const overlaps = (aT: number) => boxes.some((b) => {
+      // Push straight down past any already-placed card it would overlap.
+      const blocks = (t: number) => boxes.find((b) => {
         const hOverlap = left < b.left + CARD_W + GAP && left + CARD_W + GAP > b.left;
-        const vOverlap = aT < b.top + b.height + GAP && aT + it.height + GAP > b.top;
+        const vOverlap = t < b.top + b.height + GAP && t + height + GAP > b.top;
         return hOverlap && vOverlap;
       });
       let guard = 0;
-      while (overlaps(top) && guard++ < 24) {
-        const blocker = boxes.find((b) => {
-          const hOverlap = left < b.left + CARD_W + GAP && left + CARD_W + GAP > b.left;
-          const vOverlap = top < b.top + b.height + GAP && top + it.height + GAP > b.top;
-          return hOverlap && vOverlap;
-        });
-        if (!blocker) break;
+      let blocker = blocks(top);
+      while (blocker && guard++ < 24) {
         top = blocker.top + blocker.height + GAP;
+        blocker = blocks(top);
       }
-      // If pushed off the bottom, wrap back up near the top margin.
-      if (top + it.height > vh - MARGIN) top = MARGIN;
+      if (top + height > vh - MARGIN) top = MARGIN; // last resort: back to top
 
-      boxes.push({ ...it, left, top, side: preferRight ? "left" : "right" });
+      boxes.push({ ...it, left, top, height, side: preferRight ? "left" : "right" });
     }
     return boxes;
-  }, [rects, vw, vh]);
+  }, [rects, heights, vw, vh]);
 
-  // Arrow geometry: from the card's inner edge to the nearest edge of its region.
+  // Measure the REAL rendered card heights and feed them back so the collision
+  // pass reasons with truth, not an estimate. Converges in a frame or two.
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    const next: Record<string, number> = {};
+    let changed = false;
+    for (const b of placed) {
+      const el = document.querySelector<HTMLElement>(`[data-orient-card="${b.spec.tour}"]`);
+      if (!el) continue;
+      const h = el.offsetHeight;
+      next[b.spec.tour] = h;
+      if (Math.abs((heights[b.spec.tour] ?? 0) - h) > 1) changed = true;
+    }
+    if (changed) setHeights((prev) => ({ ...prev, ...next }));
+  }, [placed, heights]);
+
   function arrowFor(b: (typeof placed)[number]) {
-    const cardMidY = b.top + b.height / 2;
-    // Card origin: the edge that faces the region.
     const startX = b.side === "left" ? b.left : b.left + CARD_W;
-    const startY = cardMidY;
-    // Region target: nearest vertical edge, clamped to the region's height.
+    const startY = b.top + b.height / 2;
     const targetX = b.side === "left" ? b.rect.left + b.rect.width : b.rect.left;
     const targetY = Math.max(b.rect.top + 10, Math.min(startY, b.rect.top + b.rect.height - 10));
     return { startX, startY, targetX, targetY };
@@ -218,93 +215,77 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
       aria-label="Workspace orientation"
       style={{
         position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(7, 10, 8, 0.74)",
+        background: "rgba(7, 10, 8, 0.76)",
         fontFamily: font.sans,
       }}
       onClick={(e) => { if (!showStart && e.target === e.currentTarget) onDismiss(); }}
     >
-      {/* Leader arrows (one SVG layer under the cards). */}
-      <svg
-        aria-hidden
-        style={{ position: "fixed", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
-      >
+      {/* Leader arrows. */}
+      <svg aria-hidden style={{ position: "fixed", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
         <defs>
-          <marker id="orient-arrow" markerWidth="9" markerHeight="9" refX="6.5" refY="4.5" orient="auto">
-            <path d="M1,1 L8,4.5 L1,8 Z" fill={color.accent.base} />
+          <marker id="orient-arrow" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+            <path d="M1,1 L9,5 L1,9 Z" fill={color.accent.base} />
           </marker>
         </defs>
         {placed.map((b) => {
           const { startX, startY, targetX, targetY } = arrowFor(b);
-          // A gentle horizontal-first elbow reads cleaner than a raw diagonal.
           const midX = (startX + targetX) / 2;
           const d = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${targetY}, ${targetX} ${targetY}`;
           return (
-            <path
-              key={`arrow-${b.spec.tour}`}
-              d={d}
-              fill="none"
-              stroke={color.accent.base}
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-              markerEnd="url(#orient-arrow)"
-              opacity={0.9}
-            />
+            <path key={`arrow-${b.spec.tour}`} d={d} fill="none"
+              stroke={color.accent.base} strokeWidth={1.75} strokeDasharray="5 4"
+              markerEnd="url(#orient-arrow)" opacity={0.92} />
           );
         })}
       </svg>
 
       {/* Highlight rings + number badges. */}
       {placed.map((b) => (
-        <div
-          key={`ring-${b.spec.tour}`}
-          aria-hidden
+        <div key={`ring-${b.spec.tour}`} aria-hidden
           style={{
             position: "fixed",
             top: b.rect.top, left: b.rect.left, width: b.rect.width, height: b.rect.height,
-            border: `1.5px solid ${color.accent.base}`,
+            border: `2px solid ${color.accent.base}`,
             borderRadius: radius.md,
-            boxShadow: `0 0 0 3px ${color.accent.soft}, 0 0 40px -6px ${color.accent.glow}`,
+            boxShadow: `0 0 0 3px ${color.accent.soft}, 0 0 44px -6px ${color.accent.glow}`,
             pointerEvents: "none",
-          }}
-        >
-          <div style={badgeStyle({ top: -11, left: -11 })}>{b.num}</div>
+          }}>
+          <div style={badgeStyle({ top: -13, left: -13 })}>{b.num}</div>
         </div>
       ))}
 
       {/* Callout cards. */}
       {placed.map((b) => (
-        <div
-          key={`label-${b.spec.tour}`}
+        <div key={`label-${b.spec.tour}`} data-orient-card={b.spec.tour}
           style={{
             position: "fixed", top: b.top, left: b.left, width: CARD_W,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)), " + color.bg.panel,
+            background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)), " + color.bg.panel,
             border: `1px solid ${color.border.strong}`,
             borderRadius: radius.md,
-            padding: "11px 13px",
-            boxShadow: "0 16px 44px -14px rgba(0,0,0,0.75)",
+            padding: "14px 16px",
+            boxShadow: "0 18px 48px -14px rgba(0,0,0,0.78)",
             pointerEvents: "none",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: b.spec.tools ? 8 : 5 }}>
+          }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: b.spec.tools ? 10 : 7 }}>
             <div style={badgeStyle({ static: true })}>{b.num}</div>
             <div style={{
-              fontFamily: font.mono, fontSize: 10, letterSpacing: "0.16em",
-              textTransform: "uppercase", color: color.accent.base,
+              fontFamily: font.mono, fontSize: 12.5, letterSpacing: "0.12em",
+              textTransform: "uppercase", color: color.accent.base, fontWeight: 600,
             }}>
               {b.spec.title}
             </div>
           </div>
           {b.spec.tools ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {b.spec.tools.map((t) => (
-                <div key={t.name} style={{ display: "flex", gap: 6, alignItems: "baseline", lineHeight: 1.35 }}>
-                  <span style={{ color: color.text.primary, fontSize: 12, fontWeight: 600, minWidth: 74 }}>{t.name}</span>
-                  <span style={{ color: color.text.secondary, fontSize: 11.5 }}>{t.desc}</span>
+                <div key={t.name} style={{ display: "flex", gap: 8, alignItems: "baseline", lineHeight: 1.35 }}>
+                  <span style={{ color: color.text.primary, fontSize: 14, fontWeight: 600, minWidth: 92 }}>{t.name}</span>
+                  <span style={{ color: color.text.secondary, fontSize: 13 }}>{t.desc}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ color: color.text.secondary, fontSize: 12, lineHeight: 1.5 }}>{b.spec.body}</div>
+            <div style={{ color: color.text.secondary, fontSize: 14, lineHeight: 1.55 }}>{b.spec.body}</div>
           )}
         </div>
       ))}
@@ -313,29 +294,29 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
       <div
         style={{
           position: "fixed", left: "50%", bottom: 28, transform: "translateX(-50%)",
-          width: "min(560px, calc(100vw - 48px))",
-          background: "linear-gradient(180deg, rgba(163,230,53,0.05), rgba(255,255,255,0)), " + color.bg.elevated,
+          width: "min(600px, calc(100vw - 48px))",
+          background: "linear-gradient(180deg, rgba(163,230,53,0.06), rgba(255,255,255,0)), " + color.bg.elevated,
           border: `1px solid ${color.accent.soft}`,
           borderRadius: radius.lg,
-          padding: "18px 24px",
-          boxShadow: "0 24px 80px -20px rgba(0,0,0,0.7)",
+          padding: "22px 28px",
+          boxShadow: "0 24px 80px -20px rgba(0,0,0,0.72)",
           textAlign: "center",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{
-          fontFamily: font.mono, fontSize: 10, letterSpacing: "0.18em",
-          textTransform: "uppercase", color: color.accent.base, marginBottom: 8,
+          fontFamily: font.mono, fontSize: 11, letterSpacing: "0.2em",
+          textTransform: "uppercase", color: color.accent.base, marginBottom: 10,
         }}>
           Orientation
         </div>
         <h2 style={{
-          fontFamily: font.mono, fontSize: "1.3rem", fontWeight: 600,
-          letterSpacing: "-0.02em", lineHeight: 1.15, margin: "0 0 8px", color: color.text.primary,
+          fontFamily: font.mono, fontSize: "1.6rem", fontWeight: 600,
+          letterSpacing: "-0.02em", lineHeight: 1.15, margin: "0 0 10px", color: color.text.primary,
         }}>
           Your workspace, at a glance
         </h2>
-        <p style={{ color: color.text.secondary, fontSize: 12.5, lineHeight: 1.6, margin: "0 0 16px" }}>
+        <p style={{ color: color.text.secondary, fontSize: 14.5, lineHeight: 1.6, margin: "0 0 18px" }}>
           Each numbered region has a job — the arrows point to where it lives. {showStart
             ? "Your time only starts when you begin, so look around first."
             : "Press Close to return to your session."}
@@ -354,17 +335,15 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
   );
 }
 
-/** Small lime number badge — used on both the ring corner and the card title. */
+/** Lime number badge — used on both the ring corner and the card title. */
 function badgeStyle(opts: { top?: number; left?: number; static?: boolean }): React.CSSProperties {
   return {
-    ...(opts.static
-      ? {}
-      : { position: "absolute", top: opts.top, left: opts.left }),
-    width: 20, height: 20, flex: "0 0 auto",
+    ...(opts.static ? {} : { position: "absolute", top: opts.top, left: opts.left }),
+    width: 23, height: 23, flex: "0 0 auto",
     display: "inline-flex", alignItems: "center", justifyContent: "center",
     background: color.accent.base, color: color.text.inverse,
-    fontFamily: font.mono, fontSize: 11, fontWeight: 700,
+    fontFamily: font.mono, fontSize: 12.5, fontWeight: 700,
     borderRadius: "50%",
-    boxShadow: "0 2px 8px -1px rgba(0,0,0,0.5)",
+    boxShadow: "0 2px 10px -1px rgba(0,0,0,0.55)",
   };
 }
