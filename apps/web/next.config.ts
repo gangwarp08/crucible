@@ -25,14 +25,25 @@ try {
 // plus an admin-gated review surface. The high-value directives here are
 // frame-ancestors (clickjacking), connect-src (locks XHR/WebSocket targets to
 // our own server), and object-src 'none'.
+//
+// MONACO_CDN: the candidate IDE (@monaco-editor/react) loads the Monaco editor
+// + its web workers from jsdelivr at runtime (it always has — see
+// Editor.tsx). The editor mounts a <script> from the CDN, fetches its chunks,
+// and spawns blob: workers. So script/connect/font must allow jsdelivr and
+// worker-src must allow blob:, or the editor hangs on "Loading…". (Restoring
+// what worked pre-CSP; self-hosting Monaco under /monaco is the stricter
+// follow-up if we want to drop the CDN dependency.)
+const MONACO_CDN = "https://cdn.jsdelivr.net";
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline' blob: ${MONACO_CDN}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self' ${serverOrigin} ${serverWsOrigin}`,
+  `font-src 'self' data: ${MONACO_CDN}`,
+  `connect-src 'self' ${serverOrigin} ${serverWsOrigin} ${MONACO_CDN}`,
+  "worker-src 'self' blob:",
+  "child-src 'self' blob:",
   "frame-ancestors 'none'",
   "object-src 'none'",
   "form-action 'self'",
