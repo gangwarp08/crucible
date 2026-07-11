@@ -23,6 +23,10 @@ interface RegionSpec {
   title: string;
   body?: string;
   tools?: ToolItem[];
+  /** Force which side of the region the callout sits on (overrides the
+   *  roomier-side heuristic). Used to keep Help on the left and Live status on
+   *  the right in the crowded top bar. */
+  forceSide?: "left" | "right";
 }
 
 const REGIONS: RegionSpec[] = [
@@ -40,11 +44,13 @@ const REGIONS: RegionSpec[] = [
     tour: "constraints",
     title: "Live status",
     body: "Time remaining, tokens, and budget. The clock starts only when you begin.",
+    forceSide: "right",
   },
   {
     tour: "help",
     title: "Help",
     body: "Reopen this guide at any point during the session.",
+    forceSide: "left",
   },
   {
     tour: "tabs",
@@ -156,11 +162,13 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
       const { rect, height } = it;
       const regCx = rect.left + rect.width / 2;
       const roomRight = vw - (rect.left + rect.width);
-      const preferRight = roomRight >= CARD_W + GAP + MARGIN
-        ? true
-        : rect.left >= CARD_W + GAP + MARGIN
-          ? false
-          : regCx < vw / 2;
+      const preferRight = it.spec.forceSide
+        ? it.spec.forceSide === "right"
+        : roomRight >= CARD_W + GAP + MARGIN
+          ? true
+          : rect.left >= CARD_W + GAP + MARGIN
+            ? false
+            : regCx < vw / 2;
       let left = preferRight ? rect.left + rect.width + GAP : rect.left - CARD_W - GAP;
       let top = rect.top + rect.height / 2 - height / 2;
       left = Math.max(MARGIN, Math.min(left, vw - CARD_W - MARGIN));
@@ -276,11 +284,29 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
             </div>
           </div>
           {b.spec.tools ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {b.spec.tools.map((t) => (
-                <div key={t.name} style={{ display: "flex", gap: 8, alignItems: "baseline", lineHeight: 1.35 }}>
-                  <span style={{ color: color.text.primary, fontSize: 14, fontWeight: 600, minWidth: 92 }}>{t.name}</span>
-                  <span style={{ color: color.text.secondary, fontSize: 13 }}>{t.desc}</span>
+            <div style={{
+              border: `1px solid ${color.border.default}`,
+              borderRadius: radius.sm,
+              overflow: "hidden",
+            }}>
+              {b.spec.tools.map((t, i) => (
+                <div
+                  key={t.name}
+                  style={{
+                    display: "flex", lineHeight: 1.3,
+                    borderTop: i > 0 ? `1px solid ${color.border.default}` : "none",
+                  }}
+                >
+                  <span style={{
+                    color: color.text.primary, fontSize: 13.5, fontWeight: 600,
+                    width: 96, flex: "0 0 auto",
+                    padding: "6px 10px",
+                    borderRight: `1px solid ${color.border.default}`,
+                  }}>{t.name}</span>
+                  <span style={{
+                    color: color.text.secondary, fontSize: 13,
+                    padding: "6px 10px",
+                  }}>{t.desc}</span>
                 </div>
               ))}
             </div>
