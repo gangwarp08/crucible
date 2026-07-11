@@ -1,13 +1,20 @@
 "use client";
 import { useRef, useCallback } from "react";
-import MonacoEditor from "@monaco-editor/react";
+import MonacoEditor, { loader } from "@monaco-editor/react";
 import { writeFile } from "@/lib/api";
 import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
 
+// Point the Monaco loader at our self-hosted copy (public/monaco/vs, populated
+// at build time by scripts/copy-monaco.mjs) instead of the jsdelivr CDN. This
+// must run at module scope, before the editor mounts, so the loader never
+// reaches for its default CDN URL. Keeps the app self-contained and lets the
+// CSP forbid all external hosts.
+loader.config({ paths: { vs: "/monaco/vs" } });
+
 // Structural type for the slice of the Monaco API we touch. The full type
-// lives in the `monaco-editor` package, which isn't a direct dependency —
-// @monaco-editor/react loads it from CDN at runtime.
+// lives in the `monaco-editor` package (a direct dependency), but we only
+// need this narrow shape at the beforeMount callback.
 interface MonacoThemeApi {
   editor: {
     defineTheme: (
