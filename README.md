@@ -24,10 +24,14 @@ claim to do.
 - Grades the session against an 8-competency rubric with anchor-driven
   scoring. Recruiters see overall score plus per-competency breakdown
   with evidence citations.
-- Flags (but never scores) suspicious browser behavior — tab switches,
-  paste bursts, idle gaps, devtools — as a recruiter-only 0–100
-  Suspicion Score. Integrity signals are excluded from scoring by
-  construction, and candidates see a disclosure up front.
+- Flags (but never scores) suspicious behavior — tab switches, idle gaps,
+  devtools, plus server-side geo/network signals (coarse location, IP-change,
+  timezone mismatch — raw IPs never stored, only a per-session-salted hash) —
+  as a recruiter-only 0–100 Suspicion Score (copy/paste counted but shown "not
+  scored"). Integrity signals are excluded from scoring by construction, and
+  candidates see a disclosure up front.
+- Lets recruiters **watch a session live** — a read-only, org-scoped SSE
+  stream of the in-flight event timeline + status/spend.
 - Multi-tenant: partner orgs authenticate with an API key
   (`X-Org-Key`) — delivered as a single review link (`/review?key=…`)
   — and see only their own sessions, plus per-scenario
@@ -89,7 +93,7 @@ apps/
 fixtures/
   fde-db-triage/        Tier 1 scenario — synthetic dataset + ground truth
   fde-db-triage-pro/    Tier 1.5 — multi-issue + prioritization + Sam pushes wrong priority
-  fde-api-integration/  Family 2 (dormant) — API-integration debugging + native ps-fork
+  fde-api-integration/  Family 2 (LIVE) — API-integration debugging + native ps-fork (client: Priya)
 infra/
   e2b/          Sandbox template definition
 packages/
@@ -190,13 +194,18 @@ cohort dashboards + public shareable reports, and difficulty-band
 routing with calibration stats + equating. Migrations 0018–0022 are
 applied to the live DB; see `docs/ARCHITECTURE-REPORT.md` §13.
 
-Built dormant (fully verified, deliberately OFF): a second scenario
-family (`fde-api-integration`, hidden behind `catalog_visible=false` —
-migration 0023 authored, unapplied) and proctoring v2 (consent-gated
-identity verification + webcam presence, per-org flag default off —
-migration 0024 authored, unapplied). Activation is a manual runbook:
-`docs/GOING-LIVE.md`; details in `docs/ARCHITECTURE-REPORT.md`
-§13.5–13.7.
+Second scenario family now LIVE: `fde-api-integration` (API-integration
+debugging, client persona Priya, native product-sense fork) was built dormant
+and has been activated — migration 0023 applied, calibration passed, and the
+`catalog_visible = true` flip run. It rides on a generic deliverable schema,
+scenario-driven personas, and a `sqlite_master`-derived DB builder (family 1
+byte-identical). Constraints v2 (migration 0025) tightened the in-fiction
+budgets (tokens 50k, compute 30 min, memory 1 GiB).
+
+Still built dormant (fully verified, deliberately OFF): proctoring v2
+(consent-gated identity verification + webcam presence, per-org flag default
+off — migration 0024 authored, unapplied). Activation is a manual runbook:
+`docs/GOING-LIVE.md`; details in `docs/ARCHITECTURE-REPORT.md` §13.5–13.7.
 
 Validity instrumentation: a READ-ONLY, admin-only dashboard at
 `/review/validity` (`GET /api/admin/validity/*`; admin `X-Org-Key`
@@ -213,9 +222,16 @@ validity) — LiteLLM gateway spend, internal per-session usage from
 `sessions.spend_usd`, and fixed-plan service cards. See
 `docs/ARCHITECTURE-REPORT.md` §13.9.
 
+Web hardening shipped: a CSP + security headers on the Next.js app
+(`frame-ancestors 'none'`, `connect-src` locked to self + server, HSTS)
+made self-contained by a self-hosted Monaco editor (vendored under
+`public/monaco/vs`, no CDN); a global Fastify error handler that collapses
+unhandled 500s to a generic body; `trustProxy` for real client IPs. On the
+candidate side, a deferred work clock + `OrientationOverlay` tutorial replaced
+the old workspace tour (the clock starts on `POST /sessions/:id/start`).
+
 Not yet shipped: per-candidate one-time invite codes (currently a
-shared secret), audit log table, stricter Helmet CSP, multi-scenario
-catalog UI.
+shared secret), audit log table.
 
 ## License
 

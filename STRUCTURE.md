@@ -80,7 +80,11 @@ apps/
         difficulty-stats.ts        # competency_difficulty_stats accumulator
         equating.ts                # cross-band equating readout
         events-direct.ts
+        geo-integrity.ts           # server-authored geo/network integrity
+                                   #   (vendored GeoLite2 via maxmind; raw IPs
+                                   #   never persisted — per-session-salted hash)
         litellm.ts                 # mint/scope per-session LiteLLM keys
+        live-stream.ts             # READ-ONLY tail for live-session SSE monitoring
         messaging.ts
         orgs.ts                    # org resolution + API key / webhook secret minting
         persona-agent.ts           # AI interviewer persona
@@ -99,16 +103,21 @@ apps/
         sqlrun.py.ts
         supabase.ts
         suspicion-score.ts         # deterministic 0-100 integrity score (never scored;
-                                   #   v2 adds dormant webcam-presence factors)
+                                   #   v4: +geo/network factors, copy/paste now
+                                   #   informational-only)
         telemetry.ts               # telemetry writes
         validity.ts                # READ-ONLY validity aggregation (version-aware,
                                    #   scorable-only, min-N gates N>=10 / paired-N>=20)
       session.test.ts
-    scripts/                       # verify-*.ts harnesses (~66, incl. verify-tenant-isolation.ts,
+    data/
+      GeoLite2-Country.mmdb        # vendored country-only geo DB (~8.5 MB, read via maxmind)
+    scripts/                       # verify-*.ts harnesses (~70+, incl. verify-tenant-isolation.ts,
                                    #   verify-family2-*.ts + verify-family1-drift-inert.ts +
-                                   #   verify-cross-family-scale.ts (dormant family 2),
+                                   #   verify-cross-family-scale.ts (family 2, now LIVE),
+                                   #   verify-persona-scenario-driven.ts, verify-geo-integrity.ts,
+                                   #   verify-live-monitoring.ts, verify-error-redaction.ts,
                                    #   verify-proctoring-v2-flag / identity-verify /
-                                   #   biometric-retention (dormant proctoring v2), and the six
+                                   #   biometric-retention (dormant proctoring v2), the six
                                    #   validity-dashboard gates: verify-validity-access /
                                    #   not-assessed / exclusions / discrimination-view /
                                    #   correlation-view / version-panel, and
@@ -132,19 +141,27 @@ apps/
         landing/      # EmberCanvas, FlameCube, LandingPage
         review/       # AdminNavLinks (admin-probe nav links, replaces
                       # ValidityNavLink), CohortDashboard, CostPanel,
-                      # CostsDashboard, FilesDiffPanel, OrgKeyInput,
-                      # Scorecard, SessionDetail, SessionLinkMintPanel,
+                      # CostsDashboard, FilesDiffPanel, LiveStatusStrip +
+                      # useLiveSession (read-only live SSE monitoring),
+                      # OrgKeyInput, OutcomeInvitePanel (partner-feedback links,
+                      # first in the detail rail), PersonaMessagesPanel,
+                      # Scorecard, SessionDetail (overview header + tabbed
+                      # evidence + sticky rail redesign), SessionLinkMintPanel,
                       # SessionSummary, SessionsTable, ShareReportModal,
-                      # StatusBadge, SuspicionPanel, TerminalReplay, Timeline,
+                      # SqlHistoryPanel, StatusBadge, SuspicionPanel (now +geo
+                      # network row), TerminalReplay, Timeline,
                       # TranscriptPanel, ValidityDashboard, format.ts
         start/        # ScenariosCatalog, StartScreen, IdentityCapture (dormant
                       # proctoring-v2 consent + ID/selfie capture)
         ui/           # Bubble, Button, Card, IconButton, Pill,
                       # SectionLabel, Stat, TabStrip, Wordmark
-        workspace/    # BriefPanel, ChatHUD, ConstraintHUD, DataExplorer,
-                      # DeliverablePanel, DocsViewer, Editor, EndScreen,
-                      # FileTree, MarkdownView, Messages, Terminal,
-                      # Workspace, WorkspaceLoader, WorkspaceTour
+        workspace/    # BriefPanel, ChatHUD, ConstraintHUD (static pre-start
+                      # time under the deferred clock), DataExplorer,
+                      # DeliverablePanel, DocsViewer, Editor (self-hosted
+                      # Monaco → /monaco/vs), EndScreen, FileTree, MarkdownView,
+                      # Messages (scenario-driven persona labels), OrientationOverlay
+                      # (entry tutorial; starts the clock — replaced WorkspaceTour),
+                      # Terminal, Workspace, WorkspaceLoader
       lib/api.ts
       lib/integrity.ts             # useIntegrityMonitor hook (passive proctoring)
       lib/proctoring.ts            # dormant proctoring-v2 client plumbing (consent, config)
@@ -152,7 +169,11 @@ apps/
       lib/ai-fluency.ts
       stores/sessionStore.ts
       styles/tokens.ts
-    next.config.ts  package.json  tsconfig.json
+    public/monaco/vs/              # self-hosted Monaco editor build (no CDN)
+    scripts/copy-monaco.mjs        # build step: vendor Monaco into public/monaco/vs
+    next.config.ts                 # CSP + security headers (frame-ancestors none,
+                                   #   connect-src self+server, HSTS; no external hosts)
+    package.json  tsconfig.json
 
 packages/
   shared/
@@ -177,8 +198,11 @@ supabase/
     0020_difficulty_calibration.sql  # sessions.difficulty_band + competency_difficulty_stats
     0021_report_shares.sql         # shareable candidate report tokens
     0022_session_link_band.sql     # session_links.difficulty_band
-    0023_family2_api_integration.sql  # AUTHORED-UNAPPLIED: family 2 seed (catalog_visible=false)
+    0023_family2_api_integration.sql  # APPLIED: family 2 seed + scenarios.catalog_visible
+                                      #   (family 2 since flipped to catalog_visible=true — LIVE)
     0024_proctoring_v2.sql            # AUTHORED-UNAPPLIED: identity_checks (derived data only)
+    0025_constraints_v2.sql           # APPLIED: tighten in-fiction constraints
+                                      #   (tokens 50k, compute 30m, memory 1 GiB)
 
 infra/
   e2b/
@@ -188,10 +212,10 @@ infra/
 fixtures/
   fde-db-triage/        # generate.ts, ground_truth.json, queries.sql,
   fde-db-triage-pro/    # scenario.json, schema.sql, seed.sql
-  fde-api-integration/  # family 2 (DORMANT) — canonical mid-band scenario.json,
-                        #   generate.ts, schema/seed/ground_truth; the -iso and -pro
-                        #   sibling dirs are committed alongside (migration 0023 seeds
-                        #   all three dataset_refs)
+  fde-api-integration/  # family 2 (LIVE) — canonical mid-band scenario.json (client
+                        #   persona Priya), generate.ts, schema/seed/ground_truth; the
+                        #   -iso and -pro sibling dirs are committed alongside (migration
+                        #   0023 seeds all three dataset_refs)
 
 docs/
   ARCHITECTURE.md

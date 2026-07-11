@@ -136,7 +136,7 @@ apps/web/src/
 | Pane           | Default | Min | Contents                                                |
 |----------------|--------:|----:|---------------------------------------------------------|
 | File tree      | 18%     | 10% | `FileTree` — lists `/workspace` recursively              |
-| Editor         | 50%     | 25% | Monaco (`vs-dark`, ts/py/sql, automatic layout)         |
+| Editor         | 50%     | 25% | Monaco (`vs-dark`, ts/py/sql) — **self-hosted** under `public/monaco/vs` (no CDN) |
 | Tool panel     | 32%     | 20% | 7-tab strip + always-mounted panes                      |
 
 The 7 tabs (in workflow order): **Brief · Docs · Messages · Data ·
@@ -149,6 +149,24 @@ The top **chrome row** (44px) merges scenario title + role/difficulty
 pill with the live `ConstraintHUD` (Time / Tokens / Compute / Money /
 Memory). Time, Tokens, Compute are live (color-coded as they cross
 warning thresholds). Money + Memory are static context.
+
+**Deferred clock + orientation.** The work clock does not start at session
+creation (the creation-relative deadline is only a hard cost ceiling). On
+entry the candidate sees an **`OrientationOverlay`** tutorial (dimmed
+workspace, numbered highlight rings + leader arrows over Files / Editor /
+Live-status / Help / Tools); dismissing "Start the simulation" calls
+`POST /sessions/:id/start`, which recomputes `deadline = now +
+SESSION_TIMEOUT_MIN` (idempotent). Until then `ConstraintHUD` shows a static
+pre-start time. The Help button reopens the overlay. (This replaced the old
+`WorkspaceTour`.)
+
+**Web security.** `apps/web/next.config.ts` sets a CSP + security headers —
+`frame-ancestors 'none'`, `connect-src` locked to self + the server origin,
+HSTS, `X-Frame-Options: DENY`, `nosniff`. The self-hosted Monaco makes the CSP
+fully self-contained (no external hosts). The server sets a global Fastify
+`setErrorHandler` that collapses unhandled 500s to `{ error: "internal_error" }`
+and `trustProxy: true` (so `request.ip` is the real client, feeding rate-limit
+keying + geo integrity).
 
 When `sessionStore.status === "ended"` an **EndScreen** overlay covers
 the workspace — same overlay regardless of end reason (timer, manual
@@ -390,7 +408,15 @@ EndScreen, with module names.
 2. Click a row → `/review/[id]` → `SessionDetail` → `GET /api/review/sessions/:id`.
    Fires six parallel reads (session + events + transcript +
    file_snapshots + cost_ledger + evaluation header), then conditionally
-   fetches `evaluation_items` when an evaluation exists. The detail
+   fetches `evaluation_items` when an evaluation exists. `SessionDetail` was
+   redesigned into an **overview header** + **tabbed evidence** column
+   (AI Chat · Team/Client · SQL · Files · Terminal — the new
+   `PersonaMessagesPanel` and `SqlHistoryPanel` among them) + a **sticky right
+   rail** (partner-feedback `OutcomeInvitePanel` first). For an in-flight
+   session the header's **"Watch live"** opens a read-only SSE stream
+   (`GET /api/review/sessions/:id/live` → `services/live-stream.ts`, `useLiveSession`
+   hook, `LiveStatusStrip`): a 1 s poll tails events by `seq` + status/spend
+   with a 15 s SSE heartbeat, org-scoped and provably write-free. The detail
    bundle hydrates:
    - **`Scorecard`** — 8 per-competency cells with score + rationale +
      evidence chips that link back to specific events.
@@ -839,15 +865,20 @@ is the detailed source of truth. In brief:
 
 - **Passive proctoring + Suspicion Score.** The workspace emits `integrity.*`
   events (tab/window blur, paste bursts, idle gaps, devtools, copy, fullscreen
-  exit — shared Zod taxonomy in `packages/shared/src/schemas/telemetry.ts`;
-  browser hook `apps/web/src/lib/integrity.ts`) to
-  `POST /sessions/:id/integrity` (rate-capped). `services/suspicion-score.ts`
-  computes a deterministic 0–100 score + factors
-  (`suspicion_detector_version=1`), shown in the review UI's SuspicionPanel.
+  exit, browser-timezone snapshot — shared Zod taxonomy in
+  `packages/shared/src/schemas/telemetry.ts`; browser hook
+  `apps/web/src/lib/integrity.ts`) to `POST /sessions/:id/integrity`
+  (rate-capped). The **server** authors geo/network events on the same channel
+  from `request.ip` (`services/geo-integrity.ts`: a vendored country-only
+  `GeoLite2-Country.mmdb` read via `maxmind`; **raw IPs never persisted — only
+  a per-session-salted hash**). `services/suspicion-score.ts` computes a
+  deterministic 0–100 score + factors (`suspicion_detector_version=4` — v3
+  added geo/network factors, v4 made copy/paste informational-only), shown in
+  the review UI's SuspicionPanel (with a recruiter-only network row).
   **Hard rule:** the evidence extractor filters `integrity.*` before any
   detector runs — proctoring signals never affect scores. Candidates see a
   disclosure on the start screen; the public shared report shows the score
-  only (factors are recruiter-only).
+  only (factors, incl. the network block, are recruiter-only).
 - **Multi-tenant orgs** (migrations 0018/0019, applied). `orgs` table;
   `org_id NOT NULL` on sessions / session_links / outcomes / outcome_invites
   (backfilled to the default asaya org); per-org API key + webhook secret,
@@ -880,21 +911,27 @@ is the detailed source of truth. In brief:
   `ORG_AUTH_REQUIRED=true`. The verify suite grew by nine scripts (~49 total),
   including the tenant-isolation gate.
 
-**Dormant builds (July 2026 — fully built, deliberately OFF).** Two features
-ship in the codebase but do nothing until manually activated: the second
-scenario family **`fde-api-integration`** (dormant by data — migration 0023
-is authored but unapplied, and its seed carries `catalog_visible = false`, so
-the family never lists in the candidate catalog; its `DETECTOR_VERSION` 3
-detectors are slug-gated and inert on family 1) and **proctoring v2**
-(dormant by flag — consent-gated identity verification + webcam presence,
-gated per org on `orgs.settings.proctoring_v2_enabled`, default off and
-fail-closed to v1 passive on every error path; migration 0024
-(`identity_checks`) is likewise authored but unapplied, raw imagery is never
-persisted, and deletion is an org-scoped hard delete — `identity.*` events
-are retained by design). Activation is a manual, per-feature operator
-runbook — `docs/GOING-LIVE.md` — with family 2 gated on cohort 1 closing +
-green calibration verifiers, and proctoring v2 gated on counsel sign-off of
-the consent text; details in `docs/ARCHITECTURE-REPORT.md` §13.5–13.7.
+**Second scenario family — now LIVE (July 2026).** The API-integration family
+**`fde-api-integration`** (client persona **Priya, Head of Operations**;
+native product-sense fork) was built dormant and has since been **activated**
+— migration 0023 applied and the `catalog_visible = true` flip run per
+`docs/GOING-LIVE.md` after calibration (discrimination + isomorph) passed. Its
+`DETECTOR_VERSION` 3 detectors are slug-gated and inert on family 1. The
+generic machinery that made it assignable: a **generic deliverable schema**
+(any family's component keys), **scenario-driven personas**
+(`services/persona-agent.ts` branches by family — `fde-db-triage*` keeps the
+byte-identical hardcoded path, others build from the scenario's persona JSON),
+and a **`sqlite_master`-derived DB builder** — each proven not to disturb
+family 1. Details in `docs/ARCHITECTURE-REPORT.md` §13.5.
+
+**Proctoring v2 — still dormant (built, deliberately OFF).** Consent-gated
+identity verification + webcam presence, gated per org on
+`orgs.settings.proctoring_v2_enabled` (default off, fail-closed to v1 passive
+on every error path). Migration 0024 (`identity_checks`) is authored but
+unapplied; raw imagery is never persisted, and deletion is an org-scoped hard
+delete — `identity.*` events are retained by design. Activation is a manual
+operator runbook gated on **counsel sign-off** of the consent text;
+`docs/GOING-LIVE.md` + `docs/ARCHITECTURE-REPORT.md` §13.6–13.7.
 
 **Validity instrumentation (July 2026).** A READ-ONLY, admin-only dashboard
 over the existing measurement data — no new measurement logic, no writes:
