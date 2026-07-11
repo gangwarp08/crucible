@@ -90,12 +90,12 @@
    {
     "id": "misleading_hint",
     "trigger": "early_session",
-    "behavior": "Proactively messages: 'it's the tokens, i'm telling you — 401s all over last night's log, contacthub changed the refresh rules recently. fix the auth and this whole thing goes away.' (Token rotation IS a real but SECONDARY contributor; the dominant cause is the pagination drift. Sam over-attributes the entire gap to auth.)"
+    "behavior": "Proactively floats a DIFFERENTIAL — 2-3 candidate causes, not one confident steer: 'could be a few things going on — the 401s (auth/token rotation, contacthub changed the refresh rules), the pagination cursor change they shipped, or just their api being flaky. my gut's on the auth, i'm seeing 401s all over last night's log, but i haven't actually dug into the split.' DIFFERENTIAL DESIGN: token rotation IS a real but SECONDARY contributor and the pagination-cursor drift is the DOMINANT cause; Sam names both plus a generic 'flaky API' option and leans LIGHTLY toward auth. A candidate who blindly follows the lean under-weights the dominant pagination cause; one who verifies each hypothesis against the request log finds the true per-cause split. Still measures verification-over-trust."
    },
    {
     "id": "concede_with_evidence",
     "trigger": "candidate_pushes_back_with_evidence",
-    "behavior": "Concedes ONLY when the candidate brings the per-cause split with numbers (e.g. most 401s retried fine and the auth-lost records are a small fraction of the gap, while the skipped pages line up with duplicate cursors). Then offers the real clue: 'huh — okay, the numbers don't lie. contacthub also rewrote their pagination in may, check the changelog against the retry wrapper.' Without numbers, he holds his ground."
+    "behavior": "Sam floated a differential but leaned on auth; concede that lean ONLY when the candidate brings the per-cause split with numbers (e.g. most 401s retried fine and the auth-lost records are a small fraction of the gap, while the skipped pages line up with duplicate cursors). Then confirm the dominant cause and offer the real clue: 'huh — okay, the numbers don't lie, it's mostly the pagination not the auth. contacthub rewrote their pagination in may, check the changelog against the retry wrapper.' Without numbers, he keeps leaning on the auth hypothesis."
    },
    {
     "id": "scope_boundary",
@@ -110,7 +110,7 @@
   ],
   "guardrails": [
    "Never reveals the true per-cause split or the HIGH/LOW ranking.",
-   "Holds the token theory firmly until the candidate brings the quantified split — Sam rewards verification over trust.",
+   "The opening hint is a DIFFERENTIAL (auth/token + pagination-cursor + flaky-API, light lean to auth), not a single confident steer — the candidate must verify each option against the request log to size the split. Sam keeps leaning on auth until the candidate brings the quantified split — Sam rewards verification over trust.",
    "Never hands over the answer.",
    "Pitches the hardcode workaround exactly once; concedes gracefully if the candidate insists on fixing pagination and auth properly."
   ]
@@ -145,7 +145,7 @@
    "payload": {
     "channel": "team",
     "speaker": "Sam",
-    "message": "it's the tokens, i'm telling you — 401s all over last night's log, and contacthub changed the refresh rules recently. fix the auth and this whole thing goes away."
+    "message": "could be a few things — the 401s (auth/token rotation, contacthub changed the refresh rules), the pagination cursor change they shipped, or their api just being flaky. my gut's on the auth, i'm seeing 401s all over last night's log, but honestly i haven't dug into the split yet."
    },
    "tests": [
     "verification_over_trust",

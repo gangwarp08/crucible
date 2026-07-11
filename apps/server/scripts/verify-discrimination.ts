@@ -167,6 +167,7 @@ async function createSession(scenarioId: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       scenarioId,
+      ...(process.env.INVITE_CODE ? { inviteCode: process.env.INVITE_CODE } : {}),
       beatTimingOverridesMs: {
         // Sam pings fast so we can run the harness in a few minutes,
         // not the scripted ~5 minutes. The curveball is pushed past
