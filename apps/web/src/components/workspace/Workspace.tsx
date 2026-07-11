@@ -10,8 +10,8 @@ import FileTree from "./FileTree";
 import ConstraintHUD from "./ConstraintHUD";
 import BriefPanel from "./BriefPanel";
 import EndScreen from "./EndScreen";
-import WorkspaceTour, { tourHasBeenSeen } from "./WorkspaceTour";
-import { readFile, getSession, getAssistantHistory } from "@/lib/api";
+import OrientationOverlay from "./OrientationOverlay";
+import { readFile, getSession, getAssistantHistory, startSession } from "@/lib/api";
 import { useIntegrityMonitor } from "@/lib/integrity";
 import { useWebcamPresence } from "@/lib/webcam-presence";
 import { useSessionStore } from "@/stores/sessionStore";
@@ -70,11 +70,16 @@ export default function Workspace({ sessionId }: Props) {
   const [rightTab, setRightTab] = useState<RightTab>("brief");
   const [layout, setLayout] = useState<number[]>(DEFAULT_SIZES);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [showTour, setShowTour] = useState(false);
+  // Help-mode orientation overlay (reopened via the Help button while the clock
+  // is already running). Distinct from the PRE-START overlay, which is derived
+  // from clockStarted below — never from this flag.
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const status = useSessionStore((s) => s.status);
   const scenario = useSessionStore((s) => s.scenario);
+  const clockStarted = useSessionStore((s) => s.clockStarted);
   const init = useSessionStore((s) => s.init);
+  const startClock = useSessionStore((s) => s.startClock);
   const setStatus = useSessionStore((s) => s.setStatus);
   const setMessages = useSessionStore((s) => s.setMessages);
   // The store's sessionId, distinct from the prop. Used to suppress UI from
@@ -102,13 +107,6 @@ export default function Workspace({ sessionId }: Props) {
     setLayoutReady(true);
   }, []);
 
-  // First-load workspace tour. Runs once per browser (gated by localStorage
-  // crucible.workspace.toured.v1). Read on mount so a returning candidate
-  // never sees it twice.
-  useEffect(() => {
-    if (!tourHasBeenSeen()) setShowTour(true);
-  }, []);
-
   // On mount: eagerly reset the store with empty defaults for the NEW
   // session BEFORE hydrating from the server. Without this, the zustand
   // store (a module-level singleton) leaks status="ended" / endedAt /
@@ -117,9 +115,12 @@ export default function Workspace({ sessionId }: Props) {
   // eager reset, the brief render before getSession resolves shows a
   // blank workspace (loading), not the prior session's EndScreen.
   useEffect(() => {
+    // clockStarted=true on the eager placeholder so the PRE-START overlay never
+    // flashes during the boot window before getSession resolves — the real
+    // value (false for a fresh session) arrives from the server hydrate below.
     init(sessionId, "", 0, 0, null, null, null,
       { title: null, brief: null, role: null, difficulty: null,
-        clientPersona: null, teamPersona: null });
+        clientPersona: null, teamPersona: null }, true);
     getSession(sessionId)
       .then((s) => {
         init(
@@ -138,6 +139,10 @@ export default function Workspace({ sessionId }: Props) {
             clientPersona: s.clientPersona ?? null,
             teamPersona:   s.teamPersona ?? null,
           },
+          // Older servers omit clockStarted → undefined; treat as already
+          // started (no pre-start overlay) so a stale server can't strand the
+          // candidate behind an overlay whose Start call has no route.
+          s.clockStarted !== false,
         );
         if (s.status === "completed") setStatus("ended");
         else if (s.status === "submitted" || s.status === "defending") setStatus("locked");
@@ -275,7 +280,8 @@ export default function Workspace({ sessionId }: Props) {
         <div style={{ flex: 1, minWidth: 0 }} />
         <button
           type="button"
-          onClick={() => setShowTour(true)}
+          data-tour="help"
+          onClick={() => setHelpOpen(true)}
           aria-label="Workspace orientation"
           title="Workspace orientation"
           style={{
@@ -303,7 +309,9 @@ export default function Workspace({ sessionId }: Props) {
             Orientation
           </span>
         </button>
-        <ConstraintHUD />
+        <span data-tour="constraints" style={{ display: "inline-flex", alignItems: "center" }}>
+          <ConstraintHUD />
+        </span>
       </header>
 
       {/* Resizable 3-pane workspace. PanelGroup auto-handles widths in
@@ -318,6 +326,7 @@ export default function Workspace({ sessionId }: Props) {
           >
             <Panel defaultSize={layout[0]} minSize={10}>
               <div
+                data-tour="files"
                 style={{
                   height: "100%",
                   background: color.bg.panel,
@@ -334,7 +343,7 @@ export default function Workspace({ sessionId }: Props) {
             </Panel>
             <PanelResizeHandle />
             <Panel defaultSize={layout[1]} minSize={25}>
-              <div data-integrity-panel="editor" style={{ height: "100%", display: "flex", overflow: "hidden" }}>
+              <div data-integrity-panel="editor" data-tour="editor" style={{ height: "100%", display: "flex", overflow: "hidden" }}>
                 <Editor
                   sessionId={sessionId}
                   path={selectedPath}
@@ -354,12 +363,14 @@ export default function Workspace({ sessionId }: Props) {
                   overflow: "hidden",
                 }}
               >
-                <TabStrip
-                  tabs={TABS}
-                  value={rightTab}
-                  onChange={setRightTab}
-                  variant="underline"
-                />
+                <div data-tour="tabs">
+                  <TabStrip
+                    tabs={TABS}
+                    value={rightTab}
+                    onChange={setRightTab}
+                    variant="underline"
+                  />
+                </div>
                 <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
                   <div data-integrity-panel="brief" style={{ position: "absolute", inset: 0, display: rightTab === "brief" ? "block" : "none" }}>
                     <BriefPanel />
@@ -395,11 +406,39 @@ export default function Workspace({ sessionId }: Props) {
           matches the route prop. */}
       {hydrated && status === "ended" && <EndScreen />}
 
-      {/* One-shot workspace orientation overlay. Gated on hydrated so it
-          doesn't flash during the brief boot window, and suppressed when the
-          session has already ended (nothing to orient toward). */}
-      {showTour && hydrated && status !== "ended" && (
-        <WorkspaceTour onDismiss={() => setShowTour(false)} />
+      {/* Orientation overlay — the watermark tutorial map.
+          Two modes over the SAME component:
+
+          PRE-START (showStart): shown automatically at the start of EVERY
+          simulation while the clock has not been started, gated on `hydrated`
+          so it reflects THIS session's real clockStarted (not a boot-window
+          flash or a prior session's residual) and suppressed once ended.
+          Dismissing it — the "Start the simulation" button — is the ONLY way
+          the clock starts: startSession() re-anchors the deadline server-side,
+          startClock() flips clockStarted=true (which unmounts this overlay).
+          A mid-session refresh cannot reshow it: the server reports
+          clockStarted=true after /start, so this branch is false on reload.
+
+          HELP (helpOpen): reopened via the Help button while the clock is
+          already running. Same visuals, but the button reads "Close" and only
+          dismisses — the clock is untouched. Pre-start takes precedence so the
+          two can never stack. */}
+      {hydrated && status !== "ended" && !clockStarted && (
+        <OrientationOverlay
+          showStart
+          onStart={async () => {
+            const resp = await startSession(sessionId);
+            startClock(resp.deadline);
+          }}
+          onDismiss={() => { /* pre-start: dismissal only happens via onStart */ }}
+        />
+      )}
+      {hydrated && status !== "ended" && clockStarted && helpOpen && (
+        <OrientationOverlay
+          showStart={false}
+          onStart={() => { /* unused in help mode */ }}
+          onDismiss={() => setHelpOpen(false)}
+        />
       )}
     </div>
   );

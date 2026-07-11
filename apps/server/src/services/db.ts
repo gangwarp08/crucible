@@ -238,6 +238,10 @@ export async function persistSessionUpdate(
     status?: string;
     end_reason?: string;
     ended_at?: string;
+    // Deferred session clock: re-stamped by POST /sessions/:id/start when the
+    // candidate presses "Start working" (deadline = start + SESSION_TIMEOUT_MIN,
+    // replacing the creation-time safety deadline).
+    deadline?: string;
     // Rotated per-session LiteLLM key alias (H1/6.8a rehydration key rotation).
     litellm_key_alias?: string;
     // Lifecycle columns (Slice 6.1+).
