@@ -21,6 +21,19 @@ export interface Scenario {
   created_at: string;
 }
 
+/** Extract the {name, role} label for a scenario persona (client_persona /
+ *  team_persona JSON) for the candidate MESSAGES panel channel header.
+ *  Null-safe: returns null when either field is missing so the web can fall
+ *  back to its legacy hardcoded label for older sessions. */
+export function personaMeta(
+  persona: Record<string, unknown> | null | undefined,
+): { name: string; role: string } | null {
+  const name = persona?.["name"];
+  const role = persona?.["role"];
+  if (typeof name !== "string" || typeof role !== "string") return null;
+  return { name, role };
+}
+
 const COLUMNS =
   "id, slug, title, role, difficulty, brief, client_persona, team_persona, " +
   "dataset_ref, docs, constraints, rubric, deliverable_spec, curveballs, " +

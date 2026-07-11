@@ -6,6 +6,7 @@ import Bubble from "@/components/ui/Bubble";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 import { getMessageHistory, getSessionToken } from "@/lib/api";
+import { useSessionStore } from "@/stores/sessionStore";
 
 interface Props { sessionId: string; }
 
@@ -32,11 +33,25 @@ type Inbound =
     }
   | { type: "error"; code: string; message: string };
 
+// Static tab labels + LEGACY fallback sublabels. The client/team sublabels are
+// only used when the session carries no persona data (older sessions); the live
+// header is scenario-driven — see channelMeta() below.
 const CHANNEL_META: Record<Channel, { label: string; sublabel: string }> = {
   client:   { label: "Client",   sublabel: "Dana, VP Finance" },
   team:     { label: "Team",     sublabel: "Sam, senior engineer" },
   verifier: { label: "Reviewer", sublabel: "End-of-session check — defend your key decisions" },
 };
+
+type Persona = { name: string; role: string } | null;
+
+/** Scenario-driven channel sublabel: `${name}, ${role}` from the bound
+ *  scenario's persona, falling back to the legacy hardcoded label when persona
+ *  data is absent (older sessions). Verifier is always static. */
+function channelSublabel(c: Channel, clientPersona: Persona, teamPersona: Persona): string {
+  if (c === "client" && clientPersona) return `${clientPersona.name}, ${clientPersona.role}`;
+  if (c === "team" && teamPersona) return `${teamPersona.name}, ${teamPersona.role}`;
+  return CHANNEL_META[c].sublabel;
+}
 
 const PERSONA_COLOR: Record<Channel, string> = {
   client:   color.persona.client,
@@ -60,6 +75,13 @@ function emptyByChannel<T>(make: () => T): Record<Channel, T> {
 }
 
 export default function Messages({ sessionId }: Props) {
+  // Personas are scenario-driven (frozen at session creation, delivered by
+  // GET /sessions/:id → sessionStore). Null on older sessions → legacy labels.
+  const clientPersona = useSessionStore((s) => s.scenario.clientPersona);
+  const teamPersona = useSessionStore((s) => s.scenario.teamPersona);
+  const clientName = clientPersona?.name ?? "Dana";
+  const teamName = teamPersona?.name ?? "Sam";
+
   const [active, setActive] = useState<Channel>("client");
   const [threads, setThreads] = useState<Record<Channel, PersonaMessage[]>>(emptyByChannel(() => []));
   const [awaiting, setAwaiting] = useState<Record<Channel, boolean>>(emptyByChannel(() => false));
@@ -187,15 +209,15 @@ export default function Messages({ sessionId }: Props) {
   }
 
   function emptyHint(c: Channel): string {
-    if (c === "client") return "Start a conversation with the client (Dana).";
-    if (c === "team") return "Ping your teammate (Sam).";
+    if (c === "client") return `Start a conversation with the client (${clientName}).`;
+    if (c === "team") return `Ping your teammate (${teamName}).`;
     return "The reviewer will ask you to defend a few key decisions before the session ends.";
   }
   function placeholder(c: Channel): string {
     if (!connected) return "Disconnected";
     if (awaiting[c]) return "Waiting for reply…";
-    if (c === "client") return "Message Dana…";
-    if (c === "team") return "Message Sam…";
+    if (c === "client") return `Message ${clientName}…`;
+    if (c === "team") return `Message ${teamName}…`;
     return "Answer the reviewer…";
   }
 
@@ -227,7 +249,7 @@ export default function Messages({ sessionId }: Props) {
               fontSize: 12, color: color.text.muted,
               flexShrink: 0,
             }}>
-              {CHANNEL_META[c].sublabel}
+              {channelSublabel(c, clientPersona, teamPersona)}
             </div>
 
             {error && (

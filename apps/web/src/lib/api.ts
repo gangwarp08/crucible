@@ -150,6 +150,11 @@ export interface SessionInfo {
   scenarioBrief:      string | null;
   scenarioRole:       string | null;
   scenarioDifficulty: string | null;
+  // Client/team persona name+role, driving the MESSAGES panel channel header.
+  // Optional/null on older sessions where the server didn't emit them — the UI
+  // falls back to the legacy hardcoded "Dana, VP Finance" / "Sam" labels.
+  clientPersona?: { name: string; role: string } | null;
+  teamPersona?:   { name: string; role: string } | null;
 }
 
 // ── Candidate-safe scenario lookup ──────────────────────────────────────────

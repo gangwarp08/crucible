@@ -33,7 +33,7 @@ import {
   persistSessionUpdate,
 } from "./db.js";
 import { mintSessionKey, revokeSessionKeyByAlias } from "./litellm.js";
-import { loadScenarioById } from "./scenarios.js";
+import { loadScenarioById, personaMeta } from "./scenarios.js";
 import { expireSession } from "./session.js";
 import { appendEvent } from "./events-direct.js";
 
@@ -153,6 +153,8 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
         brief:      scenario.brief,
         role:       scenario.role,
         difficulty: scenario.difficulty,
+        clientPersona: personaMeta(scenario.client_persona),
+        teamPersona:   personaMeta(scenario.team_persona),
       };
     }
   }

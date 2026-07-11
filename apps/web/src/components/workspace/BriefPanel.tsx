@@ -55,7 +55,7 @@ export default function BriefPanel() {
 
       {scenario.brief && (
         <section style={{ marginBottom: 24 }}>
-          <SectionLabel>The situation</SectionLabel>
+          <SectionLabel tone="section">The situation</SectionLabel>
           <p
             style={{
               fontSize: 13,
@@ -73,7 +73,7 @@ export default function BriefPanel() {
 
       {c && (
         <section>
-          <SectionLabel>Constraints (starting values)</SectionLabel>
+          <SectionLabel tone="section">Constraints (starting values)</SectionLabel>
           <div
             style={{
               display: "grid",

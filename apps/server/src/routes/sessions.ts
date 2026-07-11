@@ -279,6 +279,11 @@ export async function sessionRoutes(server: FastifyInstance) {
       scenarioBrief:      entry.scenarioMeta?.brief      ?? null,
       scenarioRole:       entry.scenarioMeta?.role       ?? null,
       scenarioDifficulty: entry.scenarioMeta?.difficulty ?? null,
+      // Persona name+role for the MESSAGES panel channel header. Null when the
+      // scenario lacks the field (older sessions) → web falls back to legacy
+      // hardcoded labels.
+      clientPersona:      entry.scenarioMeta?.clientPersona ?? null,
+      teamPersona:        entry.scenarioMeta?.teamPersona   ?? null,
     };
   });
 

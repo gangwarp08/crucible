@@ -7,7 +7,7 @@ import { persistSessionCreated, loadSessionRow } from "./db.js";
 import { logEvent } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
-import { loadScenarioById, type Scenario } from "./scenarios.js";
+import { loadScenarioById, personaMeta, type Scenario } from "./scenarios.js";
 import { seedScenarioDataset } from "./dataset-seed.js";
 import {
   freshVerificationState,
@@ -281,6 +281,8 @@ export async function createSandbox(
           brief:      scenario.brief,
           role:       scenario.role,
           difficulty: scenario.difficulty,
+          clientPersona: personaMeta(scenario.client_persona),
+          teamPersona:   personaMeta(scenario.team_persona),
         }
       : null,
     messagingSockets: new Set(),

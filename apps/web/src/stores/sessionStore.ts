@@ -25,6 +25,10 @@ export interface ScenarioPresentation {
   brief:      string | null;
   role:       string | null;
   difficulty: string | null;
+  // Client/team persona name+role for the MESSAGES panel channel header.
+  // Null on older sessions → Messages falls back to legacy hardcoded labels.
+  clientPersona: { name: string; role: string } | null;
+  teamPersona:   { name: string; role: string } | null;
 }
 
 interface SessionState {
@@ -64,6 +68,7 @@ interface SessionState {
 
 const EMPTY_SCENARIO: ScenarioPresentation = {
   title: null, brief: null, role: null, difficulty: null,
+  clientPersona: null, teamPersona: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
