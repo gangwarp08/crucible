@@ -9,10 +9,15 @@ export interface PtySocket {
  *  are all expireSession needs to flush the connection on teardown. */
 export type MessagingSocket = PtySocket;
 
-/** One turn in a persona channel — kept in memory only (events table is the
- *  durable log). Used to seed the messages array on the next LLM call. */
-export interface PersonaTurn {
-  role: "candidate" | "persona";
+/** One turn in the unified persona chat — kept in memory only (events table is
+ *  the durable log). Both personas share this single history: `channel` is the
+ *  ADDRESSEE for candidate turns and the AUTHOR persona for persona turns, so
+ *  per-channel views (verifier condensation, telemetry) can still be derived
+ *  while every prompt sees the whole conversation in true arrival order. */
+export interface ChatTurn {
+  speaker: "candidate" | "persona";
+  channel: "client" | "team";
+  personaName?: string; // set on persona turns
   text: string;
   ts: string; // ISO 8601
 }
@@ -192,9 +197,11 @@ export interface SessionEntry {
     teamPersona:   { name: string; role: string } | null;
   } | null;
 
-  // Persona messaging (client / team channels).
+  // Persona messaging — ONE shared conversation for both personas (the
+  // client/team channel split lives on in event types, routing, and scoring;
+  // the history itself is unified so each persona's prompt sees everything).
   messagingSockets: Set<MessagingSocket>;
-  channelHistory: { client: PersonaTurn[]; team: PersonaTurn[] };
+  chatHistory: ChatTurn[];
   personaState: PersonaState;
 
   // AI-assistant rolling context window (in-memory, best-effort). Holds the

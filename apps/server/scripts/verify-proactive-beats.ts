@@ -8,7 +8,7 @@
 // Persistence assertions: 2 curveball.fired events, matching
 // message.{client|team}.persona rows with proactive:true and token/cost
 // metadata, scenario_state.scheduled_beats.fired flipped true on both,
-// reveal flags set, scenario_state.tokens unchanged at 200000, cost_ledger
+// reveal flags set, scenario_state.tokens unchanged at 50000, cost_ledger
 // rows with purpose=proactive_{client,team}.
 //
 // Run: pnpm exec tsx apps/server/scripts/verify-proactive-beats.ts
@@ -354,8 +354,10 @@ function sendCandidate(ws: WS, channel: "client" | "team", text: string): void {
       pass('personas.fired_beat_ids includes "requirement_change"');
     else fail(`fired_beat_ids = ${JSON.stringify([...fired])}, expected to include "requirement_change"`);
 
-    if (ss.tokens === 200000) pass("scenario_state.tokens unchanged (200000 — proactive cost did NOT deduct)");
-    else fail(`scenario_state.tokens = ${JSON.stringify(ss.tokens)}, expected 200000`);
+    // 50_000 since migration 0025 (constraints v2). The check's point is that
+    // proactive persona cost does NOT deduct from the candidate's budget.
+    if (ss.tokens === 50000) pass("scenario_state.tokens unchanged (50000 — proactive cost did NOT deduct)");
+    else fail(`scenario_state.tokens = ${JSON.stringify(ss.tokens)}, expected 50000`);
   }
 
   console.log("\n[g] cost_ledger — proactive purpose split");

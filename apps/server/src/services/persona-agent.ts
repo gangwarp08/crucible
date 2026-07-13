@@ -13,7 +13,7 @@
 // here and persisted into sessions.scenario_state.personas via the existing
 // service-role client.
 
-import { sessionRegistry, personaStateToJson, type PersonaState } from "./registry.js";
+import { sessionRegistry, personaStateToJson, type PersonaState, type ChatTurn } from "./registry.js";
 import { loadScenarioById, type Scenario } from "./scenarios.js";
 import {
   chatCompletionWithMessages,
@@ -26,7 +26,11 @@ import { persistScenarioStatePatch } from "./db.js";
 // the session's lifetime, so a process-local cache is safe.
 const scenarioCache = new Map<string, Scenario>();
 
-const HISTORY_TURN_CAP = 30; // bound prompt growth without truncating events table
+// Bound prompt growth without truncating the events table. The unified history
+// holds BOTH personas' conversations (previously 30 per channel), so 60 keeps
+// the same worst-case prompt size while giving a one-persona-heavy session
+// deeper context.
+const HISTORY_TURN_CAP = 60;
 
 export type Channel = "client" | "team";
 
@@ -174,11 +178,103 @@ function situationBlock(goal: string | undefined, brief: string | null): string 
   return parts.join("\n\n");
 }
 
+/** The other persona sharing the room, for the SHARED CHANNEL prompt block.
+ *  Null when the scenario lacks the opposite persona — the block is omitted
+ *  and the prompt degrades to the single-channel form. */
+export interface OtherPersona {
+  name: string;
+  role: string;
+}
+
+/** SHARED CHANNEL block — both personas and the candidate share ONE group
+ *  chat. Explains the bracket-prefix convention used by renderHistoryForPersona,
+ *  pins reply discipline (answer only the final message, which is always
+ *  addressed to you), and re-asserts knowledge boundaries so visibility of the
+ *  other conversation never widens what this persona knows or does. */
+function sharedChannelBlock(
+  selfName: string,
+  other: OtherPersona,
+  variant: "client" | "team",
+): string {
+  const boundary =
+    variant === "client"
+      ? `- Your knowledge boundaries are UNCHANGED: seeing the candidate's technical discussion with ${other.name} does NOT make you technical. React only as your character would — you may notice work is happening, but you do not understand or evaluate technical detail, and you NEVER quote technical terms back (not even to say they're over your head — just say the technical side isn't your department and steer to what you need).`
+      : `- Your role is UNCHANGED: seeing the candidate's business updates to ${other.name} does not make you take over client communication, relay messages for ${other.name}, or soften your engineering voice.
+- GATED beats still require the candidate to bring the evidence TO YOU. Evidence you merely saw them mention to ${other.name} counts only if they raise it with you directly.`;
+
+  return `
+SHARED CHANNEL — this is ONE group chat with three participants: you (${selfName}), ${other.name} (${other.role}), and the candidate.
+- You see every message, including the candidate's messages to ${other.name} and ${other.name}'s replies. Messages from others are prefixed like "[Candidate → ${other.name}]: ..." or "[${other.name} wrote]: ...". Your own past messages appear unprefixed.
+- Reply ONLY when the candidate addresses you. The final message in this conversation is always addressed to YOU — respond to that one message only.
+- NEVER speak for ${other.name}, imitate the bracketed prefixes in your own reply, or answer questions the candidate directed at ${other.name}.
+${boundary}`;
+}
+
+/** Render the unified chat history into the LLM messages array for persona
+ *  `self`: own turns are assistant-role raw text; everything else (candidate
+ *  turns to either persona, the other persona's turns) is user-role with a
+ *  bracketed speaker prefix. Consecutive user-role turns are coalesced into
+ *  one message — some providers mishandle adjacent same-role messages. */
+function renderHistoryForPersona(
+  history: ChatTurn[],
+  self: Channel,
+  selfName: string,
+  other: OtherPersona | null,
+): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const turn of history) {
+    let msg: ChatMessage;
+    if (turn.speaker === "persona" && turn.channel === self) {
+      msg = { role: "assistant", content: turn.text };
+    } else if (turn.speaker === "candidate") {
+      const addressee =
+        turn.channel === self ? selfName : (other?.name ?? turn.personaName ?? "the other participant");
+      msg = { role: "user", content: `[Candidate → ${addressee}]: ${turn.text}` };
+    } else {
+      const author = turn.personaName ?? other?.name ?? "Teammate";
+      const role = other?.role ? ` (${other.role})` : "";
+      msg = { role: "user", content: `[${author}${role} wrote]: ${turn.text}` };
+    }
+    const prev = out[out.length - 1];
+    if (prev && prev.role === "user" && msg.role === "user") {
+      prev.content = `${prev.content}\n\n${msg.content}`;
+    } else {
+      out.push(msg);
+    }
+  }
+  return out;
+}
+
+/** Defensive: strip a leading bracketed speaker tag if the model parrots the
+ *  history-prefix convention back in its own reply. */
+function stripSpeakerTag(text: string): string {
+  return text.replace(/^\[[^\]]{1,80}\]:\s*/, "");
+}
+
+/** Resolve the opposite persona's name+role for the SHARED CHANNEL block. */
+function resolveOtherPersona(scenario: Scenario, self: Channel): OtherPersona | null {
+  const raw = (self === "client" ? scenario.team_persona : scenario.client_persona) as
+    | ClientPersonaJson
+    | null
+    | undefined;
+  if (!raw || Object.keys(raw).length === 0) return null;
+  return {
+    name: typeof raw.name === "string" && raw.name ? raw.name : self === "client" ? "Team" : "Client",
+    role:
+      typeof raw.role === "string" && raw.role
+        ? raw.role
+        : self === "client"
+          ? "teammate engineer"
+          : "business stakeholder",
+  };
+}
+
 export function buildClientSystemPromptGeneric(
   persona: ClientPersonaJson,
   brief: string | null,
   state: PersonaState,
   proactive?: { beatId: string; payloadMessage?: string | undefined; behavior?: string | undefined },
+  other?: OtherPersona | null,
 ): string {
   const name = persona.name ?? "Client";
   const role = persona.role ?? "business stakeholder";
@@ -188,7 +284,7 @@ export function buildClientSystemPromptGeneric(
 
   const proactiveBlock = proactive
     ? `
-PROACTIVE BEAT MODE — you are sending a new message in this channel; the candidate has NOT just spoken to you. You are proactively pinging them now.
+PROACTIVE BEAT MODE — you are sending a new message in this group chat; the candidate has NOT just spoken to you. You are proactively pinging them now.
 - Fire beat "${proactive.beatId}".${proactive.behavior ? ` Behaviour: ${proactive.behavior}` : ""}${proactive.payloadMessage ? `\n- Deliver this update, rephrased into your own voice (do NOT read it robotically): "${proactive.payloadMessage}"` : ""}
 - Keep it terse (2-3 sentences) and in character. Include "${proactive.beatId}" in the reveals array.
 `
@@ -199,7 +295,7 @@ ${ANTI_JAILBREAK(name)}
 
 You are ${name}, ${role}. Your voice: ${voice}.
 You are messaging the forward-deployed engineer (the candidate) in a business chat about the problem described below.
-
+${other ? sharedChannelBlock(name, other, "client") : ""}
 ${situationBlock(persona.goal, brief)}
 
 WHAT YOU KNOW (you may share when asked):
@@ -225,6 +321,7 @@ export function buildTeamSystemPromptGeneric(
   brief: string | null,
   state: PersonaState,
   proactive?: { beatId: string; payloadMessage?: string | undefined; behavior?: string | undefined },
+  other?: OtherPersona | null,
 ): string {
   const name = persona.name ?? "Sam";
   const role = persona.role ?? "senior engineer / teammate";
@@ -234,7 +331,7 @@ export function buildTeamSystemPromptGeneric(
 
   const proactiveBlock = proactive
     ? `
-PROACTIVE BEAT MODE — you are sending a new message in this channel; the candidate has NOT just spoken to you. You are proactively pinging them now, unprompted.
+PROACTIVE BEAT MODE — you are sending a new message in this group chat; the candidate has NOT just spoken to you. You are proactively pinging them now, unprompted.
 - Fire beat "${proactive.beatId}".${proactive.behavior ? ` Behaviour: ${proactive.behavior}` : ""}${proactive.payloadMessage ? `\n- Deliver this, rephrased into your own voice (engineering-channel terse, lowercase OK; do NOT read it robotically): "${proactive.payloadMessage}"` : ""}
 - 1-2 sentences. Include "${proactive.beatId}" in the reveals array.
 `
@@ -243,8 +340,8 @@ PROACTIVE BEAT MODE — you are sending a new message in this channel; the candi
   return `\
 ${ANTI_JAILBREAK(name)}
 
-You are ${name}, ${role}. Your voice: ${voice}. You're mid-task on something else when the new forward-deployed engineer (the candidate) pings you in the internal team channel about the problem below.
-
+You are ${name}, ${role}. Your voice: ${voice}. You're mid-task on something else when the new forward-deployed engineer (the candidate) pings you in the shared project channel about the problem below.
+${other ? sharedChannelBlock(name, other, "team") : ""}
 ${situationBlock(persona.goal, brief)}
 
 WHAT YOU MUST NEVER DO (hard rules):
@@ -402,25 +499,22 @@ export async function replyAsPersona(
         ? "Client"
         : "Team");
 
-  // Append candidate turn to history BEFORE building the prompt, so the
-  // assistant sees the conversation it's responding to (the just-sent user
-  // turn goes in as the trailing message). We send the same content as the
-  // trailing user message; do not duplicate it in history (the history is
-  // the *prior* turns only).
-  const history = entry.channelHistory[channel];
+  // The UNIFIED history (both personas' conversations). The trailing message
+  // is the just-sent candidate turn — labeled with the same speaker-prefix
+  // convention the history uses; do not duplicate it in history (the history
+  // is the *prior* turns only).
+  const history = entry.chatHistory;
+  const other = resolveOtherPersona(scenario, channel);
 
   const systemPrompt =
     channel === "client"
-      ? buildClientSystemPromptGeneric(personaJson, scenario.brief, entry.personaState)
-      : buildTeamSystemPromptGeneric(personaJson, scenario.brief, entry.personaState);
+      ? buildClientSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, undefined, other)
+      : buildTeamSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, undefined, other);
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    ...history.map<ChatMessage>((t) => ({
-      role: t.role === "candidate" ? "user" : "assistant",
-      content: t.text,
-    })),
-    { role: "user", content: candidateText },
+    ...renderHistoryForPersona(history, channel, personaName, other),
+    { role: "user", content: `[Candidate → ${personaName}]: ${candidateText}` },
   ];
 
   const t0 = Date.now();
@@ -436,13 +530,15 @@ export async function replyAsPersona(
   const latencyMs = Date.now() - t0;
 
   const validBeatIds = beatIdSet(personaJson);
-  const { text, reveals } = parsePersonaResponseGeneric(result.text, validBeatIds);
+  const parsed = parsePersonaResponseGeneric(result.text, validBeatIds);
+  const text = stripSpeakerTag(parsed.text);
+  const reveals = parsed.reveals;
 
   // History updates: append BOTH turns now that we have the reply. Cap to
   // HISTORY_TURN_CAP to keep prompt size bounded; older turns stay in events.
   const nowIso = new Date().toISOString();
-  history.push({ role: "candidate", text: candidateText, ts: nowIso });
-  history.push({ role: "persona", text, ts: nowIso });
+  history.push({ speaker: "candidate", channel, text: candidateText, ts: nowIso });
+  history.push({ speaker: "persona", channel, personaName, text, ts: nowIso });
   if (history.length > HISTORY_TURN_CAP) {
     history.splice(0, history.length - HISTORY_TURN_CAP);
   }
@@ -523,20 +619,18 @@ export async function proactiveBeatMessageGeneric(
   const behavior = (personaJson.beats ?? []).find((b) => b.id === beatId)?.behavior;
   const proactive = { beatId, payloadMessage, behavior };
 
-  const history = entry.channelHistory[channel];
+  const history = entry.chatHistory;
+  const other = resolveOtherPersona(scenario, channel);
   const systemPrompt =
     channel === "client"
-      ? buildClientSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, proactive)
-      : buildTeamSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, proactive);
+      ? buildClientSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, proactive, other)
+      : buildTeamSystemPromptGeneric(personaJson, scenario.brief, entry.personaState, proactive, other);
 
   const triggerText = `[SYSTEM BEAT TRIGGER] Fire your proactive "${beatId}" beat now. Output JSON per the schema.`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    ...history.map<ChatMessage>((t) => ({
-      role: t.role === "candidate" ? "user" : "assistant",
-      content: t.text,
-    })),
+    ...renderHistoryForPersona(history, channel, personaName, other),
     { role: "user", content: triggerText },
   ];
 
@@ -551,10 +645,12 @@ export async function proactiveBeatMessageGeneric(
   // not be in persona.beats, but it's the reveal we intend to track).
   const validBeatIds = beatIdSet(personaJson);
   validBeatIds.add(beatId);
-  const { text, reveals } = parsePersonaResponseGeneric(result.text, validBeatIds);
+  const parsed = parsePersonaResponseGeneric(result.text, validBeatIds);
+  const text = stripSpeakerTag(parsed.text);
+  const reveals = parsed.reveals;
 
   const nowIso = new Date().toISOString();
-  history.push({ role: "persona", text, ts: nowIso });
+  history.push({ speaker: "persona", channel, personaName, text, ts: nowIso });
   if (history.length > HISTORY_TURN_CAP) {
     history.splice(0, history.length - HISTORY_TURN_CAP);
   }
