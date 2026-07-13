@@ -147,6 +147,9 @@ export default function ScenariosCatalog() {
               <Button type="submit" variant="primary" size="lg" disabled={phase.submitting}>
                 {phase.submitting ? "Checking…" : "Unlock"}
               </Button>
+              <Button href="/contact" variant="ghost" size="lg">
+                Talk to us
+              </Button>
             </form>
             {phase.inviteError && (
               <div role="alert" style={{ color: color.error.base, fontSize: 13, marginTop: 12, lineHeight: 1.5 }}>
@@ -154,8 +157,7 @@ export default function ScenariosCatalog() {
               </div>
             )}
             <p style={{ color: color.text.muted, fontSize: 12.5, lineHeight: 1.6, margin: "16px 0 0" }}>
-              No code? <Link href="/contact" style={{ color: color.text.secondary, textDecoration: "underline" }}>Talk to us</Link> and
-              we will set you up with a pilot.
+              No code? Talk to us and we will set you up with a pilot.
             </p>
           </Card>
         )}
