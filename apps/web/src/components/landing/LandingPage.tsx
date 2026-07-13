@@ -963,7 +963,7 @@ function Footer() {
               marginTop: 18, lineHeight: 1.65,
             }}>
               Simulation-based assessment for AI-augmented engineers.<br />
-              Measure what matters.
+              Metrics that Matter. Measured with Precision.
             </p>
           </div>
           <div style={{ display: "flex", gap: 60, flexWrap: "wrap" }}>
@@ -990,7 +990,7 @@ function Footer() {
           gap: 16, flexWrap: "wrap",
         }}>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
-            © 2026 asaya · measure what matters
+            © 2026 asaya · metrics that matter. measured with precision.
           </span>
           <span style={{ fontFamily: font.mono, fontSize: 11.5, letterSpacing: "0.08em", color: color.text.muted }}>
             dynamic work simulations · built for AI-era roles
