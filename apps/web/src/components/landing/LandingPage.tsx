@@ -44,6 +44,7 @@ export default function LandingPage(): React.ReactElement {
         <Problem />
         <Void />
         <Engine />
+        <DemoBand />
         <Simulation />
         <Signal />
         <Impact />
@@ -626,6 +627,40 @@ function ConstraintReadouts() {
         </span>
       ))}
     </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────── Demo video */
+
+function DemoBand() {
+  return (
+    <section id="demo" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
+      <div style={{ ...WRAP_STYLE, position: "relative" }}>
+        <Reveal>
+          <div style={{ marginBottom: 44, textAlign: "center" }}>
+            <SectionLabel tone="eyebrow"><Scramble text="the demo" /></SectionLabel>
+            <h2 style={{ ...sectionTitleStyle(), marginLeft: "auto", marginRight: "auto" }}>
+              See asaya <span className="accent-text">in action</span>.
+            </h2>
+          </div>
+        </Reveal>
+        <Reveal delay={90}>
+          <video
+            controls
+            playsInline
+            preload="metadata"
+            style={{
+              display: "block", width: "100%", maxWidth: 1000, margin: "0 auto",
+              borderRadius: radius.md, border: `1px solid ${color.border.default}`,
+              background: "#000",
+            }}
+          >
+            <source src="/demo-asaya.mp4" type="video/mp4" />
+            Your browser does not support embedded video.
+          </video>
+        </Reveal>
+      </div>
+    </section>
   );
 }
 
