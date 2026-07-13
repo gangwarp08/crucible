@@ -161,6 +161,9 @@ export interface SessionInfo {
   // falls back to the legacy hardcoded "Dana, VP Finance" / "Sam" labels.
   clientPersona?: { name: string; role: string } | null;
   teamPersona?:   { name: string; role: string } | null;
+  // Dataset table names (fixture schema) — null/absent when the scenario has
+  // no dataset or on older servers.
+  datasetTables?: string[] | null;
 }
 
 // ── Candidate-safe scenario lookup ──────────────────────────────────────────

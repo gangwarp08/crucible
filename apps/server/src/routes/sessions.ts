@@ -291,6 +291,7 @@ export async function sessionRoutes(server: FastifyInstance) {
       // hardcoded labels.
       clientPersona:      entry.scenarioMeta?.clientPersona ?? null,
       teamPersona:        entry.scenarioMeta?.teamPersona   ?? null,
+      datasetTables:      entry.scenarioMeta?.datasetTables ?? null,
     };
   });
 

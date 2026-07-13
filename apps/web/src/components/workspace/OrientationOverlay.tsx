@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { color, font, radius } from "@/styles/tokens";
 import Button from "@/components/ui/Button";
+import { useSessionStore, type ScenarioPresentation } from "@/stores/sessionStore";
 
 // ── Orientation MAP overlay ──────────────────────────────────────────────────
 //
@@ -29,43 +30,58 @@ interface RegionSpec {
   forceSide?: "left" | "right";
 }
 
-const REGIONS: RegionSpec[] = [
-  {
-    tour: "files",
-    title: "Files",
-    body: "Your code, configs, and notes. Click any file to open it in the editor.",
-  },
-  {
-    tour: "editor",
-    title: "Editor",
-    body: "Read and edit code in the middle pane.",
-  },
-  {
-    tour: "constraints",
-    title: "Live status",
-    body: "Time remaining, tokens, and budget. The clock starts only when you begin.",
-    forceSide: "right",
-  },
-  {
-    tour: "help",
-    title: "Help",
-    body: "Reopen this guide at any point during the session.",
-    forceSide: "left",
-  },
-  {
-    tour: "tabs",
-    title: "Your tools",
-    tools: [
-      { name: "Brief", desc: "your instructions" },
-      { name: "Docs", desc: "company & domain docs" },
-      { name: "Messages", desc: "Client & Teammate channels" },
-      { name: "Data", desc: "the live database" },
-      { name: "Terminal", desc: "a shell in your workspace" },
-      { name: "Assistant", desc: "AI helper — uses your budget" },
-      { name: "Deliverable", desc: "submit your final work" },
-    ],
-  },
-];
+/** Region copy, grounded in the ACTUAL scenario where possible so the map
+ *  names real things (customer.db, Dana, Sam) instead of generic panels —
+ *  onboarding should never read like a treasure-hunt clue. Falls back to
+ *  generic copy on sessions without scenario metadata. */
+function buildRegions(scenario: ScenarioPresentation): RegionSpec[] {
+  const tables = scenario.datasetTables;
+  const clientName = scenario.clientPersona?.name;
+  const teamName = scenario.teamPersona?.name;
+  const people =
+    clientName && teamName
+      ? `One chat with ${clientName} (client) & ${teamName} (teammate)`
+      : "one chat with your client & teammate";
+  return [
+    {
+      tour: "files",
+      title: "Files",
+      body: tables && tables.length > 0
+        ? `customer.db — a read-only copy of the data (${tables.join(", ")}) — plus a README.md that maps this whole workspace.`
+        : "Your workspace files. Start with README.md — it maps everything.",
+    },
+    {
+      tour: "editor",
+      title: "Editor",
+      body: "Read and edit files in the middle pane — scratch notes and query drafts welcome.",
+    },
+    {
+      tour: "constraints",
+      title: "Live status",
+      body: "Time remaining, tokens, and budget. The clock starts only when you begin.",
+      forceSide: "right",
+    },
+    {
+      tour: "help",
+      title: "Help",
+      body: "Reopen this guide at any point during the session.",
+      forceSide: "left",
+    },
+    {
+      tour: "tabs",
+      title: "Your tools",
+      tools: [
+        { name: "Brief", desc: "your instructions + what you have" },
+        { name: "Docs", desc: "company & domain docs" },
+        { name: "Messages", desc: people },
+        { name: "Data", desc: tables && tables.length > 0 ? "run SQL against customer.db" : "the live database" },
+        { name: "Terminal", desc: "a shell in your workspace" },
+        { name: "Assistant", desc: "AI helper — uses your budget" },
+        { name: "Deliverable", desc: "what to submit, and where" },
+      ],
+    },
+  ];
+}
 
 interface Rect { top: number; left: number; width: number; height: number }
 
@@ -98,6 +114,8 @@ function estimateHeight(spec: RegionSpec): number {
 }
 
 export default function OrientationOverlay({ showStart, onStart, onDismiss }: Props): React.ReactElement {
+  const scenario = useSessionStore((s) => s.scenario);
+  const regions = useMemo(() => buildRegions(scenario), [scenario]);
   const [rects, setRects] = useState<Record<string, Rect | null>>({});
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [starting, setStarting] = useState(false);
@@ -109,7 +127,7 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
     function measure(): void {
       if (cancelled) return;
       const next: Record<string, Rect | null> = {};
-      for (const r of REGIONS) next[r.tour] = readRect(r.tour);
+      for (const r of regions) next[r.tour] = readRect(r.tour);
       const key = JSON.stringify(next);
       if (key !== measuredKey.current) {
         measuredKey.current = key;
@@ -126,7 +144,7 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
       clearInterval(poll);
       clearTimeout(stop);
     };
-  }, []);
+  }, [regions]);
 
   useEffect(() => {
     if (showStart) return;
@@ -145,7 +163,7 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
   const vh = typeof window !== "undefined" ? window.innerHeight : 900;
 
   const placed = useMemo(() => {
-    const items = REGIONS
+    const items = regions
       .map((spec, i) => {
         const rect = rects[spec.tour];
         if (!rect) return null;
@@ -191,7 +209,7 @@ export default function OrientationOverlay({ showStart, onStart, onDismiss }: Pr
       boxes.push({ ...it, left, top, height, side: preferRight ? "left" : "right" });
     }
     return boxes;
-  }, [rects, heights, vw, vh]);
+  }, [regions, rects, heights, vw, vh]);
 
   // Measure the REAL rendered card heights and feed them back so the collision
   // pass reasons with truth, not an estimate. Converges in a frame or two.

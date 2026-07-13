@@ -34,6 +34,7 @@ import {
 } from "./db.js";
 import { mintSessionKey, revokeSessionKeyByAlias } from "./litellm.js";
 import { loadScenarioById, personaMeta } from "./scenarios.js";
+import { parseTableNames } from "./workspace-readme.js";
 import { expireSession } from "./session.js";
 import { appendEvent } from "./events-direct.js";
 
@@ -148,6 +149,7 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
   if (row.scenario_id) {
     const scenario = await loadScenarioById(row.scenario_id);
     if (scenario) {
+      const tables = scenario.dataset_ref ? parseTableNames(scenario.dataset_ref) : [];
       scenarioMeta = {
         title:      scenario.title,
         brief:      scenario.brief,
@@ -155,6 +157,7 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
         difficulty: scenario.difficulty,
         clientPersona: personaMeta(scenario.client_persona),
         teamPersona:   personaMeta(scenario.team_persona),
+        datasetTables: tables.length > 0 ? tables : null,
       };
     }
   }

@@ -120,7 +120,7 @@ export default function Workspace({ sessionId }: Props) {
     // value (false for a fresh session) arrives from the server hydrate below.
     init(sessionId, "", 0, 0, null, null, null,
       { title: null, brief: null, role: null, difficulty: null,
-        clientPersona: null, teamPersona: null }, true);
+        clientPersona: null, teamPersona: null, datasetTables: null }, true);
     getSession(sessionId)
       .then((s) => {
         init(
@@ -138,6 +138,7 @@ export default function Workspace({ sessionId }: Props) {
             difficulty: s.scenarioDifficulty,
             clientPersona: s.clientPersona ?? null,
             teamPersona:   s.teamPersona ?? null,
+            datasetTables: s.datasetTables ?? null,
           },
           // Older servers omit clockStarted → undefined; treat as already
           // started (no pre-start overlay) so a stale server can't strand the
