@@ -60,6 +60,7 @@ export default function LandingPage(): React.ReactElement {
 function Nav() {
   const links = [
     { href: "#engine", label: "How it works" },
+    { href: "#demo", label: "Demo" },
   ];
   return (
     <nav
@@ -294,9 +295,9 @@ function Problem() {
             <h2 style={sectionTitleStyle()}>
               Every signal is <span className="accent-text">broken</span>.
             </h2>
-            <p style={leadStyle({ marginTop: 22 })}>
-              Layering AI over a broken process multiplies the chaos and the noise.
-              Every proxy we trusted is now synthetic.
+            <p style={leadStyle({ marginTop: 22, color: color.text.primary, fontWeight: 500 })}>
+              Layering AI over a broken process <span className="accent-text">multiplies the chaos and the noise</span>.
+              Every proxy we trusted is now <span className="accent-text">synthetic</span>.
             </p>
           </div>
         </Reveal>
@@ -790,9 +791,9 @@ function Signal() {
             <h2 style={sectionTitleStyle()}>
               We measure <span className="accent-text">how the answer was built</span>.
             </h2>
-            <p style={leadStyle({ marginTop: 22 })}>
-              ~5,000 signals per session. Every pixel, every keystroke. Every score
-              linked to the exact evidence moments that earned it.
+            <p style={leadStyle({ marginTop: 22, color: color.text.primary, fontWeight: 500 })}>
+              <span className="accent-text">~5,000 signals per session.</span> Every pixel, every keystroke.
+              Every score linked to the <span className="accent-text">exact evidence moments</span> that earned it.
             </p>
           </div>
         </Reveal>
@@ -884,7 +885,17 @@ function Impact() {
     { end: 10, suffix: "×", l: "faster screening" },
     { end: 95, suffix: "%", l: "cost saving" },
     { end: 90, suffix: "%", l: "SME time saved" },
-    { raw: "40 → 4", l: "interviews per 20 candidates" },
+    {
+      raw: (
+        <>
+          <span style={{ color: color.text.muted, textDecoration: "line-through", textDecorationThickness: 3, fontSize: "0.58em", verticalAlign: "middle" }}>40</span>
+          <span style={{ color: color.accent.deep, fontSize: "0.58em", margin: "0 10px", verticalAlign: "middle" }}>→</span>
+          <span style={{ color: color.accent.bright }}>4</span>
+        </>
+      ),
+      l: "interviews per 20 candidates",
+      hot: true,
+    },
   ];
   return (
     <section id="impact" style={{ padding: SECTION_PAD, borderTop: `1px solid ${color.border.default}`, position: "relative", overflow: "hidden" }}>
@@ -898,20 +909,26 @@ function Impact() {
               <span className="accent-text">4 interviews instead of 40</span>.
             </h2>
             <p style={leadStyle({ marginTop: 22 })}>
-              Keep the SME judgment that can&apos;t be replaced. asaya absorbs the broken
-              middle, replacing manual screening with automated, work-evidence-based
-              assessment.
+              Keep the SME judgment that can&apos;t be replaced.{" "}
+              <span style={{ color: color.text.primary, fontWeight: 500 }}>
+                asaya absorbs the broken middle, replacing manual screening with{" "}
+                <span className="accent-text">automated, work-evidence-based assessment</span>.
+              </span>
             </p>
           </div>
         </Reveal>
         <Reveal>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 1, background: color.border.default, border: `1px solid ${color.border.default}`, borderRadius: radius.md, overflow: "hidden" }}>
             {metrics.map((m) => (
-              <div key={m.l} style={{ background: color.bg.page, padding: "34px 28px 36px" }}>
-                <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base }}>
+              <div key={m.l} style={{
+                background: m.hot ? color.bg.selected : color.bg.page,
+                borderTop: m.hot ? `2px solid ${color.accent.base}` : "2px solid transparent",
+                padding: "34px 28px 36px",
+              }}>
+                <div style={{ fontFamily: font.mono, fontWeight: 600, fontSize: m.hot ? "clamp(2.3rem, 4.6vw, 3.3rem)" : "clamp(2rem, 4vw, 2.9rem)", letterSpacing: "-0.03em", lineHeight: 0.9, color: color.accent.base, whiteSpace: "nowrap" }}>
                   {m.raw ?? <RollingNumber end={m.end} suffix={m.suffix} />}
                 </div>
-                <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: color.text.secondary, marginTop: 14 }}>{m.l}</div>
+                <div style={{ fontFamily: font.mono, fontSize: 12, letterSpacing: "0.06em", textTransform: "uppercase", color: m.hot ? color.text.primary : color.text.secondary, marginTop: 14 }}>{m.l}</div>
               </div>
             ))}
           </div>
@@ -973,8 +990,8 @@ function CTABand() {
             textWrap: "balance", maxWidth: "52ch",
             margin: "28px auto 0",
           }}>
-            Run a pilot with one role <span className="accent-text">for FREE</span>.
-            See real signal in a week, and never assess the old insufficient way.
+            Run a pilot with <span className="accent-text">one role for FREE</span>.
+            See real signals and never assess the old insufficient way.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginTop: 38 }}>
             <Button href={CONTACT_HREF} variant="primary" size="lg">Talk to us →</Button>
