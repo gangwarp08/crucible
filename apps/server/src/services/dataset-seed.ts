@@ -62,6 +62,20 @@ export async function seedScenarioDataset(
     );
   }
 
+  // The E2B template bakes a legacy Express sample app into /workspace
+  // (index.js, package.json, node_modules) whose comments annotate its planted
+  // bugs — under-the-hood text no candidate may see. No live scenario uses the
+  // app, so clear it before seeding: the file tree then shows only the
+  // scenario's dataset. Hard-fail like every other provisioning step — a
+  // workspace with spoiler text is an invalid assessment environment.
+  const wipe = await sandbox.commands.run(
+    "rm -rf /workspace/index.js /workspace/package.json /workspace/package-lock.json /workspace/node_modules",
+    { timeoutMs: 15_000 },
+  );
+  if (wipe.exitCode !== 0) {
+    throw new Error(`[dataset-seed] workspace cleanup failed: ${wipe.stderr}`);
+  }
+
   // Stage everything inside the sandbox in one logical batch.
   const mkdir = await sandbox.commands.run(`mkdir -p ${STAGING_DIR}`, {
     timeoutMs: 5_000,

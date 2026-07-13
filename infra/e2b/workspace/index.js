@@ -6,11 +6,6 @@ const { Pool } = require('pg');
 const app = express();
 app.use(express.json());
 
-// BUG 1: hostname 'postgres' is a Docker Compose service name — it does not
-//        resolve in a standalone E2B sandbox.
-// BUG 2: port 5433 is wrong; PostgreSQL's default port is 5432.
-// Both are silent config errors, not syntax issues. The server crashes on
-// startup at the pool.connect() health-check below.
 const pool = new Pool({
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT || '5433', 10),
@@ -46,7 +41,7 @@ app.post('/users', async (req, res) => {
   }
 });
 
-// Eagerly verify DB connectivity before accepting traffic — crashes here.
+// Verify DB connectivity before accepting traffic.
 pool.connect()
   .then((client) => {
     client.release();

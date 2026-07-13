@@ -1,5 +1,5 @@
 {
-  "name": "crucible-sample-app",
+  "name": "sample-app",
   "version": "1.0.0",
   "description": "Sample Express API backed by Postgres",
   "main": "index.js",
