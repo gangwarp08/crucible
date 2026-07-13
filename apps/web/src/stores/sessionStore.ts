@@ -29,6 +29,9 @@ export interface ScenarioPresentation {
   // Null on older sessions → Messages falls back to legacy hardcoded labels.
   clientPersona: { name: string; role: string } | null;
   teamPersona:   { name: string; role: string } | null;
+  // Dataset table names for the Brief "what you have" inventory + orientation
+  // copy. Null when the scenario has no dataset (or on older servers).
+  datasetTables: string[] | null;
 }
 
 interface SessionState {
@@ -76,7 +79,7 @@ interface SessionState {
 
 const EMPTY_SCENARIO: ScenarioPresentation = {
   title: null, brief: null, role: null, difficulty: null,
-  clientPersona: null, teamPersona: null,
+  clientPersona: null, teamPersona: null, datasetTables: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({

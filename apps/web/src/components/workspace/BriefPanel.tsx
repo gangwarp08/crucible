@@ -1,5 +1,7 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useSessionStore } from "@/stores/sessionStore";
+import { listScenarioDocs } from "@/lib/api";
 import { color, font } from "@/styles/tokens";
 import SectionLabel from "@/components/ui/SectionLabel";
 import Stat from "@/components/ui/Stat";
@@ -20,6 +22,19 @@ function fmtNum(n: number | null): string {
 export default function BriefPanel() {
   const scenario = useSessionStore((s) => s.scenario);
   const c = useSessionStore((s) => s.scenarioConstraints);
+  const sessionId = useSessionStore((s) => s.sessionId);
+
+  // Doc titles for the "What you have" inventory — best-effort; the section
+  // simply omits the row until (or unless) the list resolves.
+  const [docTitles, setDocTitles] = useState<string[]>([]);
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    listScenarioDocs(sessionId)
+      .then((docs) => { if (!cancelled) setDocTitles(docs.map((d) => d.title)); })
+      .catch(() => { /* tolerate — inventory renders without doc titles */ });
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
   if (!scenario.title && !scenario.brief && !c) {
     return (
@@ -71,6 +86,56 @@ export default function BriefPanel() {
         </section>
       )}
 
+      {/* "What you have" inventory — the anti-treasure-hunt map. Everything
+          here is environment mechanics, no scenario content. */}
+      <section style={{ marginBottom: 24 }}>
+        <SectionLabel tone="section">What you have</SectionLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+          <InventoryRow
+            icon="▤"
+            title="Data"
+            body={
+              scenario.datasetTables && scenario.datasetTables.length > 0
+                ? `customer.db (read-only) — tables: ${scenario.datasetTables.join(", ")}. Query it in the Data tab or the Terminal.`
+                : "Your workspace files, in the Files pane. There's a README.md with the full map."
+            }
+          />
+          {docTitles.length > 0 && (
+            <InventoryRow
+              icon="≡"
+              title="Documents"
+              body={`${docTitles.map((t) => `“${t}”`).join(", ")} — in the Docs tab.`}
+            />
+          )}
+          {(scenario.clientPersona || scenario.teamPersona) && (
+            <InventoryRow
+              icon="◉"
+              title="People"
+              body={[
+                scenario.clientPersona
+                  ? `${scenario.clientPersona.name} (${scenario.clientPersona.role} — your client)`
+                  : null,
+                scenario.teamPersona
+                  ? `${scenario.teamPersona.name} (${scenario.teamPersona.role} — your teammate)`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" and ") + " — both in the Messages tab, one shared channel."}
+            />
+          )}
+          <InventoryRow
+            icon="▣"
+            title="Deliverable"
+            body="The Deliverable tab lists exactly what to submit — check it early so you know what you're working toward."
+          />
+          <InventoryRow
+            icon="✦"
+            title="Assistant"
+            body="An AI helper in the Assistant tab. It spends your session token budget — use it deliberately."
+          />
+        </div>
+      </section>
+
       {c && (
         <section>
           <SectionLabel tone="section">Constraints (starting values)</SectionLabel>
@@ -93,6 +158,29 @@ export default function BriefPanel() {
           </p>
         </section>
       )}
+    </div>
+  );
+}
+
+function InventoryRow({ icon, title, body }: { icon: string; title: string; body: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        background: color.bg.panel,
+        border: `1px solid ${color.border.subtle}`,
+        borderRadius: 6,
+        padding: "10px 12px",
+      }}
+    >
+      <span aria-hidden="true" style={{ color: color.accent.base, fontSize: 13, lineHeight: 1.5, flexShrink: 0 }}>
+        {icon}
+      </span>
+      <div style={{ fontSize: 12.5, lineHeight: 1.55 }}>
+        <span style={{ color: color.text.primary, fontWeight: 600 }}>{title}: </span>
+        <span style={{ color: color.text.secondary }}>{body}</span>
+      </div>
     </div>
   );
 }

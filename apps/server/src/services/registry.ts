@@ -195,6 +195,10 @@ export interface SessionEntry {
     // hardcoded Dana/Sam). Null when the scenario lacks the field.
     clientPersona: { name: string; role: string } | null;
     teamPersona:   { name: string; role: string } | null;
+    // Dataset table names (from the fixture schema) so the candidate UI can
+    // say what's IN customer.db without the candidate spelunking. Null when
+    // the scenario has no dataset.
+    datasetTables: string[] | null;
   } | null;
 
   // Persona messaging — ONE shared conversation for both personas (the

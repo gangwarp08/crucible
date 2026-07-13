@@ -14,6 +14,7 @@ import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
 import { loadScenarioById, personaMeta, type Scenario } from "./scenarios.js";
 import { seedScenarioDataset } from "./dataset-seed.js";
+import { renderGuardedReadme, parseTableNames } from "./workspace-readme.js";
 import {
   freshVerificationState,
   freshPersonaState,
@@ -325,6 +326,21 @@ export async function createSandbox(
     }
   }
 
+  // Onboarding README — the candidate's "what do I have and where" map,
+  // written AFTER the dataset seed (which wipes the workspace). Guarded:
+  // renderGuardedReadme hard-fails if the rendered content contains any
+  // ground-truth figure/narrative or a persona never_reveals sentence, so a
+  // future scenario edit can't leak an answer into onboarding copy.
+  const datasetTables = scenario?.dataset_ref ? parseTableNames(scenario.dataset_ref) : [];
+  if (scenario) {
+    try {
+      await sandbox.files.write("/workspace/README.md", renderGuardedReadme(scenario, datasetTables));
+    } catch (err) {
+      await sandbox.kill().catch(() => {});
+      throw err;
+    }
+  }
+
   // SAFETY deadline (do NOT remove): even though the work-time countdown +
   // proactive beats are DEFERRED until the candidate presses "Start working"
   // (POST /sessions/:id/start re-arms this timer for the real deadline), a
@@ -367,6 +383,7 @@ export async function createSandbox(
           difficulty: scenario.difficulty,
           clientPersona: personaMeta(scenario.client_persona),
           teamPersona:   personaMeta(scenario.team_persona),
+          datasetTables: datasetTables.length > 0 ? datasetTables : null,
         }
       : null,
     messagingSockets: new Set(),
