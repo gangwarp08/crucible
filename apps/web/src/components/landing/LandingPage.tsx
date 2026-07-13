@@ -927,7 +927,8 @@ function CTABand() {
             margin: "22px 0 0", color: color.text.primary,
             textWrap: "balance",
           }}>
-            Measure what <span className="accent-text">matters</span>.
+            Metrics that <span className="accent-text">Matter</span>.
+            Measured with <span className="accent-text">Precision</span>.
           </h2>
           <p style={{
             fontFamily: font.sans, fontWeight: 600,
