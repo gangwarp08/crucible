@@ -209,7 +209,9 @@ export default function Workspace({ sessionId }: Props) {
   // EndScreen; submitted/defending → locked; still-active or an unreachable
   // server (blip) is ignored so the candidate keeps working.
   const handleSessionEnd = useCallback(() => {
-    if (status !== "active") return;
+    // token_exhausted is still a live working state — end-detection must run
+    // there too, or a genuinely completed session never reaches the EndScreen.
+    if (status !== "active" && status !== "token_exhausted") return;
     getSession(sessionId)
       .then((s) => {
         if (s.status === "completed") setStatus("ended");
