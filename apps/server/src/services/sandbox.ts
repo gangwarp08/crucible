@@ -370,7 +370,7 @@ export async function createSandbox(
         }
       : null,
     messagingSockets: new Set(),
-    channelHistory: { client: [], team: [] },
+    chatHistory: [],
     personaState: freshPersonaState(),
     verificationState: freshVerificationState(),
     assistantHistory: [],

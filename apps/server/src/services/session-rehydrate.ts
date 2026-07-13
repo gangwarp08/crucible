@@ -210,11 +210,11 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
     scenarioMeta,
 
     messagingSockets: new Set(),
-    // TODO(rehydrate): rebuild channelHistory from the transcript table so
+    // TODO(rehydrate): rebuild chatHistory from the events table so
     // persona-agent has conversational context after a restart. For now the
-    // persona responds without prior turns in memory — degraded but
+    // personas respond without prior turns in memory — degraded but
     // functional; the session continues.
-    channelHistory: { client: [], team: [] },
+    chatHistory: [],
     personaState: personaStateFromRow,
     verificationState: verificationStateFromRow,
     // Rolling assistant context is in-memory only; a rehydrated session starts

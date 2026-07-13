@@ -1,9 +1,11 @@
 // Per-session messaging orchestrator.
 //
-// Serializes inbound candidate messages PER CHANNEL so two quick sends on the
-// same channel don't race on history append + scenarioState mutation, while
-// leaving the two channels independent of each other (a slow Dana reply does
-// not head-of-line block a Sam reply).
+// Serializes ALL persona work (client + team, reactive + proactive) on ONE
+// promise chain per session: the personas share a single conversation history,
+// so a reply to Sam must see Dana's completed reply — two chains would let an
+// LLM call snapshot the history mid-turn and interleave appends
+// nondeterministically. The verifier keeps its own chain so a slow persona
+// turn never blocks a defense answer.
 //
 // This module owns the wiring between the WS route and the persona-agent:
 // telemetry events, cost ledger, in-memory spend accounting, and the
@@ -23,10 +25,9 @@ import { verifierReply } from "./verifier-agent.js";
 // Channel stays the narrower client|team — MessageChannel is its superset.
 export type MessageChannel = Channel | "verifier";
 
-// Per-session, per-channel promise chain to serialize work.
+// Per-session promise chains: one for all persona traffic, one for the verifier.
 interface ChannelChains {
-  client: Promise<void>;
-  team: Promise<void>;
+  persona: Promise<void>;
   verifier: Promise<void>;
 }
 const chainsBySession = new Map<string, ChannelChains>();
@@ -34,10 +35,22 @@ const chainsBySession = new Map<string, ChannelChains>();
 function getChains(sessionId: string): ChannelChains {
   let c = chainsBySession.get(sessionId);
   if (!c) {
-    c = { client: Promise.resolve(), team: Promise.resolve(), verifier: Promise.resolve() };
+    c = { persona: Promise.resolve(), verifier: Promise.resolve() };
     chainsBySession.set(sessionId, c);
   }
   return c;
+}
+
+/** Run a task serialized on the session's persona chain. Used by the proactive
+ *  beat scheduler so a scheduled persona ping can never interleave with an
+ *  in-flight reactive reply's history read/append. Returns the task's promise;
+ *  the stored chain swallows the rejection so one failure doesn't poison
+ *  subsequent turns. */
+export function runOnPersonaChain(sessionId: string, task: () => Promise<void>): Promise<void> {
+  const chains = getChains(sessionId);
+  const next = chains.persona.then(task);
+  chains.persona = next.catch(() => {});
+  return next;
 }
 
 /** Fan out one message to every open WS for the given session. Used by the
@@ -88,10 +101,11 @@ export type OutboundMessage =
 export type Send = (msg: OutboundMessage) => void;
 
 /**
- * Append one candidate message to the per-channel queue. The reply (when it
- * arrives) is sent back via the provided `send` callback. Returns the promise
- * for the just-enqueued work — the WS handler can ignore it (fire-and-forget)
- * since responses are pushed via `send`.
+ * Append one candidate message to the appropriate queue (persona chain for
+ * client/team, verifier chain for the defense). The reply (when it arrives) is
+ * sent back via the provided `send` callback. Returns the promise for the
+ * just-enqueued work — the WS handler can ignore it (fire-and-forget) since
+ * responses are pushed via `send`.
  */
 export function enqueueCandidateMessage(
   sessionId: string,
@@ -100,10 +114,11 @@ export function enqueueCandidateMessage(
   send: Send,
 ): Promise<void> {
   const chains = getChains(sessionId);
-  const next = chains[channel].then(() => processOne(sessionId, channel, text, send));
+  const key = channel === "verifier" ? "verifier" : "persona";
+  const next = chains[key].then(() => processOne(sessionId, channel, text, send));
   // Swallow downstream rejections on the chain so a single failed turn doesn't
   // poison the subsequent ones. Errors are already surfaced via `send`.
-  chains[channel] = next.catch(() => {});
+  chains[key] = next.catch(() => {});
   return next;
 }
 

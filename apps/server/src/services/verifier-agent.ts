@@ -92,10 +92,12 @@ async function condenseWork(sessionId: string, entry: SessionEntry): Promise<Con
   const deliverable =
     (entry.scenarioState["deliverable"] as Record<string, unknown> | undefined) ?? null;
 
+  // Last 4 turns per channel, derived from the unified history — preserves the
+  // exact pre-merge condensation semantics for question selection.
   const messages: CondensedWork["messages"] = [];
   for (const ch of ["client", "team"] as const) {
-    for (const t of entry.channelHistory[ch].slice(-4)) {
-      messages.push({ channel: ch, role: t.role, text: t.text.slice(0, 300) });
+    for (const t of entry.chatHistory.filter((turn) => turn.channel === ch).slice(-4)) {
+      messages.push({ channel: ch, role: t.speaker, text: t.text.slice(0, 300) });
     }
   }
 

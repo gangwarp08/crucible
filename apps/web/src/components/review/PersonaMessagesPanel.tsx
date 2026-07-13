@@ -1,18 +1,18 @@
 "use client";
-// Persona-channel conversation view for the recruiter review page: the
-// candidate's chat with the TEAM persona and the CLIENT persona, rebuilt from
-// the session's `message.{team|client}.{candidate|persona}` event rows (the
-// detail endpoint already returns every event, so no extra fetch). One tab
-// per channel, speaker-labeled and timestamped bubbles — same visual idiom as
-// TranscriptPanel. Renders nothing when the session has no persona messages
-// (e.g. scenarios without personas), mirroring SuspicionPanel's posture.
-import { useMemo, useState } from "react";
+// Persona conversation view for the recruiter review page: the candidate's
+// chat with the CLIENT and TEAM personas, rebuilt from the session's
+// `message.{team|client}.{candidate|persona}` event rows (the detail endpoint
+// already returns every event, so no extra fetch). Rendered as ONE seq-sorted
+// interleaved thread — the same unified chat the candidate saw — with
+// candidate rows labeled by addressee ("Candidate → Dana") and persona rows by
+// name. Renders nothing when the session has no persona messages (e.g.
+// scenarios without personas), mirroring SuspicionPanel's posture.
+import { useMemo } from "react";
 import type { ReviewEvent } from "@/lib/api";
 import { color, radius, font } from "@/styles/tokens";
 import { formatDateTime } from "./format";
 
 type Channel = "team" | "client";
-const CHANNELS: Channel[] = ["team", "client"];
 const CHANNEL_LABEL: Record<Channel, string> = { team: "Team", client: "Client" };
 
 interface PersonaMessage {
@@ -53,11 +53,27 @@ function parseMessages(events: ReviewEvent[]): PersonaMessage[] {
   return out.sort((a, b) => a.seq - b.seq);
 }
 
-function Bubble({ msg }: { msg: PersonaMessage }) {
+/** Per-channel persona display names, harvested from the persona rows
+ *  themselves so candidate rows can be labeled "Candidate → Dana" without any
+ *  extra scenario fetch. Falls back to the channel label. */
+function personaNames(messages: PersonaMessage[]): Record<Channel, string> {
+  const names: Record<Channel, string> = { team: CHANNEL_LABEL.team, client: CHANNEL_LABEL.client };
+  for (const m of messages) {
+    if (m.role === "persona" && m.personaName) names[m.channel] = m.personaName;
+  }
+  return names;
+}
+
+const CHANNEL_ACCENT: Record<Channel, string> = {
+  client: color.persona.client,
+  team: color.persona.team,
+};
+
+function Bubble({ msg, names }: { msg: PersonaMessage; names: Record<Channel, string> }) {
   const isCandidate = msg.role === "candidate";
   const speaker = isCandidate
-    ? "Candidate"
-    : (msg.personaName ?? CHANNEL_LABEL[msg.channel]);
+    ? `Candidate → ${names[msg.channel]}`
+    : (msg.personaName ?? names[msg.channel]);
   return (
     <div
       style={{
@@ -77,7 +93,14 @@ function Bubble({ msg }: { msg: PersonaMessage }) {
           gap: 8,
         }}
       >
-        <span style={{ color: color.text.secondary, fontWeight: 600 }}>{speaker}</span>
+        <span
+          style={{
+            color: isCandidate ? color.text.secondary : CHANNEL_ACCENT[msg.channel],
+            fontWeight: 600,
+          }}
+        >
+          {speaker}
+        </span>
         <span>{formatDateTime(msg.ts)}</span>
       </div>
       <div
@@ -103,20 +126,11 @@ function Bubble({ msg }: { msg: PersonaMessage }) {
 
 export default function PersonaMessagesPanel({ events }: { events: ReviewEvent[] }) {
   const messages = useMemo(() => parseMessages(events), [events]);
-  const channelsWithMessages = CHANNELS.filter((c) =>
-    messages.some((m) => m.channel === c),
-  );
-  const [selected, setSelected] = useState<Channel | null>(null);
+  const names = useMemo(() => personaNames(messages), [messages]);
 
   // No persona traffic at all (persona-less scenario / legacy session) —
   // stay invisible rather than render an empty shell.
-  if (channelsWithMessages.length === 0) return null;
-
-  const active: Channel =
-    selected !== null && channelsWithMessages.includes(selected)
-      ? selected
-      : channelsWithMessages[0]!;
-  const activeMessages = messages.filter((m) => m.channel === active);
+  if (messages.length === 0) return null;
 
   return (
     <section
@@ -142,41 +156,18 @@ export default function PersonaMessagesPanel({ events }: { events: ReviewEvent[]
         <span style={{ fontSize: 12, fontWeight: 600, color: color.text.secondary, letterSpacing: "0.08em", textTransform: "uppercase" }}>
           Persona Messages
         </span>
-        <div style={{ display: "flex", gap: 6 }}>
-          {CHANNELS.map((c) => {
-            const count = messages.filter((m) => m.channel === c).length;
-            const isActive = c === active;
-            return (
-              <button
-                key={c}
-                onClick={() => setSelected(c)}
-                disabled={count === 0}
-                style={{
-                  padding: "3px 10px",
-                  fontSize: 11,
-                  borderRadius: radius.sm,
-                  border: `1px solid ${isActive ? color.accent.base : color.border.default}`,
-                  background: isActive ? color.accent.soft : "transparent",
-                  color: count === 0 ? color.text.muted : isActive ? color.text.primary : color.text.secondary,
-                  cursor: count === 0 ? "default" : "pointer",
-                  fontFamily: font.mono,
-                }}
-              >
-                {CHANNEL_LABEL[c]} ({count})
-              </button>
-            );
-          })}
-        </div>
+        <span style={{ fontSize: 11, color: color.text.muted, fontFamily: font.mono }}>
+          {messages.length} messages ·{" "}
+          <span style={{ color: CHANNEL_ACCENT.client }}>{names.client}</span>
+          {" + "}
+          <span style={{ color: CHANNEL_ACCENT.team }}>{names.team}</span>
+        </span>
       </header>
 
       <div style={{ padding: "12px 0", maxHeight: 480, overflowY: "auto" }}>
-        {activeMessages.length === 0 ? (
-          <div style={{ padding: "24px 16px", color: color.text.muted, fontSize: 13, textAlign: "center" }}>
-            No messages on this channel
-          </div>
-        ) : (
-          activeMessages.map((m) => <Bubble key={m.seq} msg={m} />)
-        )}
+        {messages.map((m) => (
+          <Bubble key={m.seq} msg={m} names={names} />
+        ))}
       </div>
     </section>
   );

@@ -19,10 +19,11 @@ import {
   type ScheduledBeat,
   type PersonaState,
   type MessagingSocket,
+  type SessionEntry,
 } from "./registry.js";
 import { proactiveBeatMessageGeneric } from "./persona-agent.js";
 import { startVerification } from "./verifier-agent.js";
-import { broadcastToSession } from "./messaging.js";
+import { broadcastToSession, runOnPersonaChain } from "./messaging.js";
 import { logEvent, recordCost } from "./telemetry.js";
 import { persistSessionUpdate, persistScenarioStatePatch } from "./db.js";
 
@@ -131,6 +132,17 @@ async function fireBeat(sessionId: string, beat: ScheduledBeat): Promise<void> {
     return;
   }
 
+  // Serialize on the session's persona chain: the personas share ONE
+  // conversation history, so a proactive ping must not interleave with an
+  // in-flight reactive reply's history read/append.
+  await runOnPersonaChain(sessionId, () => firePersonaBeat(sessionId, entry, beat));
+}
+
+async function firePersonaBeat(
+  sessionId: string,
+  entry: SessionEntry,
+  beat: ScheduledBeat,
+): Promise<void> {
   const reply = await proactiveBeatMessageGeneric(
     sessionId,
     beat.channel as "client" | "team",
