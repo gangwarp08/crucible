@@ -59,11 +59,15 @@ export default function ConstraintHUD() {
   // count down against it. Passing null freezes the countdown; the Time cell
   // shows the full scenario time as a static "ready" value below.
   const remainingSec = useCountdown(clockStarted ? deadline : null, () => {
-    if (status === "active") setStatus("ended");
+    // token_exhausted sessions are still live work sessions — the deadline
+    // must end them exactly like active ones.
+    if (status === "active" || status === "token_exhausted") setStatus("ended");
   });
 
   useEffect(() => {
-    if (!sessionId || status !== "active") return;
+    // Keep polling balances while the candidate can still work — including
+    // token_exhausted (assistant locked, everything else live).
+    if (!sessionId || (status !== "active" && status !== "token_exhausted")) return;
     const tick = () => {
       void getSession(sessionId)
         .then((s) => {
@@ -80,7 +84,7 @@ export default function ConstraintHUD() {
 
   const timeTone: Tone =
     !clockStarted ? "muted"
-    : status !== "active" ? "error"
+    : status !== "active" && status !== "token_exhausted" ? "error"
     : remainingSec < 120 ? "error"
     : remainingSec < 300 ? "warn"
     : "default";

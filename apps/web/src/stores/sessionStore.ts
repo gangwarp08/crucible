@@ -14,10 +14,14 @@ export type SessionStatus =
   | "token_exhausted"       // scenario AI token budget hit; session continues but assistant disabled
   | "ended";
 
-/** Workspace mutations (edit/terminal/AI/query/deliverable) are only allowed
- *  while truly active. locked/ended/exhausted are read-only. */
+/** Workspace mutations (edit/terminal/query/deliverable) are allowed while
+ *  active AND after the scenario AI-token budget runs out — token_exhausted
+ *  only disables the assistant (ChatHUD gates on status === "active" itself);
+ *  the candidate must still be able to work unaided and SUBMIT. Only
+ *  locked (submitted/defending), budget_exhausted (sandbox destroyed), and
+ *  ended are read-only. */
 export function isWorkspaceWritable(status: SessionStatus): boolean {
-  return status === "active";
+  return status === "active" || status === "token_exhausted";
 }
 
 export interface ScenarioPresentation {
