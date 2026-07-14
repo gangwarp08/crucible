@@ -47,6 +47,20 @@ section top to bottom; every step is copy-paste where possible.
   MiB — and bumped `scenario_version`. `time_minutes` is display-only; the
   enforced deadline is `SESSION_TIMEOUT_MIN`. Apply via the pooler method below
   if standing up a fresh DB.
+- **Migration 0026 (differential-hint personas) is applied.** Personas are now
+  **fully DB-driven** — the server builds every persona prompt (family 1
+  included) from the scenario row's `client_persona` / `team_persona` JSON, so
+  a fresh DB needs 0026 on top of the earlier content migrations for the two
+  hard sims' differential opening steer. Apply via the pooler method below;
+  it's an idempotent `UPDATE scenarios SET team_persona…` on the two `-pro`
+  slugs.
+- **Scenario-content edits can fail provisioning by design.** The
+  auto-generated workspace `README.md` is leak-guarded: if an edit puts
+  ground-truth figures/narratives or persona `never_reveals` text into the
+  rendered onboarding copy, `createSandbox()` hard-fails with
+  `ReadmeLeakError` — run
+  `pnpm --filter @crucible/server exec tsx scripts/verify-workspace-readme.ts`
+  after any scenario-content change.
 - **Geo integrity needs the vendored DB.** `apps/server/data/GeoLite2-Country.mmdb`
   (~8.5 MB, read via the `maxmind` package) ships in the repo — no runtime
   download, no key. `trustProxy: true` must stay on so `request.ip` is the real
@@ -55,7 +69,9 @@ section top to bottom; every step is copy-paste where possible.
 - **Monaco is self-hosted.** `pnpm build` runs `copy-monaco.mjs` first to vendor
   the editor into `apps/web/public/monaco/vs`; the CSP in `next.config.ts`
   allows **no external hosts**. A deploy that skips the copy step leaves the IDE
-  stuck on "Loading…".
+  stuck on "Loading…". `turbo.json` now declares `public/monaco/**` as a build
+  output, closing the failure mode where the Vercel remote cache restored
+  `.next/**` without the editor assets on server-only deploys.
 
 ## Applying a migration (the pooler method)
 

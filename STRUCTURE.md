@@ -44,7 +44,8 @@ apps/
       server.ts                    # app/route wiring
       env.ts                       # env validation
       routes/
-        chat.ts                    # candidate <-> AI interviewer chat
+        chat.ts                    # candidate <-> AI assistant chat (rolling
+                                   #   last-2-exchange context, in-memory only)
         costs.ts                   # ADMIN-ONLY READ-ONLY costs dashboard
                                    #   (/api/admin/costs/* — same requireAdmin
                                    #   gate as validity.ts)
@@ -53,7 +54,8 @@ apps/
         files.ts                   # sandbox file read/write
         health.ts
         integrity.ts               # passive proctoring signals (integrity.* events)
-        messages.ts                # message history
+        messages.ts                # unified persona chat WS + history (one
+                                   #   thread, both personas; channel = addressee)
         outcomes.ts                # partner outcome webhook + feedback invites
         proctoring.ts              # proctoring v2 surface (DORMANT — org flag): consent,
                                    #   identity-verify, org-scoped identity-delete
@@ -85,9 +87,13 @@ apps/
                                    #   never persisted — per-session-salted hash)
         litellm.ts                 # mint/scope per-session LiteLLM keys
         live-stream.ts             # READ-ONLY tail for live-session SSE monitoring
-        messaging.ts
+        messaging.ts               # WS broadcast + the single persona promise
+                                   #   chain (runOnPersonaChain; verifier separate)
         orgs.ts                    # org resolution + API key / webhook secret minting
-        persona-agent.ts           # AI interviewer persona
+        persona-agent.ts           # scenario personas — fully DB-driven (no
+                                   #   hardcoded family path); unified shared-
+                                   #   context chat; differential misleading
+                                   #   hints on the hard sims (migration 0026)
         proctoring-v2.ts           # DORMANT: consent recording, gateway-vision identity
                                    #   match (raw images in-memory only), biometric deletion
         query-runner.ts
@@ -108,6 +114,10 @@ apps/
         telemetry.ts               # telemetry writes
         validity.ts                # READ-ONLY validity aggregation (version-aware,
                                    #   scorable-only, min-N gates N>=10 / paired-N>=20)
+        workspace-readme.ts        # guarded in-sandbox README generator —
+                                   #   renderGuardedReadme() hard-fails provisioning
+                                   #   (ReadmeLeakError) if rendered onboarding text
+                                   #   would leak ground truth / never-reveals
       session.test.ts
     data/
       GeoLite2-Country.mmdb        # vendored country-only geo DB (~8.5 MB, read via maxmind)
@@ -120,8 +130,12 @@ apps/
                                    #   biometric-retention (dormant proctoring v2), the six
                                    #   validity-dashboard gates: verify-validity-access /
                                    #   not-assessed / exclusions / discrimination-view /
-                                   #   correlation-view / version-panel, and
-                                   #   verify-costs-dashboard.ts)
+                                   #   correlation-view / version-panel,
+                                   #   verify-costs-dashboard.ts, and the newest
+                                   #   verify-shared-context.ts (unified-chat
+                                   #   cross-persona visibility, no knowledge bleed)
+                                   #   + verify-workspace-readme.ts (README leak
+                                   #   guard + real-E2B provision check))
                                    # + encode/seed helpers + mint-org-key.ts
     package.json  tsconfig.json  vitest.config.ts
 
@@ -155,12 +169,17 @@ apps/
                       # proctoring-v2 consent + ID/selfie capture)
         ui/           # Bubble, Button, Card, IconButton, Pill,
                       # SectionLabel, Stat, TabStrip, Wordmark
-        workspace/    # BriefPanel, ChatHUD, ConstraintHUD (static pre-start
-                      # time under the deferred clock), DataExplorer,
-                      # DeliverablePanel, DocsViewer, Editor (self-hosted
-                      # Monaco → /monaco/vs), EndScreen, FileTree, MarkdownView,
-                      # Messages (scenario-driven persona labels), OrientationOverlay
-                      # (entry tutorial; starts the clock — replaced WorkspaceTour),
+        workspace/    # BriefPanel (+ "What you have" inventory: tables/docs/
+                      # people from scenario metadata), ChatHUD (+ short-memory
+                      # disclaimer), ConstraintHUD (static pre-start time under
+                      # the deferred clock; token_exhausted ≠ read-only),
+                      # DataExplorer, DeliverablePanel, DocsViewer, Editor
+                      # (self-hosted Monaco → /monaco/vs), EndScreen, FileTree,
+                      # MarkdownView, Messages (UNIFIED chat: one merged
+                      # persona thread + recipient toggle; Reviewer sub-tab
+                      # hidden unless the dormant verifier speaks),
+                      # OrientationOverlay (scenario-grounded entry tutorial;
+                      # starts the clock — replaced WorkspaceTour),
                       # Terminal, Workspace, WorkspaceLoader
       lib/api.ts
       lib/integrity.ts             # useIntegrityMonitor hook (passive proctoring)
@@ -169,7 +188,10 @@ apps/
       lib/ai-fluency.ts
       stores/sessionStore.ts
       styles/tokens.ts
-    public/monaco/vs/              # self-hosted Monaco editor build (no CDN)
+    public/monaco/vs/              # self-hosted Monaco editor build (no CDN;
+                                   #   declared a turbo build output so the
+                                   #   remote cache can't restore a build without it)
+    public/demo-asaya.mp4          # self-hosted landing demo video (CSP: no external hosts)
     scripts/copy-monaco.mjs        # build step: vendor Monaco into public/monaco/vs
     next.config.ts                 # CSP + security headers (frame-ancestors none,
                                    #   connect-src self+server, HSTS; no external hosts)
@@ -203,6 +225,9 @@ supabase/
     0024_proctoring_v2.sql            # AUTHORED-UNAPPLIED: identity_checks (derived data only)
     0025_constraints_v2.sql           # APPLIED: tighten in-fiction constraints
                                       #   (tokens 50k, compute 30m, memory 1 GiB)
+    0026_differential_hints.sql       # APPLIED: sync the two hard sims' team
+                                      #   persona to the differential misleading
+                                      #   hint (personas fully DB-driven)
 
 infra/
   e2b/

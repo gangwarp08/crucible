@@ -15,10 +15,16 @@ claim to do.
   board meeting in 60 minutes — figure out what's wrong, prioritize,
   and brief the VP Finance").
 - Spins up a per-candidate sandbox (E2B microVM) with a SQLite copy of
-  Meridian's "production" data, file tree, terminal, SQL data explorer.
-- Runs two AI personas the candidate can talk to: **Dana** (VP Finance,
-  the client) and **Sam** (senior engineer teammate — helpful but
-  confidently wrong about priority).
+  Meridian's "production" data, file tree, terminal, SQL data explorer,
+  and an auto-generated (leak-guarded) `README.md` inventory.
+- Runs two AI personas the candidate can talk to in a **single unified
+  chat** — one thread, a recipient toggle, shared conversation context:
+  a client (e.g. **Dana**, VP Finance) and a teammate (e.g. **Sam**,
+  senior engineer — helpful but pushing the wrong priority). Personas
+  are fully DB-driven per scenario; the hard variants open with a
+  *differential* misleading hint (real cause + red herring + noise,
+  light lean toward the wrong one) that rewards verification over
+  trust.
 - Tracks every action — query, message, file write, AI assistant turn —
   as structured telemetry.
 - Grades the session against an 8-competency rubric with anchor-driven
@@ -229,6 +235,26 @@ made self-contained by a self-hosted Monaco editor (vendored under
 unhandled 500s to a generic body; `trustProxy` for real client IPs. On the
 candidate side, a deferred work clock + `OrientationOverlay` tutorial replaced
 the old workspace tour (the clock starts on `POST /sessions/:id/start`).
+
+Latest slice of work (PRs #56–#66): personas are now **fully
+DB-driven** — the hardcoded family-1 path was removed and every
+scenario builds its persona prompts from the scenario row's persona
+JSON; migration 0026 (applied) rewrites the two hard sims' opening
+steer as a differential misleading hint. Candidate chat is **unified**:
+one window, both personas, shared context with prompt-enforced
+knowledge boundaries and a recipient toggle (telemetry unchanged —
+events are still `message.{client|team}.*`). Onboarding ships a
+**guarded in-sandbox `README.md`** (provisioning hard-fails if the
+generated text would leak ground truth), a Brief-tab "What you have"
+inventory, and a scenario-grounded orientation overlay. The AI
+assistant keeps a rolling last-2-exchange context window (in-memory
+only, with a UI disclaimer). Token exhaustion no longer locks the
+workspace — only the assistant; the candidate keeps working and can
+still submit. The legacy sample app that spoiled the planted bugs was
+stripped from the sandbox, `turbo.json` now declares the self-hosted
+Monaco assets as a build output (Vercel remote-cache fix), and the
+landing page gained a self-hosted demo video plus the tagline "Metrics
+that Matter. Measured with Precision."
 
 Not yet shipped: per-candidate one-time invite codes (currently a
 shared secret), audit log table.
