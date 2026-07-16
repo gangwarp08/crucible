@@ -12,7 +12,8 @@
 **asaya is an AI-conducted coding assessment platform.** A candidate
 clicks a link, lands on a brief, clicks Begin, and gets dropped into a
 sandboxed dev environment with a file tree, an editor, a terminal, a SQL
-data explorer, a chat with two AI personas (a client and a teammate), an
+data explorer, a unified chat with two AI personas (a client and a
+teammate in one thread, with a recipient toggle and shared context), an
 AI assistant, and a deliverable form. They have a timer, a token budget,
 and a compute budget. While they work, the personas reach out unprompted
 according to a scripted beat schedule. When time runs out — or they
@@ -145,6 +146,16 @@ block / none`) so the PTY WS, messaging WS, and chat state survive tab
 switches. Pane sizes persist to `localStorage` under
 `crucible.workspace.layout.v1`.
 
+**Messages is a unified chat**: one merged thread with both personas
+(candidate rows labelled "Candidate → X"), a "To:" recipient toggle
+that defaults to the last speaker, per-recipient waiting states, and
+one unread badge. A Reviewer sub-tab exists for the verifier channel
+but stays hidden unless the (dormant) verifier ever speaks. **Brief**
+opens with a "What you have" inventory — dataset tables, docs, people,
+deliverable, assistant — built from scenario metadata
+(`scenarioMeta.datasetTables` + `listScenarioDocs()`), no per-scenario
+authoring.
+
 The top **chrome row** (44px) merges scenario title + role/difficulty
 pill with the live `ConstraintHUD` (Time / Tokens / Compute / Money /
 Memory). Time, Tokens, Compute are live (color-coded as they cross
@@ -154,7 +165,9 @@ warning thresholds). Money + Memory are static context.
 creation (the creation-relative deadline is only a hard cost ceiling). On
 entry the candidate sees an **`OrientationOverlay`** tutorial (dimmed
 workspace, numbered highlight rings + leader arrows over Files / Editor /
-Live-status / Help / Tools); dismissing "Start the simulation" calls
+Live-status / Help / Tools) — its copy is **scenario-grounded**, naming the
+actual `customer.db` tables and the actual personas rather than generic
+labels; dismissing "Start the simulation" calls
 `POST /sessions/:id/start`, which recomputes `deadline = now +
 SESSION_TIMEOUT_MIN` (idempotent). Until then `ConstraintHUD` shows a static
 pre-start time. The Help button reopens the overlay. (This replaced the old
@@ -208,8 +221,10 @@ apps/server/src/
                           LiteLLM revoke, sandbox kill, auto-eval)
     litellm.ts            mint/revoke per-session keys; chatCompletionWithMessages
                           (all model calls go through this)
-    persona-agent.ts      LLM-driven Client (Dana) + Team (Sam) personas; reactive
-                          and proactive beats; reveal-flag state machine
+    persona-agent.ts      LLM-driven Client + Team personas (fully DB-driven from
+                          the scenario row's persona JSON); reactive and proactive
+                          beats; beat-ID-keyed reveal state; unified shared-context
+                          chat rendering
     scheduler.ts          15-second sweep loop; fires due-but-unfired proactive beats
     messaging.ts          WS broadcast helpers for messages.ts
     telemetry.ts          buffered events + transcript + cost ledger flush to Supabase
@@ -309,6 +324,16 @@ EndScreen, with module names.
      ONLY in memory on `SessionEntry.litellmKey`).
    - `seedScenarioDataset` copies the scenario's `seed.sql` into the
      sandbox + initializes `/workspace/customer.db` (read-only SQLite).
+     It first wipes the legacy Express sample app the E2B template used
+     to bake into `/workspace` (its comments announced the planted bugs
+     — a spoiler).
+   - `renderGuardedReadme` (services/workspace-readme.ts) writes an
+     auto-generated `/workspace/README.md` (role, data + table names
+     parsed from `schema.sql`, query paths, personas, tab map). The
+     render is **leak-guarded**: if it would contain ground-truth
+     figures/narratives or persona `never_reveals` text, provisioning
+     hard-fails with `ReadmeLeakError`. The candidate's first `ls`
+     shows exactly `customer.db` + `README.md`.
    - `computeScheduledBeats` reads `scenario.curveballs[]`, applies any
      `beatTimingOverridesMs` (dev/test knob), and computes absolute
      `due_ts` per beat.
@@ -342,14 +367,22 @@ EndScreen, with module names.
      embedded in `sqlrun.py.ts` inside the sandbox. Deducts compute.
      Streams rows back (max 500). Logs a `db.query` event.
    - **Sending the AI assistant a message** — `ChatHUD` → `POST /api/chat`
-     (routes/chat.ts) → `chatCompletionWithMessages` with the session's
-     key. Returns the reply + new spend + remaining tokens. Logs
-     `ai.assistant.*` events. Token deduction is in `scenarioState.tokens`;
-     if it drops ≤ 0 the next call is rejected (`token_budget_exhausted`).
-   - **Messaging Client/Team** — `Messages` → WS message → backend
-     `messaging.ts` enqueues a turn for `persona-agent.ts`. The persona
-     LLM runs with the channel's history + the persona's system prompt
-     + current reveal-flag state. Reply broadcasts back via WS.
+     (routes/chat.ts) → `chatCompletion` with the session's key, passing
+     the rolling **last-2-exchange context window**
+     (`SessionEntry.assistantHistory`, max 4 messages — in-memory only,
+     cleared by restart/rehydrate; the UI shows a disclaimer). Returns
+     the reply + new spend + remaining tokens. Logs `ai.assistant.*`
+     events. Token deduction is in `scenarioState.tokens`; if it drops
+     ≤ 0 the next call is rejected (`token_budget_exhausted`) — but the
+     **workspace stays writable**: only the assistant locks, the
+     candidate keeps editing/querying and can still submit.
+   - **Messaging the personas** — `Messages` (one unified thread, a
+     recipient toggle picks client or team) → WS message → backend
+     `messaging.ts` enqueues the turn on the **single persona promise
+     chain** for `persona-agent.ts`. The persona LLM runs with the
+     shared unified history (rendered per-persona with
+     `[Candidate → X]` / `[X wrote]` prefixes) + the persona's system
+     prompt + current reveal state. Reply broadcasts back via WS.
    - **Viewing docs** — `DocsViewer` → `POST /api/sessions/:id/docs/:docId/view`
      (routes/docs.ts) → logs `doc.view` event (for the recruiter
      timeline and the Analysis Agent's surfaced_seqs).
@@ -440,18 +473,39 @@ The FDE simulation is what makes asaya distinctive. Two layers:
 
 ### Reactive (the candidate sent a message)
 
-`messages.ts` WS receives a candidate message → routed into
-`persona-agent.processCandidateMessage(sessionId, channel, text)`:
-- Loads the channel's history from `SessionEntry.channelHistory[channel]`.
-- Loads the persona's system prompt (from `scenario.client_persona` /
-  `scenario.team_persona`) + current reveal-flag state from
-  `personaState`.
+`messages.ts` WS receives a candidate message (the `channel` field is
+the **addressee** — the recipient toggle in the unified chat) → routed
+into `persona-agent.processCandidateMessage(sessionId, channel, text)`
+on the **single persona promise chain** (`messaging.runOnPersonaChain`
+— one chain for both personas, so no turn interleaves mid-history-read;
+the verifier keeps its own chain):
+- Loads the **unified history** from `SessionEntry.chatHistory` (one
+  `ChatTurn[]` array; each turn carries `speaker` + `channel` —
+  addressee for candidate turns, author for persona turns).
+  `renderHistoryForPersona()` maps it to the persona's LLM view: own
+  turns as assistant role, everything else as user role with
+  `[Candidate → X]` / `[X wrote]` prefixes (consecutive user messages
+  coalesced; `stripSpeakerTag()` scrubs parroted prefixes from
+  replies). Both personas therefore **see the whole conversation** —
+  a `SHARED CHANNEL` prompt block enforces knowledge boundaries (the
+  client stays non-technical; the teammate's gated beats still demand
+  evidence brought directly to them) and reply discipline.
+- Loads the persona's system prompt — built **generically from the
+  scenario row's** `client_persona` / `team_persona` JSON (name, role,
+  voice, beats, guardrails) for **every** scenario, family 1 included
+  (the hardcoded family-1 builders are gone) — + current reveal state
+  from `personaState` (reveals are keyed by the scenario's beat IDs;
+  no fixed enum).
 - Calls LLM via `chatCompletionWithMessages`. The persona prompt is
-  written to respect reveal flags: e.g., Sam only "concedes with
-  evidence" if the candidate brought specific numbers refuting the
-  refund hypothesis. The LLM returns `{ text, reveals: { ... } }` —
-  reveals flip the corresponding personaState flags.
-- Broadcasts the reply, persists, logs.
+  written to respect reveal state: e.g., Sam only "concedes with
+  evidence" if the candidate brought specific numbers ruling out his
+  lean. On the hard sims the opening steer is a **differential**
+  (migration 0026): 2–3 candidate causes — the true dominant one, a
+  red herring, noise — with a light lean toward the wrong one. The LLM
+  returns `{ text, reveals: { ... } }` — reveals flip the
+  corresponding personaState flags.
+- Broadcasts the reply, persists, logs. Telemetry is unchanged by the
+  unified chat: events are still `message.{client|team}.{candidate|persona}`.
 
 ### Proactive (no candidate input — beats fire on their own)
 
@@ -467,7 +521,8 @@ On sweep:
 - If `due_ts > now`: skip.
 - If `beatAlreadyRevealed`: mark fired silently (the reactive path
   already gave the same reveal).
-- Else: `fireBeat` → `proactiveBeatMessage` (LLM call) → broadcast →
+- Else: `fireBeat` → `proactiveBeatMessage` (LLM call, queued on the
+  same shared persona chain via `runOnPersonaChain`) → broadcast →
   `applyBeatReveal` → log `curveball.fired` + `message.<channel>.persona`
   → record cost with `purpose: "proactive_client"|"proactive_team"`.
 
@@ -578,8 +633,11 @@ substantive judge or persona change.
 include `sandbox`, `sandboxId`, `scenarioState`, `scenarioMeta`
 (presentation cache for the candidate UI), `litellmKey` (NEVER logged),
 `spendTally`, telemetry buffers, PTY + messaging socket sets,
-`channelHistory`, `personaState`. Entries persist until server
-restart; completed entries are NOT evicted yet (TODO in registry.ts).
+`chatHistory` (the unified persona thread — one `ChatTurn[]` with
+speaker + channel per turn; replaced the per-channel `channelHistory`),
+`assistantHistory` (the assistant's rolling last-2-exchange window),
+`personaState`. Entries persist until server restart; completed
+entries are NOT evicted yet (TODO in registry.ts).
 
 ### Browser (`apps/web/src/stores/sessionStore.ts`)
 
@@ -609,9 +667,18 @@ Workspace pane resize sizes go to `localStorage`, NOT the store.
 - **`scheduler.ts`** — `startBeatScheduler` + `sweep`. The 15s tick is
   configurable via `CRUCIBLE_SCHEDULER_TICK_MS`.
 - **`persona-agent.ts`** — `processCandidateMessage` (reactive),
-  `proactiveBeatMessage` (proactive). System prompts per scenario.
-- **`messaging.ts`** — `broadcastToSession` + the messaging WS
-  bookkeeping helpers.
+  `proactiveBeatMessage` (proactive). System prompts built generically
+  from each scenario row's persona JSON (fully DB-driven — no
+  hardcoded family path); `renderHistoryForPersona` maps the unified
+  shared history into each persona's LLM view.
+- **`messaging.ts`** — `broadcastToSession`, the messaging WS
+  bookkeeping helpers, and the **single persona promise chain**
+  (`runOnPersonaChain`) that serializes both personas' turns
+  (the verifier chain is separate).
+- **`workspace-readme.ts`** — auto-generates the in-sandbox
+  `/workspace/README.md` inventory; `renderGuardedReadme` hard-fails
+  provisioning (`ReadmeLeakError`) if the rendered text would leak
+  ground truth or persona `never_reveals`.
 - **`telemetry.ts`** — `logEvent`, `recordCost`, `flushTelemetry`.
   Buffered to reduce write amplification; flushed on a timer + on
   `expireSession`.
@@ -647,10 +714,12 @@ by Fastify plugins in `server.ts`.)
 - **`files.ts`** — `GET /files?path=...`, `GET /file?path=...`,
   `PUT /file {path, content}`. All scoped to `/workspace` in the sandbox.
 - **`pty.ts`** — `WS /pty/:sessionId`. Bidirectional PTY stream.
-- **`messages.ts`** — `WS /messages/:sessionId`. Inbound `{channel, text}`;
+- **`messages.ts`** — `WS /messages/:sessionId`. Inbound `{channel, text}`
+  (channel = addressee, from the unified chat's recipient toggle);
   outbound `{channel, role, persona_name, text, ts}` or `{type:"error",
-  code, message}`.
-- **`chat.ts`** — `POST /api/chat {sessionId, prompt}` → AI assistant.
+  code, message}`. Wire schema unchanged by the unified chat.
+- **`chat.ts`** — `POST /api/chat {sessionId, prompt}` → AI assistant,
+  with a rolling last-2-exchange context window (in-memory only).
   Returns 402 with `{error}` on budget exhaustion.
 - **`query.ts`** — `POST /api/sessions/:id/query {sql}`. Deducts compute.
 - **`docs.ts`** — `GET /api/sessions/:id/docs` returns scenario.docs;
@@ -737,7 +806,9 @@ SELECT status, overall_score, summary FROM evaluations WHERE session_id = '<uuid
 1. Drop scenario assets under `fixtures/<slug>/`:
    - `scenario.json` (title, brief, role, difficulty, constraints,
      curveballs, deliverable_spec, **rubric with anchors**,
-     success_criteria, client_persona, team_persona, docs)
+     success_criteria, client_persona, team_persona — **with `beats` +
+     `guardrails`**: personas are fully DB-driven, there is no code
+     fallback — docs)
    - `ground_truth.json` (the answers, hidden from the candidate)
    - `seed.sql` + `schema.sql` if the scenario needs a database
    - `queries.sql` — reference queries the judge can match against
@@ -747,9 +818,13 @@ SELECT status, overall_score, summary FROM evaluations WHERE session_id = '<uuid
 3. Run it once: `pnpm --filter @crucible/server exec tsx
    scripts/encode-<slug>.ts`.
 4. Add the scenario doc under `docs/scenarios/`.
-5. Run the calibration sequence (discrimination → gradient → anchor
+5. Run `scripts/verify-workspace-readme.ts` — the auto-generated
+   in-sandbox README is leak-guarded, and a scenario whose metadata
+   leaks ground truth into onboarding copy will **fail provisioning**
+   (`ReadmeLeakError`).
+6. Run the calibration sequence (discrimination → gradient → anchor
    tuning) to confirm the new rubric discriminates.
-6. The candidate URL is automatically `/start/<slug>`.
+7. The candidate URL is automatically `/start/<slug>`.
 
 ### Common pitfalls
 
@@ -793,6 +868,10 @@ SELECT status, overall_score, summary FROM evaluations WHERE session_id = '<uuid
 
 1. `pnpm --filter @crucible/server exec tsx scripts/verify-messages.ts`
 2. `pnpm --filter @crucible/server exec tsx scripts/verify-proactive-beats.ts`
+3. `pnpm --filter @crucible/server exec tsx scripts/verify-shared-context.ts`
+   (unified chat: cross-persona visibility, no knowledge bleed, events
+   unchanged)
+4. `pnpm --filter @crucible/server exec tsx scripts/verify-persona-scenario-driven.ts`
 
 ### Before merging UI changes
 
@@ -919,10 +998,10 @@ native product-sense fork) was built dormant and has since been **activated**
 `DETECTOR_VERSION` 3 detectors are slug-gated and inert on family 1. The
 generic machinery that made it assignable: a **generic deliverable schema**
 (any family's component keys), **scenario-driven personas**
-(`services/persona-agent.ts` branches by family — `fde-db-triage*` keeps the
-byte-identical hardcoded path, others build from the scenario's persona JSON),
-and a **`sqlite_master`-derived DB builder** — each proven not to disturb
-family 1. Details in `docs/ARCHITECTURE-REPORT.md` §13.5.
+(`services/persona-agent.ts` — since PR #57 there is no family branch at all:
+every scenario, family 1 included, builds from the scenario row's persona
+JSON), and a **`sqlite_master`-derived DB builder** — each proven not to
+disturb family 1. Details in `docs/ARCHITECTURE-REPORT.md` §13.5.
 
 **Proctoring v2 — still dormant (built, deliberately OFF).** Consent-gated
 identity verification + webcam presence, gated per org on
@@ -965,7 +1044,8 @@ cards — gated by `verify-costs-dashboard`; details in
 - **Curveball** — a beat that disrupts the candidate (e.g.,
   requirement_change, misleading_teammate_hint).
 - **Reveal flag** — a boolean on `personaState` that gates what the
-  persona will say next (e.g., `team.gave_webhook_clue`).
+  persona will say next — keyed by the scenario's **beat IDs** (e.g.,
+  `concede_to_revenue_evidence`), not a fixed enum.
 - **Scenario state** — the live game-mechanic ledger for a session
   (tokens, compute_minutes, personas, scheduled_beats, deliverable).
 - **Surfaced seqs** — the whitelist of event_seqs the Analysis Agent
