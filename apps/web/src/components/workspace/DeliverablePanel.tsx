@@ -45,7 +45,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
   // already-typed values and any saved draft loaded below).
   useEffect(() => {
     setData((prev) => ({ ...emptyData(fields), ...prev }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // fields derives solely from deliverableComponents — deliberately the only dep.
   }, [deliverableComponents]);
   const [status, setStatus] = useState<DeliverableStatus | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
