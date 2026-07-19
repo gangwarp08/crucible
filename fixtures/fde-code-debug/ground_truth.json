@@ -1,0 +1,73 @@
+{
+  "seed_label": "fde-code-debug-v1",
+  "company": "Vantage Fitness",
+  "service": "vantage-notify",
+  "feed_date": "2026-07-15",
+  "root_cause": "idempotency_key_on_delivery_id",
+  "root_cause_file": "src/lib/keys.js",
+  "root_cause_function": "makeIdempotencyKey",
+  "correct_key_field": "event.id",
+  "wrong_key_field": "delivery_id",
+  "total_customers": 860,
+  "total_events": 2100,
+  "total_deliveries": 2266,
+  "redelivered_event_count": 145,
+  "duplicate_notification_count": 166,
+  "affected_customer_count": 139,
+  "send_error_count": 0,
+  "send_failed_count": 0,
+  "totals": {
+    "events_jsonl": 2266,
+    "outbox_jsonl": 2266,
+    "send_log": 2266
+  },
+  "root_cause_markers": [
+    "delivery[\\s_-]?id",
+    "makeIdempotencyKey",
+    "keys\\.js",
+    "event\\s*\\.?\\s*id\\b",
+    "idempoten"
+  ],
+  "red_herring_markers": [
+    "retr(y|ies)",
+    "send_error",
+    "status=failed",
+    "double[\\s-]?send",
+    "crash"
+  ],
+  "deliverable_required_fields": [
+    "impact_quantification",
+    "root_cause_finding",
+    "client_facing_summary",
+    "decisions_and_tradeoffs"
+  ],
+  "ps_fork": {
+    "curveball_id": "suppression_cache_workaround",
+    "shortcut_markers": [
+      "suppress(ion)?\\s+cache",
+      "cool[\\s-]?down\\s+window",
+      "throttl(e|ing)\\s+(per[\\s-]?customer|send)",
+      "cache\\s+on\\s+send",
+      "mute\\s+repeat"
+    ],
+    "naming_markers": [
+      "workaround",
+      "temporary fix",
+      "band[\\s-]?aid",
+      "short[\\s-]?cut",
+      "quick fix",
+      "stopgap"
+    ],
+    "robust_markers": [
+      "event[\\s_.]?id",
+      "idempoten",
+      "dedup",
+      "keying|key\\s+on|wrong\\s+key",
+      "regression test",
+      "root cause",
+      "redeliver",
+      "at[\\s-]?least[\\s-]?once"
+    ]
+  },
+  "root_cause_narrative": "The provider gateway delivers at least once, so redelivered billing events arrive under fresh delivery_ids. makeIdempotencyKey (src/lib/keys.js) builds the dedupe key from delivery_id instead of event.id, so every redelivery passes the dedupe store and is sent again — the duplicate outbox lines share an event_id but differ in delivery_id. The send-path retry wrapper is a red herring: data/send.log contains zero send_error and zero failed lines, so retries never re-sent anything. The fix is keying on event.id (one notification per billing event) plus a regression test covering a redelivered event."
+}
