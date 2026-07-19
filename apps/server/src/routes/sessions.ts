@@ -292,6 +292,9 @@ export async function sessionRoutes(server: FastifyInstance) {
       clientPersona:      entry.scenarioMeta?.clientPersona ?? null,
       teamPersona:        entry.scenarioMeta?.teamPersona   ?? null,
       datasetTables:      entry.scenarioMeta?.datasetTables ?? null,
+      // Candidate-safe deliverable fields (key + label) so the Deliverable
+      // panel renders this scenario's components, not the legacy hardcode.
+      deliverableComponents: entry.scenarioMeta?.deliverableComponents ?? null,
     };
   });
 

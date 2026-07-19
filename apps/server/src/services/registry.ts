@@ -199,6 +199,11 @@ export interface SessionEntry {
     // say what's IN customer.db without the candidate spelunking. Null when
     // the scenario has no dataset.
     datasetTables: string[] | null;
+    // Candidate-safe deliverable component list (key + label only — never
+    // accept_criteria) so the Deliverable panel renders THIS scenario's
+    // fields instead of the legacy family-1 hardcode. Null when the scenario
+    // doesn't define components → web falls back to the legacy four.
+    deliverableComponents: { key: string; label: string }[] | null;
   } | null;
 
   // Persona messaging — ONE shared conversation for both personas (the
