@@ -19,6 +19,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Scenario } from "./scenarios.js";
 import { personaMeta } from "./scenarios.js";
+import { readDatasetManifest, type DatasetManifest } from "./dataset-seed.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(here, "../../../..");
@@ -75,20 +76,38 @@ export function buildWorkspaceReadme(scenario: Scenario, tables: string[]): stri
     `You are the **${roleLabel}**. Your full instructions and the situation are in the **Brief** tab — read that first. This file is just the map, so you spend your time solving, not searching.`,
   );
   lines.push("");
+  // Dataset-kind-aware inventory: sqlite scenarios get the customer.db map,
+  // git_repo scenarios get the inherited-codebase map. The manifest read is
+  // tolerant (absent → sqlite), matching the seeder's dispatch exactly.
+  const manifest: DatasetManifest = scenario.dataset_ref
+    ? readDatasetManifest(scenario.dataset_ref)
+    : { kind: "sqlite", root: ".", workspace_dir: "" };
+
   lines.push(`## What's in this workspace`);
-  if (tables.length > 0) {
+  if (manifest.kind === "git_repo") {
     lines.push(
-      `- \`customer.db\` — a read-only SQLite copy of the data you'll be working with. Tables: ${tables.map((t) => `\`${t}\``).join(", ")}.`,
+      `- \`${manifest.workspace_dir}/\` — the codebase you've inherited: source, tests, docs, and its \`data/\` directory (writable — fixing this code is the job).`,
     );
+    lines.push(`- \`README.md\` — this guide. The repo has its own README too.`);
+    lines.push("");
+    lines.push(`## Working with the code`);
+    lines.push(`- **Terminal** tab — a full shell: run the service, run its tests, grep, git.`);
+    lines.push(`- **Editor** (this pane) — open and edit the repo's files directly.`);
   } else {
-    lines.push(`- \`customer.db\` — a read-only SQLite copy of the data you'll be working with.`);
+    if (tables.length > 0) {
+      lines.push(
+        `- \`customer.db\` — a read-only SQLite copy of the data you'll be working with. Tables: ${tables.map((t) => `\`${t}\``).join(", ")}.`,
+      );
+    } else {
+      lines.push(`- \`customer.db\` — a read-only SQLite copy of the data you'll be working with.`);
+    }
+    lines.push(`- \`README.md\` — this guide.`);
+    lines.push("");
+    lines.push(`## Working with the data`);
+    lines.push(`- **Data** tab — run SQL against \`customer.db\` (the fastest path).`);
+    lines.push(`- **Terminal** tab — a full shell in this workspace.`);
+    lines.push(`- **Editor** (this pane) — create files freely for notes or query drafts.`);
   }
-  lines.push(`- \`README.md\` — this guide.`);
-  lines.push("");
-  lines.push(`## Working with the data`);
-  lines.push(`- **Data** tab — run SQL against \`customer.db\` (the fastest path).`);
-  lines.push(`- **Terminal** tab — a full shell in this workspace.`);
-  lines.push(`- **Editor** (this pane) — create files freely for notes or query drafts.`);
   lines.push("");
   lines.push(`## Who's in the chat (Messages tab)`);
   // Skip the "(your client/teammate)" gloss when the persona's role string

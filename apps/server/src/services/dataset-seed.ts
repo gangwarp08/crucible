@@ -1,16 +1,22 @@
 // Seed a scenario's synthetic dataset into the candidate's E2B sandbox.
 //
 // Invoked from createSandbox() once per session when scenario.dataset_ref is
-// set. Builds /workspace/customer.db from the committed fixture files
-// (schema.sql + seed.sql under fixtures/<dataset_ref>/) using Python's stdlib
-// sqlite3 — no pip installs, no sqlite3 CLI dependency. The resulting DB is
-// chmod 444 so even a candidate process opening it without mode=ro can't
-// mutate it; the canonical read path (services/query-runner.ts) uses the URI
-// ?mode=ro switch too — belt and suspenders.
+// set. Two dataset KINDS, dispatched on the fixture's dataset.json manifest
+// (absent manifest = "sqlite", so every pre-manifest fixture keeps working):
+//
+//   sqlite   — builds /workspace/customer.db from schema.sql + seed.sql using
+//              Python's stdlib sqlite3, then chmod 444 (read-only data; the
+//              canonical read path services/query-runner.ts also opens with
+//              ?mode=ro — belt and suspenders).
+//   git_repo — ships the committed tree under fixtures/<dataset_ref>/<root>/
+//              into /workspace/<workspace_dir>/ (WRITABLE — the candidate's
+//              job is to edit this code) and best-effort git-inits it so
+//              `git diff` works in the terminal.
 //
 // Staging files live under /tmp/crucible/ inside the sandbox (not /workspace),
 // so they don't show up in the candidate's file tree.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,10 +46,49 @@ export class DatasetUnavailableError extends Error {
   }
 }
 
+export interface DatasetManifest {
+  kind: "sqlite" | "git_repo";
+  /** git_repo: directory under the fixture dir holding the tree to ship. */
+  root: string;
+  /** git_repo: directory name the tree lands under inside /workspace. */
+  workspace_dir: string;
+}
+
+/** Read the fixture's dataset.json manifest. Absent file (or absent fields)
+ *  falls back to the pre-manifest default: a sqlite dataset. An unknown kind
+ *  is a hard authoring error — provisioning a scenario against a seeder that
+ *  doesn't understand its dataset must fail loudly, not half-seed. */
+export function readDatasetManifest(datasetRef: string): DatasetManifest {
+  const fallback: DatasetManifest = { kind: "sqlite", root: ".", workspace_dir: "" };
+  let raw: string;
+  try {
+    raw = readFileSync(resolve(REPO_ROOT, datasetRef, "dataset.json"), "utf8");
+  } catch {
+    return fallback;
+  }
+  const parsed = JSON.parse(raw) as Partial<DatasetManifest>;
+  const kind = parsed.kind ?? "sqlite";
+  if (kind !== "sqlite" && kind !== "git_repo") {
+    throw new DatasetUnavailableError(
+      `[dataset-seed] dataset_ref="${datasetRef}" has unknown dataset.json kind "${String(kind)}"`,
+    );
+  }
+  return {
+    kind,
+    root: parsed.root ?? ".",
+    workspace_dir: parsed.workspace_dir ?? "workspace",
+  };
+}
+
 export async function seedScenarioDataset(
   sandbox: Sandbox,
   datasetRef: string,
 ): Promise<void> {
+  const manifest = readDatasetManifest(datasetRef);
+  if (manifest.kind === "git_repo") {
+    await seedRepoDataset(sandbox, datasetRef, manifest);
+    return;
+  }
   const fixtureDir = resolve(REPO_ROOT, datasetRef);
 
   // Read fixture files from local disk on the server, fail fast if missing.
@@ -124,5 +169,98 @@ export async function seedScenarioDataset(
 
   console.log(
     `[dataset-seed] dataset_ref="${datasetRef}" → ${DB_PATH} :: ${build.stdout.trim()}`,
+  );
+}
+
+// ─── git_repo datasets ───────────────────────────────────────────────────────
+
+/** Ship a committed fixture tree into the sandbox as the candidate's working
+ *  repo. Transfer is one tar.gz, base64-armored through files.write (a plain
+ *  text write — no binary-encoding ambiguity), extracted inside the sandbox.
+ *  The tree stays WRITABLE: unlike the sqlite datasets, editing this code is
+ *  the assessment. git init is best-effort — `git diff` is a nicety for the
+ *  candidate, not a provisioning requirement, so a template without git must
+ *  not fail the session. */
+async function seedRepoDataset(
+  sandbox: Sandbox,
+  datasetRef: string,
+  manifest: DatasetManifest,
+): Promise<void> {
+  const treeDir = resolve(REPO_ROOT, datasetRef, manifest.root);
+  const workDir = `/workspace/${manifest.workspace_dir}`;
+  const archiveB64Path = `${STAGING_DIR}/repo.tgz.b64`;
+
+  let archiveB64: string;
+  try {
+    // -C treeDir . → paths inside the archive are relative to the tree root.
+    const tgz = execFileSync("tar", ["-czf", "-", "-C", treeDir, "."], {
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    archiveB64 = tgz.toString("base64");
+  } catch (err) {
+    throw new DatasetUnavailableError(
+      `[dataset-seed] repo archive failed for dataset_ref="${datasetRef}" ` +
+        `at ${treeDir}: ${(err as Error).message}`,
+    );
+  }
+
+  // Same legacy-sample cleanup as the sqlite path — the template's baked-in
+  // Express app annotates its own planted bugs; no candidate may ever see it.
+  const wipe = await sandbox.commands.run(
+    "rm -rf /workspace/index.js /workspace/package.json /workspace/package-lock.json /workspace/node_modules",
+    { timeoutMs: 15_000 },
+  );
+  if (wipe.exitCode !== 0) {
+    throw new Error(`[dataset-seed] workspace cleanup failed: ${wipe.stderr}`);
+  }
+
+  const mkdir = await sandbox.commands.run(`mkdir -p ${STAGING_DIR} ${workDir}`, {
+    timeoutMs: 5_000,
+  });
+  if (mkdir.exitCode !== 0) {
+    throw new Error(`[dataset-seed] mkdir failed: ${mkdir.stderr}`);
+  }
+
+  await sandbox.files.write(archiveB64Path, archiveB64);
+
+  const extract = await sandbox.commands.run(
+    `base64 -d ${archiveB64Path} | tar -xz -C ${workDir}`,
+    { timeoutMs: 30_000 },
+  );
+  if (extract.exitCode !== 0) {
+    throw new Error(
+      `[dataset-seed] repo extract failed exit=${extract.exitCode}\nstderr: ${extract.stderr}`,
+    );
+  }
+
+  // Provisioning sanity check — an empty extraction is an invalid environment.
+  const check = await sandbox.commands.run(`ls -A ${workDir} | head -1`, {
+    timeoutMs: 5_000,
+  });
+  if (check.exitCode !== 0 || check.stdout.trim() === "") {
+    throw new Error(`[dataset-seed] repo landed empty at ${workDir}`);
+  }
+
+  // Best-effort: make it a real git repo so the candidate can diff their work.
+  const git = await sandbox.commands
+    .run(
+      `cd ${workDir} && git init -q -b main && git add -A && ` +
+        `git -c user.email=platform@vantage.invalid -c user.name="Platform Import" ` +
+        `commit -qm "import ${manifest.workspace_dir}"`,
+      { timeoutMs: 30_000 },
+    )
+    .catch(() => null);
+  if (!git || git.exitCode !== 0) {
+    console.warn(
+      `[dataset-seed] git init skipped for ${workDir} (git unavailable or failed) — non-fatal`,
+    );
+  }
+
+  await sandbox.commands
+    .run(`rm -f ${archiveB64Path}`, { timeoutMs: 5_000 })
+    .catch(() => { /* best-effort; tree is already extracted */ });
+
+  console.log(
+    `[dataset-seed] dataset_ref="${datasetRef}" (git_repo) → ${workDir} :: git=${git && git.exitCode === 0 ? "ok" : "skipped"}`,
   );
 }
