@@ -63,7 +63,7 @@ function assertDissociable(units: EvidenceUnit[], label: string): void {
 
 console.log(`verify-family2-units — P3.2 (fde-api-integration detectors, detector_version ${DETECTOR_VERSION})\n`);
 
-if (DETECTOR_VERSION !== "3") fail(`DETECTOR_VERSION expected "3", got "${DETECTOR_VERSION}"`);
+if (DETECTOR_VERSION !== "4") fail(`DETECTOR_VERSION expected "4", got "${DETECTOR_VERSION}"`);
 if (PS_FORK_COMPETENCY === "teamwork") fail("PS_FORK_COMPETENCY must never be teamwork");
 
 // ── A) fork rejected: robust fix shipped + user-impact reasoning (HIGH PS) ───
