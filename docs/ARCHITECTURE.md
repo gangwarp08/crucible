@@ -241,8 +241,11 @@ apps/server/src/
     compute-tracker.ts    deductComputeMinutes — for db.query + sandbox commands
     query-runner.ts       runs an SQL query via a Python helper inside the sandbox
     sqlrun.py.ts          the Python helper, embedded as a TS string for atomic copy
-    dataset-seed.ts       copies the scenario's seed.sql + creates customer.db inside
-                          the freshly-booted sandbox
+    dataset-seed.ts       seeds the freshly-booted sandbox; two dataset kinds via the
+                          fixture's dataset.json manifest (absent = sqlite):
+                          sqlite → schema.sql + seed.sql build a read-only customer.db;
+                          git_repo → the committed tree under repo/ ships as a writable
+                          repo in /workspace (base64 tar.gz + in-sandbox git init)
 
   scripts/              (one-off ops + the calibration verifiers — see § Calibration)
     encode-fde-db-triage.ts       upsert fixtures/fde-db-triage/scenario.json → DB
@@ -697,8 +700,13 @@ Workspace pane resize sizes go to `localStorage`, NOT the store.
 - **`query-runner.ts` + `sqlrun.py.ts`** — read-only SQLite query
   execution inside the sandbox. Python helper enforces the read-only
   contract; results capped at 500 rows.
-- **`dataset-seed.ts`** — copies `seed.sql` into the sandbox and runs
-  it. Failure tears down the sandbox cleanly.
+- **`dataset-seed.ts`** — seeds the sandbox per the fixture's
+  `dataset.json` manifest. `sqlite` (the default when no manifest
+  exists) builds a read-only `customer.db` from `schema.sql` +
+  `seed.sql`; `git_repo` (family 3) ships the committed tree under
+  `repo/` as a **writable** repo in `/workspace` — one base64-armored
+  tar.gz, extracted in-sandbox, best-effort `git init` so the candidate
+  can diff. Failure tears down the sandbox cleanly either way.
 - **`analysis-input.ts`** — assembles the JSON payload the judge sees.
   Includes `surfaced_seqs` whitelist.
 - **`analysis-agent.ts`** — the judge. See § Analysis Agent.
@@ -1002,6 +1010,45 @@ generic machinery that made it assignable: a **generic deliverable schema**
 every scenario, family 1 included, builds from the scenario row's persona
 JSON), and a **`sqlite_master`-derived DB builder** — each proven not to
 disturb family 1. Details in `docs/ARCHITECTURE-REPORT.md` §13.5.
+
+**Third scenario family — LIVE (July 2026).** **`fde-code-debug`**
+("Duplicate notifications triage (inherited codebase)") is the first
+*code* scenario: the candidate inherits **vantage-notify**, a small Node
+service committed as real source under `fixtures/fde-code-debug/repo/`
+(stdlib-only — runs with zero installs in the egress-denied sandbox).
+Members get duplicate billing texts while the 18-test suite is green;
+the root cause is cross-file (`makeIdempotencyKey` in `src/lib/keys.js`
+keys on the per-attempt `delivery_id` instead of `event.id`, so
+at-least-once redeliveries pass dedupe), and the planted red herring is
+a scary crash-double-send TODO in the send-retry wrapper that the
+teammate (**Jordan**) blames and the send log falsifies. Client persona
+**Maya, Head of Customer Success**; the product-sense fork is a
+suppression-cache workaround that would silently swallow legitimate
+failed-payment warnings. Ground truth (deterministic, `generate.ts`
+mulberry32): 2,100 events → 2,266 deliveries → **166 duplicates to 139
+members**; the intended one-line fix dedupes exactly 166. Three
+platform capabilities shipped with it, all backward-compatible: the
+**`git_repo` dataset kind** (see `dataset-seed.ts` above), a
+**scenario-driven Deliverable panel** (sessions carry candidate-safe
+`{key,label}` components; the web form renders them, legacy family-1
+fields as fallback), and **`DETECTOR_VERSION` 4** (family-3 domain
+detectors over the candidate corpus incl. decoded terminal input; the
+ps-fork pass reuses family-2's stance machinery via ground-truth marker
+overrides; the agnostic required-fields detector honors
+`ground_truth.deliverable_required_fields` — inert on families 1–2).
+Verified by `verify-family3-units.ts` (pure detectors) and
+`verify-family3-e2e.ts` (real-E2B provisioning: repo extract, suite
+green in-sandbox on the template's Node 24, bug live, fix dedupes 166,
+git diffable). Scenario spec: `docs/scenarios/crucible_scenario_fde-code-debug.md`.
+
+**Catalog curation (July 2026).** The mid-band originals
+`fde-db-triage` and `fde-api-integration` are hidden
+(`catalog_visible=false`; rows retained for historical sessions), and
+the surviving hard variants were retitled symptom-first: `fde-db-triage-pro`
+→ **"The revenue numbers don't add up (database investigation)"**,
+`fde-api-integration-pro` → **"CRM contacts are going missing (API
+integration)"** (fixture `scenario.json` titles synced). The live
+catalog is those two plus `fde-code-debug`.
 
 **Proctoring v2 — still dormant (built, deliberately OFF).** Consent-gated
 identity verification + webcam presence, gated per org on

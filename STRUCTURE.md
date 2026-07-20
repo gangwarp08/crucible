@@ -76,7 +76,10 @@ apps/
         compute-tracker.ts         # cost/compute accounting
         costs.ts                   # READ-ONLY costs aggregation (LiteLLM gateway spend,
                                    #   sessions.spend_usd usage, FIXED_SERVICES cards)
-        dataset-seed.ts
+        dataset-seed.ts            # two dataset kinds via fixtures/<ref>/dataset.json:
+                                   #   sqlite (default) → read-only customer.db;
+                                   #   git_repo (family 3) → writable repo in /workspace
+                                   #   (base64 tar.gz + in-sandbox git init)
         db.ts                      # in-sandbox SQL DB helpers
         difficulty-routing.ts      # band -> scenario-family sibling (at creation only)
         difficulty-stats.ts        # competency_difficulty_stats accumulator
@@ -135,7 +138,10 @@ apps/
                                    #   verify-shared-context.ts (unified-chat
                                    #   cross-persona visibility, no knowledge bleed)
                                    #   + verify-workspace-readme.ts (README leak
-                                   #   guard + real-E2B provision check))
+                                   #   guard + real-E2B provision check)
+                                   #   + verify-family3-units.ts (family-3 detectors,
+                                   #   drift-inert on families 1-2) + verify-family3-e2e.ts
+                                   #   (real-E2B git_repo provisioning smoke))
                                    # + encode/seed helpers + mint-org-key.ts
     package.json  tsconfig.json  vitest.config.ts
 
@@ -237,10 +243,18 @@ infra/
 fixtures/
   fde-db-triage/        # generate.ts, ground_truth.json, queries.sql,
   fde-db-triage-pro/    # scenario.json, schema.sql, seed.sql
-  fde-api-integration/  # family 2 (LIVE) — canonical mid-band scenario.json (client
+                        #   (canonical hidden from catalog; -pro LIVE, retitled
+                        #   "The revenue numbers don't add up")
+  fde-api-integration/  # family 2 — canonical mid-band scenario.json (client
                         #   persona Priya), generate.ts, schema/seed/ground_truth; the
                         #   -iso and -pro sibling dirs are committed alongside (migration
-                        #   0023 seeds all three dataset_refs)
+                        #   0023 seeds all three dataset_refs). Canonical hidden from
+                        #   catalog; -pro LIVE, retitled "CRM contacts are going missing"
+  fde-code-debug/       # family 3 (LIVE) — inherited-codebase debugging. dataset.json
+                        #   (kind=git_repo), scenario.json, ground_truth.json,
+                        #   generate.ts (data files only), and repo/ — the vantage-notify
+                        #   service committed as real source (stdlib-only Node, node:test
+                        #   suite, data/ feed+outbox+send.log)
 
 docs/
   ARCHITECTURE.md
@@ -248,6 +262,7 @@ docs/
   GOING-LIVE.md         # operator runbook: activating the dormant builds
   architecture.html
   scenarios/crucible_scenario_fde-db-triage.md
+  scenarios/crucible_scenario_fde-code-debug.md
 ```
 
 ## Stack
