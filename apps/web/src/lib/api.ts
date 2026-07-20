@@ -116,12 +116,11 @@ export interface ScenarioBalances {
 
 export type DeliverableStatus = "draft" | "submitted";
 
-export interface DeliverableData {
-  corrected_monthly_revenue: string;
-  root_cause_finding: string;
-  client_facing_summary: string;
-  decisions_and_tradeoffs: string;
-}
+/** Deliverable form values keyed by the scenario's component keys. The server
+ *  accepts any component-key record (routes/deliverable.ts); the panel derives
+ *  its fields from the session's deliverableComponents (legacy family-1 keys
+ *  when the server doesn't send any). */
+export type DeliverableData = Record<string, string>;
 
 export interface Deliverable {
   status: DeliverableStatus;
@@ -164,6 +163,10 @@ export interface SessionInfo {
   // Dataset table names (fixture schema) — null/absent when the scenario has
   // no dataset or on older servers.
   datasetTables?: string[] | null;
+  // Scenario deliverable fields (key + label) — null/absent when the scenario
+  // defines none or on older servers → the Deliverable panel falls back to
+  // the legacy family-1 field set.
+  deliverableComponents?: { key: string; label: string }[] | null;
 }
 
 // ── Candidate-safe scenario lookup ──────────────────────────────────────────

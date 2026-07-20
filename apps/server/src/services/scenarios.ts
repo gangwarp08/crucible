@@ -34,6 +34,23 @@ export function personaMeta(
   return { name, role };
 }
 
+/** Candidate-safe deliverable component labels (key + label ONLY — the
+ *  accept_criteria stay server-side) for the Deliverable panel. Null when the
+ *  scenario defines no components → the web keeps its legacy field set. */
+export function deliverableComponentMeta(
+  spec: Record<string, unknown> | null | undefined,
+): { key: string; label: string }[] | null {
+  const components = spec?.["components"];
+  if (!Array.isArray(components)) return null;
+  const out: { key: string; label: string }[] = [];
+  for (const c of components) {
+    const key = (c as Record<string, unknown>)?.["key"];
+    const label = (c as Record<string, unknown>)?.["label"];
+    if (typeof key === "string" && typeof label === "string") out.push({ key, label });
+  }
+  return out.length > 0 ? out : null;
+}
+
 const COLUMNS =
   "id, slug, title, role, difficulty, brief, client_persona, team_persona, " +
   "dataset_ref, docs, constraints, rubric, deliverable_spec, curveballs, " +

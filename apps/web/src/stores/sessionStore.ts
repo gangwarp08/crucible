@@ -36,6 +36,9 @@ export interface ScenarioPresentation {
   // Dataset table names for the Brief "what you have" inventory + orientation
   // copy. Null when the scenario has no dataset (or on older servers).
   datasetTables: string[] | null;
+  // Scenario deliverable fields (key + label) for the Deliverable panel.
+  // Null → the panel renders its legacy family-1 field set.
+  deliverableComponents: { key: string; label: string }[] | null;
 }
 
 interface SessionState {
@@ -84,6 +87,7 @@ interface SessionState {
 const EMPTY_SCENARIO: ScenarioPresentation = {
   title: null, brief: null, role: null, difficulty: null,
   clientPersona: null, teamPersona: null, datasetTables: null,
+  deliverableComponents: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({

@@ -1,0 +1,390 @@
+{
+ "slug": "fde-code-debug",
+ "title": "Duplicate notifications triage (inherited codebase)",
+ "role": "fde",
+ "difficulty": "mid",
+ "dataset_ref": "fixtures/fde-code-debug",
+ "family_id": "fde-code-debug",
+ "isomorph_of": null,
+ "docs": [
+  {
+   "id": "support-digest",
+   "title": "Support Ticket Digest (last two weeks)",
+   "body": "## Theme: repeated texts/emails\n\nSupport has logged a steady stream of complaints since at least early July. Representative tickets:\n\n- \"I got the same 'payment went through' text three times in one morning. Once is plenty.\"\n- \"Two identical emails about my plan renewing. Did you charge me twice?? Please check.\"\n- \"My card failed and you told me FOUR times. I get it.\"\n- \"Cancellation confirmed... and confirmed again. Is my account okay?\"\n\nPattern notes from the support lead:\n\n- Different members on different days; no single plan or payment type stands out.\n- Members were charged correctly — finance confirmed billing itself is clean. The duplicates are notifications only.\n- Volume is bursty: some nights are clean, some nights produce a batch of complaints.\n- No complaints about MISSING notifications — only repeats.\n"
+  },
+  {
+   "id": "oncall-primer",
+   "title": "vantage-notify On-call Primer",
+   "body": "## What this service is\n\n`vantage-notify` sends members one notification per billing event (receipts, failed-payment warnings, renewals, cancellations). It runs as a nightly batch over the billing provider's webhook delivery feed.\n\n## Where things live\n\n- The service code, last night's feed, outbox, and send log are all in the workspace under `vantage-notify/`.\n- `docs/ARCHITECTURE.md` in the repo explains the pipeline and its invariants.\n- `docs/RUNBOOK.md` has the on-call triage recipes (duplicate check, send-failure check).\n\n## House expectations\n\n- The outbox (`data/outbox.jsonl`) is ground truth for what members actually received — one line, one message.\n- Any fix ships with a regression test (`npm test` runs the suite).\n- The nightly batch must stay a pure function of the feed: same feed in, same outbox out.\n"
+  },
+  {
+   "id": "provider-note",
+   "title": "Billing Provider Integration Note (excerpt)",
+   "body": "## Delivery semantics\n\nOur webhook gateway delivers **at least once**. If your endpoint is slow to acknowledge, the same event is redelivered later with a new delivery identifier and an incremented `attempt` counter. Build consumers to be idempotent on the event, not the delivery.\n\n## Feed format\n\nOne JSON object per line; the `event` object is identical across redeliveries of the same event. Redeliveries can arrive minutes after the original delivery, interleaved with unrelated traffic.\n\n## SLA\n\nDelivery-level duplicates are expected under normal operation and are not considered a provider fault.\n"
+  }
+ ],
+ "brief": "You're the forward-deployed engineer assigned to Vantage Fitness, a subscription gym chain. Members are complaining about duplicate notifications — the same payment receipt or renewal text arriving two or three times — and support is drowning in tickets. You've inherited the notification service (`vantage-notify`, in your workspace) from an engineer who left; nobody currently at the company knows the codebase well. The test suite is green, which is making everyone argue about whose fault it is. Reproduce the problem, find the real root cause in the code, fix it properly with a regression test, and give Customer Success something they can tell members. Your client (Maya, Head of Customer Success) is in the client channel; Jordan, a senior engineer who's slammed with another launch, is in the team channel. You have an AI assistant — the codebase is bigger than your hour, so use it well, but verify what it tells you.",
+ "constraints": {
+  "time_minutes": 60,
+  "tokens": 100000,
+  "compute_minutes": 40,
+  "money_usd": 25,
+  "memory_mb": 1024
+ },
+ "client_persona": {
+  "name": "Maya",
+  "role": "Head of Customer Success",
+  "voice": "non-technical, warm but under pressure, protective of members",
+  "goal": "Duplicate messages stopped for good, a count of how many members were hit, and a plain-English explanation she can post in the member community and send to leadership.",
+  "knows": [
+   "Members are getting the same notification two or three times — texts and emails both.",
+   "It's been happening for a couple of weeks at least; different members on different days.",
+   "Finance confirmed nobody was double-charged — the duplicates are messages only.",
+   "Support logged dozens of tickets; the digest doc summarizes them."
+  ],
+  "never_reveals": [
+   "The technical root cause.",
+   "Anything about idempotency keys, delivery identifiers, retries, or the code.",
+   "Any opinion about the teammate's theories."
+  ],
+  "beats": [
+   {
+    "id": "open",
+    "trigger": "session_start",
+    "behavior": "Opens with the vague, urgent ask from the brief. Does not volunteer specifics."
+   },
+   {
+    "id": "specifics_on_ask",
+    "trigger": "candidate_asks_clarifying_question",
+    "behavior": "Reveals: it's the billing notifications (receipts, renewals, failed-payment warnings); members get the same message 2-3 times; started a couple of weeks ago at least; nobody was double-charged — finance checked; support's ticket digest has examples."
+   },
+   {
+    "id": "relief_on_update",
+    "trigger": "candidate_gives_status_update",
+    "behavior": "Expresses relief and adds gentle pressure: 'Members are posting screenshots in the community — can you have this nailed down by end of session?'"
+   },
+   {
+    "id": "curveball_1_relay",
+    "trigger": "curveball.requirement_change",
+    "behavior": "Relays leadership's new ask: the exact number of duplicate messages sent and members affected, confirmation it can't recur, and a short plain-English note she can post, by end of session."
+   },
+   {
+    "id": "skeptical_acceptance",
+    "trigger": "candidate_delivers_final",
+    "behavior": "Asks one skeptical follow-up — 'And if the provider sends the same thing twice again tomorrow, my members see ONE message, right?' — before accepting."
+   }
+  ],
+  "guardrails": [
+   "Never volunteers or confirms the technical cause.",
+   "If asked engineering-flavored questions, redirects to what members experienced.",
+   "Stays in character; does not coach the candidate."
+  ]
+ },
+ "team_persona": {
+  "name": "Jordan",
+  "role": "senior engineer / teammate",
+  "voice": "helpful but slammed, slightly overconfident, allergic to long investigations",
+  "goal": "Be helpful while mid-launch on another project; nudge the candidate without doing the work for them. Has a strong (and wrong) theory about the cause.",
+  "beats": [
+   {
+    "id": "misleading_hint",
+    "trigger": "early_session",
+    "behavior": "Proactively messages: 'the duplicate texts thing? pretty sure it's the retry wrapper in send/ — there's literally a TODO in there about double-sends. rip the retries out or slap a cache on the sender and re-run it.' (The TODO exists and looks damning, but the send log shows zero send_error/failed lines — send retries never re-sent anything. Red herring.)"
+   },
+   {
+    "id": "concede_with_evidence",
+    "trigger": "candidate_pushes_back_with_evidence",
+    "behavior": "Concedes and offers a real clue: 'huh, zero failed sends... okay so it's not the retries. the provider redelivers webhooks all the time though — check how we decide two deliveries are the same thing.' Only fires if the candidate brings specific evidence (zero send_error/failed lines in send.log, or duplicate outbox lines sharing an event_id with different delivery_ids)."
+   },
+   {
+    "id": "scope_boundary",
+    "trigger": "candidate_asks_for_prod_access",
+    "behavior": "Declines: 'you've got last night's full feed, outbox, and send log in the repo — that's exactly what prod saw. no prod creds mid-launch, sorry.'"
+   },
+   {
+    "id": "shortcut_pitch",
+    "trigger": "mid_session_time_pressure",
+    "behavior": "Under deadline pressure, proposes a suppression cache as the fix: mute any repeat notification to the same member within a cool-down window ('cache on send, 10-minute cool-down per member per template — ships in five minutes, complaints stop tonight'). A genuine, well-meant shortcut that also swallows LEGITIMATE messages — a member with two real events in the window silently loses one (exactly the failed-payment warnings members must not miss). Collaborative: concedes gracefully if the candidate insists on fixing the keying. This is a Product-Sense judgment fork (design_under_constraints), NOT a teamwork test."
+   }
+  ],
+  "guardrails": [
+   "Gives the misleading retry-wrapper hint exactly once.",
+   "Never hands over the answer.",
+   "The redelivery clue only unlocks if the candidate brings evidence (rewards verification over trust).",
+   "Pitches the suppression cache exactly once; concedes gracefully if the candidate insists on fixing the idempotency keying properly."
+  ]
+ },
+ "curveballs": [
+  {
+   "id": "requirement_change",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 25,
+    "event": "candidate_first_substantive_client_update"
+   },
+   "payload": {
+    "channel": "client",
+    "speaker": "Maya",
+    "message": "Quick update from leadership — they now want the exact number of duplicate messages we sent and how many members got them, confirmation this can't happen again, and a short plain-English note I can post in the member community, by end of session."
+   },
+   "tests": [
+    "adaptability",
+    "reprioritization",
+    "outcome_communication"
+   ],
+   "difficulty_band": "mid"
+  },
+  {
+   "id": "misleading_teammate_hint",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 0.5,
+    "event": "session_start"
+   },
+   "payload": {
+    "channel": "team",
+    "speaker": "Jordan",
+    "message": "the duplicate texts thing? pretty sure it's the retry wrapper in send/ — there's literally a TODO in there about double-sends. rip the retries out or slap a cache on the sender and re-run it."
+   },
+   "tests": [
+    "verification_over_trust",
+    "teamwork"
+   ],
+   "difficulty_band": "mid"
+  },
+  {
+   "id": "suppression_cache_workaround",
+   "trigger": {
+    "kind": "time_or_event",
+    "time_offset_minutes": 15,
+    "event": "candidate_first_dedupe_or_test_activity"
+   },
+   "payload": {
+    "channel": "team",
+    "speaker": "Jordan",
+    "message": "honestly we're tight on time — quickest fix: suppression cache on the sender. mute any repeat to the same member within a 10-minute cool-down per template. ships in five minutes, complaints stop tonight, we can do it properly later."
+   },
+   "tests": [
+    "product_sense",
+    "design_under_constraints"
+   ],
+   "difficulty_band": "mid"
+  }
+ ],
+ "deliverable_spec": {
+  "components": [
+   {
+    "key": "impact_quantification",
+    "label": "Duplicate-notification impact (quantified)",
+    "what": "The measured blast radius from last night's data: how many duplicate messages went out and how many members received them, with the method used to count (grouping the outbox by billing event).",
+    "accept_criteria": [
+     "States the number of duplicate notifications sent, matching the fixture's ground truth.",
+     "States the number of distinct members affected, matching the fixture's ground truth.",
+     "Counts by grouping outbox lines on the billing event (not raw line counts or delivery ids)."
+    ]
+   },
+   {
+    "key": "root_cause_finding",
+    "label": "Root-cause finding",
+    "what": "A clear statement of what is wrong and why — the idempotency key is built from the per-attempt delivery identifier instead of the billing event's id, so the provider's at-least-once redeliveries pass dedupe and are sent again. Not the retry-wrapper theory the teammate proposed.",
+    "accept_criteria": [
+     "Identifies the idempotency-key construction (keys.js / makeIdempotencyKey keying on delivery_id) as the cause.",
+     "Cites the duplicate fingerprint (outbox lines sharing an event_id with different delivery_ids).",
+     "Explicitly rejects the retry-wrapper hypothesis with evidence (zero send_error / failed lines in the send log)."
+    ]
+   },
+   {
+    "key": "client_facing_summary",
+    "label": "Member-community client-facing summary",
+    "what": "A short plain-English note Maya can post: what happened, that nobody was double-charged and no messages were missed, that it's fixed, and roughly how many members were affected.",
+    "accept_criteria": [
+     "Written in plain language a member can follow — no idempotency/webhook jargon.",
+     "States the affected-member count clearly.",
+     "Makes clear billing itself was always correct (messages only, no double charges).",
+     "Says what now prevents a recurrence."
+    ]
+   },
+   {
+    "key": "decisions_and_tradeoffs",
+    "label": "Key decisions and trade-offs",
+    "what": "A short engineering note: the decision on the proposed suppression-cache workaround and why, the chosen fix (key idempotency on the billing event id), the regression test added, and anything that should change upstream or in review practice.",
+    "accept_criteria": [
+     "States the decision on the suppression-cache workaround explicitly, with the user impact of the alternative (legitimate messages silently swallowed).",
+     "Names the fix (idempotency keyed on the event id, one notification per billing event).",
+     "Describes the regression test added (a redelivered event must be deduped).",
+     "Recommends a guard against recurrence (e.g. an outbox-duplicate alarm or an invariant test in CI)."
+    ]
+   }
+  ]
+ },
+ "rubric": [
+  {
+   "competency_key": "problem_framing",
+   "weight": 0.12,
+   "load_bearing": true,
+   "scenario_description": "Asks what 'duplicate'/how-many/since-when before digging; forms hypotheses (send retries vs feed redelivery vs dedupe keying) before changing code; confirms the outbox is ground truth for what members received.",
+   "scenario_signals": [
+    "Client questions asked before the first code change.",
+    "Hypotheses stated explicitly before testing them.",
+    "Reproduces from data (outbox grouping) before editing code."
+   ],
+   "scenario_anchors": {
+    "5": "Clarifying question to the client BEFORE touching the code AND explicit hypothesis-testing (the retry theory checked against the send log before being accepted or rejected).",
+    "3": "At least one clarifying question to the client (even if generic), OR explicit hypothesis-testing — one of the two, not both.",
+    "1": "No clarifying question AND edits code immediately without any hypothesis stated."
+   }
+  },
+  {
+   "competency_key": "data_fluency",
+   "weight": 0.18,
+   "load_bearing": true,
+   "scenario_description": "Navigates an unfamiliar codebase and its data exhaust: groups the outbox by billing event to quantify duplicates, reads the send log to falsify the retry theory, traces the key construction across files; does not accept the teammate's retry hint blindly.",
+   "scenario_signals": [
+    "Progression from symptom (outbox duplicates) to falsified red herring (clean send log) to the keying bug (keys.js).",
+    "Terminal work that groups/counts the outbox by event id.",
+    "The retry theory tested against send.log with numbers."
+   ],
+   "scenario_anchors": {
+    "5": "Full chain: outbox grouped by event id (duplicates quantified) → retry theory tested and rejected with numbers (zero send_error/failed lines) → key construction traced to keys.js building on delivery_id.",
+    "3": "Quantified the duplicates OR found the keying bug, but did not connect the chain — or never tested the retry theory against the log.",
+    "1": "Accepted the retry-wrapper hint without checking the send log; no quantification from the outbox."
+   }
+  },
+  {
+   "competency_key": "design_under_constraints",
+   "weight": 0.18,
+   "load_bearing": true,
+   "scenario_description": "The Product-Sense judgment fork: when the teammate pitches the suppression cache (mute repeats per member per template within a cool-down) that ships faster but silently swallows legitimate notifications, does the candidate protect the end user? Plus: minimal targeted fix over a rewrite; visible reprioritization after the requirement change.",
+   "scenario_signals": [
+    "Decision on the suppression cache observable in decisions_and_tradeoffs (Stage-A evidence, primary).",
+    "User-impact reasoning on the team channel after the pitch (corroborating, never sole).",
+    "Fix is minimal and targeted (keying), not a speculative refactor."
+   ],
+   "scenario_anchors": {
+    "5": "Declines the suppression cache, names the user cost (legitimate messages — including failed-payment warnings — silently swallowed for members with two real events in the window), and ships the keying fix plus a regression test; the decision is stated in the deliverable.",
+    "3": "Hedges on the cache: defers the decision, ships the keying fix without addressing the teammate's proposal, or accepts the cache 'temporarily' with a mitigation plan — trade-off awareness without a clean user-protecting call.",
+    "1": "Ships the suppression cache (mutes repeats within a window) with no analysis of the legitimate messages it swallows — the fast-but-worse shortcut taken at the members' expense."
+   },
+   "scenario_scoring_note": "The fork measures Product Sense ONLY and is graded 5/3/1 on this competency. The deliverable outcome is the primary evidence; team-channel reasoning corroborates. Teamwork is scored separately as a session-wide signal — never from this fork."
+  },
+  {
+   "competency_key": "execution",
+   "weight": 0.18,
+   "load_bearing": true,
+   "scenario_description": "Reproduces, fixes the keying, proves it: re-run dedupes the redeliveries, the suite stays green, and a regression test covering a redelivered event exists.",
+   "scenario_signals": [
+    "Test suite run before AND after the change.",
+    "Re-run of the batch showing redeliveries deduped (sent < deliveries).",
+    "Duplicate and affected-member figures in the deliverable match the fixture's ground truth."
+   ],
+   "scenario_anchors": {
+    "5": "Correct root cause + the keying fix in keys.js + a new regression test (redelivered event deduped) + a re-run demonstrating dedupe + exact figures matching ground truth.",
+    "3": "Correct fix and sound method but one element missing for a nameable reason — figures slightly off (counted delivery ids instead of event ids), or no regression test added. The diagnosis is real; completeness is not.",
+    "1": "Wrong root cause (patched the retry wrapper or added a cache) OR no working fix at all."
+   }
+  },
+  {
+   "competency_key": "ai_orchestration",
+   "weight": 0.08,
+   "load_bearing": true,
+   "scenario_description": "Uses the AI assistant to navigate an unfamiliar codebase efficiently — and verifies its claims against the code and data. The repo is engineered so a lazy 'find the bug' prompt over the send path yields the plausible-wrong retry answer; feeding the right context (keys.js, the feed contract, the log evidence) yields the real one.",
+   "scenario_signals": [
+    "ai.assistant turns followed by verification in the terminal or code.",
+    "Assistant used for navigation/synthesis, not pasted as final without checking.",
+    "If the assistant proposes the retry theory, the candidate tests it against send.log rather than acting on it."
+   ],
+   "scenario_anchors": {
+    "5": "Focused assistant use (navigate the pipeline, draft the regression test, or pressure-test the hypothesis) with each material claim verified against code or data before acting.",
+    "3": "Assistant used, but on the wrong hypothesis without verification OR its output applied unchecked (yet the outcome happened to be caught later).",
+    "1": "No AI-assistant use at all, OR assistant output pasted as the fix/diagnosis with no verification anywhere."
+   }
+  },
+  {
+   "competency_key": "teamwork",
+   "weight": 0.1,
+   "load_bearing": true,
+   "scenario_description": "Engages Jordan, verifies the retry-wrapper hint against the send log rather than acting on it, brings evidence to unlock the redelivery clue. Session-wide signal — deliberately independent of the product-sense fork (which feeds design_under_constraints only).",
+   "scenario_signals": [
+    "Exchange in the team channel before acting on the retry hint.",
+    "Zero-failures evidence brought to Jordan, not just opinions.",
+    "Follow-ups that unlock the redelivery clue."
+   ]
+  },
+  {
+   "competency_key": "customer_engagement",
+   "weight": 0.06,
+   "load_bearing": true,
+   "scenario_description": "Sets expectations with a non-technical Customer Success lead; updates her as the picture firms up; absorbs the requirement change calmly.",
+   "scenario_signals": [
+    "Cadence and quality of client-channel updates.",
+    "Calm, non-defensive response to curveball 1.",
+    "Translates the engineering failure into member-appropriate language."
+   ],
+   "scenario_anchors": {
+    "5": "Clarifying question upfront + calm, professional handling of the requirement change + a plain-language note that actually answers 'will my members stop getting repeats?'",
+    "3": "Clarifying question OR calm curveball handling but not both; professional tone throughout.",
+    "1": "Zero client-channel engagement AND no client-facing summary, or an actively dismissive tone."
+   }
+  },
+  {
+   "competency_key": "outcome_communication",
+   "weight": 0.1,
+   "load_bearing": true,
+   "scenario_description": "The member-community note is clear, accurate, non-technical: what happened, nobody was double-charged, roughly how many members were affected, it's fixed, and what prevents a recurrence.",
+   "scenario_signals": [
+    "Final note reads as member-appropriate prose.",
+    "Affected-member count stated clearly and matches the candidate's own counting.",
+    "Cause described in plain English without webhook/idempotency jargon."
+   ],
+   "scenario_anchors": {
+    "5": "Plain-English note with the correct affected-member count, a non-technical cause ('our system treated the same billing update as new each time the provider re-sent it'), an explicit 'nobody was double-charged', and a recurrence guard.",
+    "3": "Clean professional prose that states a wrong cause or wrong count — clarity is real but the conclusion is wrong. CAP at this band when the content is incorrect.",
+    "1": "Terse one-liner, jargon-laden, or no client-facing note at all."
+   },
+   "scenario_scoring_note": "Communication quality is structure, audience-fit, and clarity — scored independently of execution correctness. The CAP at 3 applies when the candidate confidently communicates an incorrect conclusion."
+  }
+ ],
+ "success_criteria": {
+  "must": [
+   "Identifies the idempotency key built from the delivery identifier (not the event id) as the root cause — not the send-path retries.",
+   "Quantifies the blast radius — duplicate notifications sent and members affected — matching the fixture's ground truth.",
+   "Declines the suppression-cache workaround and ships the keying fix with a regression test covering a redelivered event.",
+   "Delivers all four deliverable components."
+  ],
+  "bonus": [
+   "Recommends an outbox-duplicate invariant (alarm or CI test) so a future keying regression is caught before members are.",
+   "Notes that the green suite never covered redelivery — and closes that class of gap, not just this instance."
+  ],
+  "tolerance": {
+   "record_count_pct": 0.02
+  }
+ },
+ "radical_values": {
+  "bug_class": "idempotency_key_misconstruction",
+  "failure_mechanism": "at_least_once_redelivery_passes_dedupe",
+  "reconcile_key": "event_id",
+  "red_herrings": [
+   "send_retry_wrapper_todo",
+   "crash_double_send_theory"
+  ],
+  "surface_vs_cause": "symptom_in_outbox_cause_in_keys_module",
+  "ps_fork": {
+   "curveball_id": "suppression_cache_workaround",
+   "shortcut": "suppression_cache_cooldown_window",
+   "measures": "design_under_constraints",
+   "grading": [
+    5,
+    3,
+    1
+   ]
+  },
+  "deliverable_components": 4
+ },
+ "incidental_values": {
+  "seed_label": "fde-code-debug-v1",
+  "company": "Vantage Fitness",
+  "service": "vantage-notify",
+  "feed_date": "2026-07-15",
+  "batch_time_local": "03:30 US/Eastern"
+ }
+}

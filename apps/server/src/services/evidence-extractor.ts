@@ -27,7 +27,12 @@ import { supabase } from "./supabase.js";
 // is gated on slug.startsWith("fde-api-integration"), so re-scoring any
 // fde-db-triage* session emits units identical to v2 modulo this stamp
 // (asserted by scripts/verify-family1-drift-inert.ts).
-export const DETECTOR_VERSION = "3";
+// v4 (family 3): fde-code-debug detectors (inherited-codebase domain signals;
+// the ps_fork pass reuses the family-2 stance machinery via the gt.ps_fork
+// marker-override contract). The agnostic required-fields detector now honors
+// ground_truth.deliverable_required_fields; families 1-2 don't define that
+// key, so their fallback is the pre-v4 hardcoded list — inert by construction.
+export const DETECTOR_VERSION = "4";
 
 // DISSOCIABILITY GUARD (7.2 + P3.2): the product-sense fork measures Product
 // Sense ONLY — in the shared competency model that construct lives on
@@ -178,7 +183,7 @@ function parseDollarAmounts(text: string): number[] {
 // ─── Detectors ───────────────────────────────────────────────────────────────
 
 /** Scenario-agnostic — run for every scenario. */
-function agnosticDetectors(events: EventRow[]): EvidenceUnit[] {
+function agnosticDetectors(events: EventRow[], groundTruth: Record<string, unknown> = {}): EvidenceUnit[] {
   const units: EvidenceUnit[] = [];
   const queries = asQueries(events);
   const ok = queries.filter((q) => q.status === "ok");
@@ -203,10 +208,16 @@ function agnosticDetectors(events: EventRow[]): EvidenceUnit[] {
   units.push(unit("execution", "deliverable_present", lastDeliverable !== null,
     lastDeliverable ? [lastDeliverable.seq] : []));
   if (delivData) {
-    const requiredFields = [
-      "corrected_monthly_revenue", "root_cause_finding",
-      "client_facing_summary", "decisions_and_tradeoffs",
-    ];
+    // Scenario override via ground truth (v4); absent → the legacy family-1
+    // list, keeping pre-v4 output byte-identical for families that predate it.
+    const gtFields = groundTruth["deliverable_required_fields"];
+    const requiredFields =
+      Array.isArray(gtFields) && gtFields.length > 0 && gtFields.every((f) => typeof f === "string")
+        ? (gtFields as string[])
+        : [
+            "corrected_monthly_revenue", "root_cause_finding",
+            "client_facing_summary", "decisions_and_tradeoffs",
+          ];
     const missing = requiredFields.filter((f) => {
       const v = delivData[f];
       return typeof v !== "string" || v.trim() === "";
@@ -711,6 +722,93 @@ function psForkApiIntegrationDetectors(
   return units;
 }
 
+// ─── Family 3: fde-code-debug (inherited-codebase debugging) ─────────────────
+//
+// The candidate inherits a small service repo whose green test suite hides a
+// cross-file bug (idempotency key built from the per-attempt delivery id).
+// Signals live in the terminal + editor exhaust rather than SQL: running the
+// tests, re-running the batch, tracing the key construction, falsifying the
+// send-retry red herring against the log. Gated in runDetectors on
+// slug.startsWith("fde-code-debug") — inert on families 1-2 by construction.
+
+// Fallback markers; a variant's ground truth overrides via root_cause_markers /
+// red_herring_markers (regex sources, case-insensitive), mirroring the family-2
+// ps_fork override contract.
+const CODE_ROOT_CAUSE_MARKERS = [
+  "delivery[\\s_-]?id", "idempoten", "event[\\s_.]?id", "dedup\\w*\\s+key", "keys\\.js",
+];
+const CODE_RED_HERRING_MARKERS = [
+  "retr(y|ies|ied)", "send_error", "status=failed", "double[\\s-]?send", "backoff",
+];
+// Terminal fingerprints (decoded pty.input): running the suite / the batch.
+const CODE_TEST_RUN_RE = /(npm\s+(run\s+)?test|node\s+--test)/i;
+const CODE_BATCH_RUN_RE = /(node\s+\S*cli\.js|npm\s+run\s+run)/i;
+
+/** Extract plain integers (with optional thousands commas) from free text. */
+function parseCounts(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(/\b\d{1,3}(?:,\d{3})+\b|\b\d+\b/g)) {
+    const n = parseInt(m[0]!.replace(/,/g, ""), 10);
+    if (Number.isFinite(n)) out.push(n);
+  }
+  return out;
+}
+
+function fdeCodeDebugDetectors(events: EventRow[], gt: Record<string, unknown>): EvidenceUnit[] {
+  const units: EvidenceUnit[] = [];
+  const corpus = candidateTextCorpus(events);
+  const scanRes = (res: RegExp[]): { hits: number; seqs: number[] } => {
+    const seqs = corpus.filter((c) => res.some((re) => re.test(c.text))).map((c) => c.seq);
+    return { hits: seqs.length, seqs };
+  };
+
+  // data_fluency — engaged the real causal chain (keying) vs the red herring
+  // (send retries). Presence-tier: Stage B grades quality off the cited seqs.
+  const rootCause = scanRes(compileMarkers(gt.root_cause_markers, CODE_ROOT_CAUSE_MARKERS));
+  units.push(unit("data_fluency", "code_root_cause_engaged",
+    { present: rootCause.hits > 0, hits: rootCause.hits }, rootCause.seqs));
+  const herring = scanRes(compileMarkers(gt.red_herring_markers, CODE_RED_HERRING_MARKERS));
+  units.push(unit("data_fluency", "retry_theory_engaged",
+    { present: herring.hits > 0, hits: herring.hits }, herring.seqs));
+
+  // execution — ran the suite; re-ran the batch. Decoded terminal keystrokes
+  // only (candidateTextCorpus already base64-decodes pty.input).
+  const ptyText = corpus.filter((c) =>
+    events.some((e) => e.seq === c.seq && e.type === "pty.input"));
+  const testRuns = ptyText.filter((c) => CODE_TEST_RUN_RE.test(c.text));
+  units.push(unit("execution", "tests_run",
+    { count: testRuns.length }, testRuns.map((c) => c.seq)));
+  const batchRuns = ptyText.filter((c) => CODE_BATCH_RUN_RE.test(c.text));
+  units.push(unit("execution", "batch_rerun",
+    { count: batchRuns.length }, batchRuns.map((c) => c.seq)));
+
+  // execution — deliverable figures vs ground truth (±2%, mirroring family 1's
+  // tolerance). Two independent figures: duplicate notifications sent and
+  // distinct members affected.
+  const dupTarget = typeof gt.duplicate_notification_count === "number"
+    ? gt.duplicate_notification_count : null;
+  const custTarget = typeof gt.affected_customer_count === "number"
+    ? gt.affected_customer_count : null;
+  const submits = events.filter((e) => e.type === "deliverable.submit");
+  const lastSubmit = submits.sort((a, b) => b.seq - a.seq)[0] ?? null;
+  if (lastSubmit && (dupTarget !== null || custTarget !== null)) {
+    const data = (lastSubmit.payload.data ?? {}) as Record<string, unknown>;
+    const text = Object.values(data).filter((v): v is string => typeof v === "string").join("\n");
+    const counts = parseCounts(text);
+    const matches = (target: number | null): boolean =>
+      target !== null && counts.some((n) => Math.abs(n - target) / target <= 0.02);
+    units.push(unit("execution", "figures_match_truth",
+      {
+        matched: matches(dupTarget) && matches(custTarget),
+        duplicate_count_matched: matches(dupTarget),
+        affected_customer_matched: matches(custTarget),
+      },
+      [lastSubmit.seq]));
+  }
+
+  return units;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /** Pure detector pass over an event stream — no IO. Exposed so tests can feed
@@ -735,7 +833,7 @@ export function runDetectors(
     (e) => !e.type.startsWith("integrity.") && !e.type.startsWith("identity."),
   );
 
-  const units = agnosticDetectors(events);
+  const units = agnosticDetectors(events, groundTruth);
   units.push(...verificationDetectors(events));
   if (slug.startsWith("fde-db-triage")) {
     units.push(...fdeDbTriageDetectors(events, groundTruth));
@@ -745,6 +843,14 @@ export function runDetectors(
   // are inert on family 1 by construction (verify-family1-drift-inert.ts).
   if (slug.startsWith("fde-api-integration")) {
     units.push(...fdeApiIntegrationDetectors(events));
+    units.push(...psForkApiIntegrationDetectors(events, groundTruth));
+  }
+  // Family 3 — inherited-codebase debugging. The ps_fork pass REUSES the
+  // family-2 stance machinery: this family's ground truth supplies
+  // ps_fork.curveball_id + shortcut/naming/robust marker overrides, so the
+  // family-2 defaults never apply to it.
+  if (slug.startsWith("fde-code-debug")) {
+    units.push(...fdeCodeDebugDetectors(events, groundTruth));
     units.push(...psForkApiIntegrationDetectors(events, groundTruth));
   }
   return units;

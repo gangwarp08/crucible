@@ -1,6 +1,6 @@
 {
  "slug": "fde-api-integration-pro",
- "title": "Contact sync triage (Tier 1.5)",
+ "title": "CRM contacts are going missing (API integration)",
  "role": "fde",
  "difficulty": "hard",
  "dataset_ref": "fixtures/fde-api-integration-pro",

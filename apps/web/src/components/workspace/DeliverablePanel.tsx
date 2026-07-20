@@ -12,27 +12,41 @@ import Pill from "@/components/ui/Pill";
 interface Props { sessionId: string; }
 
 interface Field {
-  key: keyof DeliverableData;
+  key: string;
   label: string;
   rows: number;
 }
 
-const FIELDS: Field[] = [
+// Fallback for sessions whose server doesn't send deliverableComponents
+// (older servers / scenarios without components): the original family-1 set.
+const LEGACY_FIELDS: Field[] = [
   { key: "corrected_monthly_revenue", label: "Corrected monthly revenue (last 3 months)", rows: 6 },
   { key: "root_cause_finding",        label: "Root-cause finding",                        rows: 5 },
   { key: "client_facing_summary",     label: "Board-ready client-facing summary",         rows: 6 },
   { key: "decisions_and_tradeoffs",   label: "Decisions, trade-offs, and prioritization", rows: 5 },
 ];
 
-const EMPTY_DATA: DeliverableData = {
-  corrected_monthly_revenue: "",
-  root_cause_finding: "",
-  client_facing_summary: "",
-  decisions_and_tradeoffs: "",
-};
+function emptyData(fields: Field[]): DeliverableData {
+  return Object.fromEntries(fields.map((f) => [f.key, ""]));
+}
 
 export default function DeliverablePanel({ sessionId }: Props) {
-  const [data, setData] = useState<DeliverableData>(EMPTY_DATA);
+  const deliverableComponents = useSessionStore((s) => s.scenario.deliverableComponents);
+  // Scenario-driven fields; the first component gets the roomier mono-friendly
+  // box (it's the quantitative one across families).
+  const fields: Field[] =
+    deliverableComponents && deliverableComponents.length > 0
+      ? deliverableComponents.map((c, i) => ({ key: c.key, label: c.label, rows: i === 0 ? 6 : 5 }))
+      : LEGACY_FIELDS;
+  const [data, setData] = useState<DeliverableData>(() => emptyData(fields));
+
+  // The scenario presentation hydrates async — when the component list lands
+  // after mount, widen the form state to include its keys (preserving any
+  // already-typed values and any saved draft loaded below).
+  useEffect(() => {
+    setData((prev) => ({ ...emptyData(fields), ...prev }));
+    // fields derives solely from deliverableComponents — deliberately the only dep.
+  }, [deliverableComponents]);
   const [status, setStatus] = useState<DeliverableStatus | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +61,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
     getDeliverable(sessionId)
       .then((d) => {
         if (cancelled || !d) return;
-        setData(d.data);
+        setData((prev) => ({ ...prev, ...d.data }));
         setStatus(d.status);
         setUpdatedAt(d.updated_at);
       })
@@ -125,7 +139,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 24px" }}>
-        {FIELDS.map((f) => (
+        {fields.map((f) => (
           <div key={f.key} style={{ marginBottom: 18 }}>
             <label style={{
               display: "block", fontSize: 13, color: color.text.primary,
@@ -134,7 +148,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
               {f.label}
             </label>
             <textarea
-              value={data[f.key]}
+              value={data[f.key] ?? ""}
               onChange={(e) => setData({ ...data, [f.key]: e.target.value })}
               rows={f.rows}
               spellCheck={false}
@@ -148,7 +162,7 @@ export default function DeliverablePanel({ sessionId }: Props) {
                 borderRadius: radius.sm,
                 color: color.text.primary,
                 fontSize: 12,
-                fontFamily: f.key === "corrected_monthly_revenue" ? font.mono : font.sans,
+                fontFamily: f.key === fields[0]?.key ? font.mono : font.sans,
                 padding: "8px 10px",
                 outline: "none",
                 resize: "vertical",
