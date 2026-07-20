@@ -93,9 +93,11 @@ export default function BriefPanel() {
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
           <InventoryRow
             icon="▤"
-            title="Data"
+            title={scenario.datasetKind === "git_repo" ? "Codebase" : "Data"}
             body={
-              scenario.datasetTables && scenario.datasetTables.length > 0
+              scenario.datasetKind === "git_repo"
+                ? "The inherited service repo in the Files pane (writable) — source, tests, docs, and its data/ files. Run it and its tests in the Terminal. README.md has the full map."
+                : scenario.datasetTables && scenario.datasetTables.length > 0
                 ? `customer.db (read-only) — tables: ${scenario.datasetTables.join(", ")}. Query it in the Data tab or the Terminal.`
                 : "Your workspace files, in the Files pane. There's a README.md with the full map."
             }

@@ -59,6 +59,19 @@ export async function queryRoutes(server: FastifyInstance) {
       // RD1: queries are blocked once the work is locked (submitted/defending/ended).
       if (!ensureWritable(entry, reply)) return;
 
+      // git_repo scenarios ship a codebase, not a customer.db — there is
+      // nothing to query and the SQL runner is deliberately not staged.
+      // Refuse cleanly (no compute-minute deduction, no infra-500) — the web
+      // hides the Data tab for these sessions, so this is a belt-and-braces
+      // guard for direct API calls and stale clients.
+      if (entry.scenarioMeta?.datasetKind === "git_repo") {
+        return reply.status(409).send({
+          error: "no_sql_dataset",
+          message:
+            "This scenario has no SQL database — work in the repo via the Terminal and Editor.",
+        });
+      }
+
       try {
         const result = await runSqliteQuery(entry.sandbox, sql);
 

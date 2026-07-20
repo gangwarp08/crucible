@@ -80,6 +80,20 @@ export function readDatasetManifest(datasetRef: string): DatasetManifest {
   };
 }
 
+/** Null-safe, never-throwing dataset-kind lookup for presentation/guard
+ *  paths (scenarioMeta, the query-route SQL refusal). A malformed manifest
+ *  must not break a HUD poll — provisioning is where it fails loudly. */
+export function scenarioDatasetKind(
+  datasetRef: string | null | undefined,
+): DatasetManifest["kind"] | null {
+  if (!datasetRef) return null;
+  try {
+    return readDatasetManifest(datasetRef).kind;
+  } catch {
+    return null;
+  }
+}
+
 export async function seedScenarioDataset(
   sandbox: Sandbox,
   datasetRef: string,

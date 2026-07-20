@@ -295,6 +295,8 @@ export async function sessionRoutes(server: FastifyInstance) {
       // Candidate-safe deliverable fields (key + label) so the Deliverable
       // panel renders this scenario's components, not the legacy hardcode.
       deliverableComponents: entry.scenarioMeta?.deliverableComponents ?? null,
+      // git_repo sessions have no customer.db — the web hides the Data tab.
+      datasetKind: entry.scenarioMeta?.datasetKind ?? null,
     };
   });
 

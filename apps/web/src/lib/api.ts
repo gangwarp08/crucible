@@ -167,6 +167,9 @@ export interface SessionInfo {
   // defines none or on older servers → the Deliverable panel falls back to
   // the legacy family-1 field set.
   deliverableComponents?: { key: string; label: string }[] | null;
+  // Dataset kind: "git_repo" sessions have no customer.db, so the workspace
+  // hides the Data tab. Null/absent (older servers, no dataset) shows it.
+  datasetKind?: "sqlite" | "git_repo" | null;
 }
 
 // ── Candidate-safe scenario lookup ──────────────────────────────────────────

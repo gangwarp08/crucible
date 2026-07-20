@@ -13,7 +13,7 @@ import { logEvent } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
 import { loadScenarioById, personaMeta, deliverableComponentMeta, type Scenario } from "./scenarios.js";
-import { seedScenarioDataset } from "./dataset-seed.js";
+import { seedScenarioDataset, scenarioDatasetKind } from "./dataset-seed.js";
 import { renderGuardedReadme, parseTableNames } from "./workspace-readme.js";
 import {
   freshVerificationState,
@@ -385,6 +385,7 @@ export async function createSandbox(
           teamPersona:   personaMeta(scenario.team_persona),
           datasetTables: datasetTables.length > 0 ? datasetTables : null,
           deliverableComponents: deliverableComponentMeta(scenario.deliverable_spec),
+          datasetKind: scenarioDatasetKind(scenario.dataset_ref),
         }
       : null,
     messagingSockets: new Set(),

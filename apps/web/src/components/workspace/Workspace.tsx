@@ -77,6 +77,13 @@ export default function Workspace({ sessionId }: Props) {
 
   const status = useSessionStore((s) => s.status);
   const scenario = useSessionStore((s) => s.scenario);
+  // git_repo scenarios ship a codebase, not a customer.db — no Data tab.
+  // (The server also refuses SQL for these sessions; this is the UX half.)
+  const isRepoScenario = scenario.datasetKind === "git_repo";
+  const tabs = isRepoScenario ? TABS.filter((t) => t.id !== "data") : TABS;
+  useEffect(() => {
+    if (isRepoScenario && rightTab === "data") setRightTab("terminal");
+  }, [isRepoScenario, rightTab]);
   const clockStarted = useSessionStore((s) => s.clockStarted);
   const init = useSessionStore((s) => s.init);
   const startClock = useSessionStore((s) => s.startClock);
@@ -121,7 +128,7 @@ export default function Workspace({ sessionId }: Props) {
     init(sessionId, "", 0, 0, null, null, null,
       { title: null, brief: null, role: null, difficulty: null,
         clientPersona: null, teamPersona: null, datasetTables: null,
-        deliverableComponents: null }, true);
+        deliverableComponents: null, datasetKind: null }, true);
     getSession(sessionId)
       .then((s) => {
         init(
@@ -141,6 +148,7 @@ export default function Workspace({ sessionId }: Props) {
             teamPersona:   s.teamPersona ?? null,
             datasetTables: s.datasetTables ?? null,
             deliverableComponents: s.deliverableComponents ?? null,
+            datasetKind: s.datasetKind ?? null,
           },
           // Older servers omit clockStarted → undefined; treat as already
           // started (no pre-start overlay) so a stale server can't strand the
@@ -370,7 +378,7 @@ export default function Workspace({ sessionId }: Props) {
               >
                 <div data-tour="tabs">
                   <TabStrip
-                    tabs={TABS}
+                    tabs={tabs}
                     value={rightTab}
                     onChange={setRightTab}
                     variant="underline"

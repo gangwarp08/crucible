@@ -34,6 +34,7 @@ import {
 } from "./db.js";
 import { mintSessionKey, revokeSessionKeyByAlias } from "./litellm.js";
 import { loadScenarioById, personaMeta, deliverableComponentMeta } from "./scenarios.js";
+import { scenarioDatasetKind } from "./dataset-seed.js";
 import { parseTableNames } from "./workspace-readme.js";
 import { expireSession } from "./session.js";
 import { appendEvent } from "./events-direct.js";
@@ -159,6 +160,7 @@ async function rehydrate(sessionId: string): Promise<SessionEntry | null> {
         teamPersona:   personaMeta(scenario.team_persona),
         datasetTables: tables.length > 0 ? tables : null,
         deliverableComponents: deliverableComponentMeta(scenario.deliverable_spec),
+        datasetKind: scenarioDatasetKind(scenario.dataset_ref),
       };
     }
   }
