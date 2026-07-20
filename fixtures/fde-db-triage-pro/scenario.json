@@ -1,6 +1,6 @@
 {
  "slug": "fde-db-triage-pro",
- "title": "Customer database triage (Tier 1.5)",
+ "title": "The revenue numbers don't add up (database investigation)",
  "role": "fde",
  "difficulty": "hard",
  "dataset_ref": "fixtures/fde-db-triage-pro",

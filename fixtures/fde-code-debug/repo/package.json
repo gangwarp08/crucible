@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "run": "node src/cli.js",
     "reset": "rm -f data/outbox.jsonl data/send.log"
   }
