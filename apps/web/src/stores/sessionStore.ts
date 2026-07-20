@@ -39,6 +39,8 @@ export interface ScenarioPresentation {
   // Scenario deliverable fields (key + label) for the Deliverable panel.
   // Null → the panel renders its legacy family-1 field set.
   deliverableComponents: { key: string; label: string }[] | null;
+  // "git_repo" hides the Data tab (no customer.db in a repo scenario).
+  datasetKind: "sqlite" | "git_repo" | null;
 }
 
 interface SessionState {
@@ -87,7 +89,7 @@ interface SessionState {
 const EMPTY_SCENARIO: ScenarioPresentation = {
   title: null, brief: null, role: null, difficulty: null,
   clientPersona: null, teamPersona: null, datasetTables: null,
-  deliverableComponents: null,
+  deliverableComponents: null, datasetKind: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({

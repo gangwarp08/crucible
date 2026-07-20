@@ -36,6 +36,7 @@ interface RegionSpec {
  *  generic copy on sessions without scenario metadata. */
 function buildRegions(scenario: ScenarioPresentation): RegionSpec[] {
   const tables = scenario.datasetTables;
+  const isRepo = scenario.datasetKind === "git_repo";
   const clientName = scenario.clientPersona?.name;
   const teamName = scenario.teamPersona?.name;
   const people =
@@ -46,7 +47,9 @@ function buildRegions(scenario: ScenarioPresentation): RegionSpec[] {
     {
       tour: "files",
       title: "Files",
-      body: tables && tables.length > 0
+      body: isRepo
+        ? "The codebase you've inherited — source, tests, docs, and its data files (writable). Start with README.md; it maps everything."
+        : tables && tables.length > 0
         ? `customer.db — a read-only copy of the data (${tables.join(", ")}) — plus a README.md that maps this whole workspace.`
         : "Your workspace files. Start with README.md — it maps everything.",
     },
@@ -74,8 +77,11 @@ function buildRegions(scenario: ScenarioPresentation): RegionSpec[] {
         { name: "Brief", desc: "your instructions + what you have" },
         { name: "Docs", desc: "company & domain docs" },
         { name: "Messages", desc: people },
-        { name: "Data", desc: tables && tables.length > 0 ? "run SQL against customer.db" : "the live database" },
-        { name: "Terminal", desc: "a shell in your workspace" },
+        // Repo scenarios have no customer.db — the Data tab is hidden for them.
+        ...(isRepo
+          ? []
+          : [{ name: "Data", desc: tables && tables.length > 0 ? "run SQL against customer.db" : "the live database" }]),
+        { name: "Terminal", desc: isRepo ? "a shell in the repo — run the service and its tests" : "a shell in your workspace" },
         { name: "Assistant", desc: "AI helper — uses your budget" },
         { name: "Deliverable", desc: "what to submit, and where" },
       ],

@@ -204,6 +204,10 @@ export interface SessionEntry {
     // fields instead of the legacy family-1 hardcode. Null when the scenario
     // doesn't define components → web falls back to the legacy four.
     deliverableComponents: { key: string; label: string }[] | null;
+    // Dataset kind from the fixture's dataset.json manifest. git_repo
+    // scenarios have no customer.db: the query route refuses SQL cleanly and
+    // the web hides the Data tab. Null when the scenario has no dataset.
+    datasetKind: "sqlite" | "git_repo" | null;
   } | null;
 
   // Persona messaging — ONE shared conversation for both personas (the
