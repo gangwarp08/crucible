@@ -14,9 +14,12 @@ claim to do.
 - Presents a scenario (e.g. "Meridian SaaS revenue dashboard looks off,
   board meeting in 60 minutes — figure out what's wrong, prioritize,
   and brief the VP Finance").
-- Spins up a per-candidate sandbox (E2B microVM) with a SQLite copy of
-  Meridian's "production" data, file tree, terminal, SQL data explorer,
-  and an auto-generated (leak-guarded) `README.md` inventory.
+- Spins up a per-candidate sandbox (E2B microVM) with the scenario's
+  dataset — a read-only SQLite copy of "production" data (database /
+  API-integration sims) or a **writable inherited codebase** (the
+  code-debugging sim ships a real, runnable Node repo with tests and
+  git) — plus file tree, terminal, SQL data explorer, and an
+  auto-generated (leak-guarded) `README.md` inventory.
 - Runs two AI personas the candidate can talk to in a **single unified
   chat** — one thread, a recipient toggle, shared conversation context:
   a client (e.g. **Dana**, VP Finance) and a teammate (e.g. **Sam**,
@@ -97,9 +100,13 @@ apps/
   web/          Next.js — candidate UI, landing page, review UI
   server/       Fastify — session lifecycle, persona-agent, analysis-agent
 fixtures/
-  fde-db-triage/        Tier 1 scenario — synthetic dataset + ground truth
-  fde-db-triage-pro/    Tier 1.5 — multi-issue + prioritization + Sam pushes wrong priority
-  fde-api-integration/  Family 2 (LIVE) — API-integration debugging + native ps-fork (client: Priya)
+  fde-db-triage/        Family 1 — synthetic dataset + ground truth (hidden from catalog)
+  fde-db-triage-pro/    Family 1 hard — "The revenue numbers don't add up" (LIVE)
+  fde-api-integration/  Family 2 — API-integration debugging (canonical hidden; -pro
+                        "CRM contacts are going missing" LIVE)
+  fde-code-debug/       Family 3 (LIVE) — "Duplicate notifications triage": inherited
+                        Node codebase (repo/ committed as real source, git_repo dataset
+                        kind), green-suite keying bug, client Maya / teammate Jordan
 infra/
   e2b/          Sandbox template definition
 packages/
@@ -146,11 +153,18 @@ pnpm build                                              # both workspaces
 pnpm --filter @crucible/server dev                      # server with tsx watch
 pnpm --filter @crucible/web dev                         # next dev
 
-# Regenerate the Tier 1.5 fixture (deterministic)
+# Regenerate a scenario fixture (deterministic; family 3 regenerates only the
+# data files — the repo source is committed directly)
 pnpm exec tsx fixtures/fde-db-triage-pro/generate.ts
+pnpm --filter @crucible/server exec tsx ../../fixtures/fde-code-debug/generate.ts
 
 # Push a scenario row update to Supabase
 pnpm exec tsx apps/server/scripts/encode-fde-db-triage-pro.ts
+pnpm --filter @crucible/server exec tsx scripts/encode-fde-code-debug.ts
+
+# Family-3 verification (pure detectors; real-E2B provisioning smoke)
+pnpm --filter @crucible/server exec tsx scripts/verify-family3-units.ts
+pnpm --filter @crucible/server exec tsx scripts/verify-family3-e2e.ts
 
 # Daily cost rollup against cost_ledger
 pnpm --filter @crucible/server exec tsx scripts/check-daily-cost.ts
@@ -255,6 +269,27 @@ stripped from the sandbox, `turbo.json` now declares the self-hosted
 Monaco assets as a build output (Vercel remote-cache fix), and the
 landing page gained a self-hosted demo video plus the tagline "Metrics
 that Matter. Measured with Precision."
+
+Third scenario family LIVE (July 2026): **`fde-code-debug`** —
+"Duplicate notifications triage (inherited codebase)", the first *code*
+scenario. The candidate inherits `vantage-notify`, a runnable stdlib-only
+Node service (committed as real source under
+`fixtures/fde-code-debug/repo/`) whose green 18-test suite hides a
+cross-file idempotency-keying bug; a send-retry red herring, client
+persona Maya, teammate Jordan, and a suppression-cache product-sense
+fork complete the sim. Shipped with three backward-compatible platform
+capabilities: the **`git_repo` dataset kind** (a `dataset.json`
+manifest routes seeding; repos land writable with git init), a
+**scenario-driven Deliverable panel** (fields come from the scenario's
+components; legacy family-1 fields as fallback), and **detector v4**
+(family-3 evidence detectors incl. decoded-terminal signals, inert on
+families 1–2). Verified end-to-end against real E2B and the deployed
+Railway server. The catalog was curated at the same time: the mid-band
+originals are hidden and the hard variants renamed symptom-first — the
+live catalog is "The revenue numbers don't add up (database
+investigation)", "CRM contacts are going missing (API integration)",
+and "Duplicate notifications triage (inherited codebase)". Family-3
+calibration (anchors + curveball timing) is still pending.
 
 Not yet shipped: per-candidate one-time invite codes (currently a
 shared secret), audit log table.
