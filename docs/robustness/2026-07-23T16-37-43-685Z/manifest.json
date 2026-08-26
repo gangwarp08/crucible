@@ -1,0 +1,15 @@
+{
+  "runId": "2026-07-23T16-37-43-685Z",
+  "opts": {
+    "classes": [
+      "genuine"
+    ],
+    "scenarioSlugs": [
+      "fde-db-triage"
+    ],
+    "trials": 2,
+    "seedBase": 1000
+  },
+  "speed": 0.5,
+  "count": 6
+}
