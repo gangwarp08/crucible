@@ -32,7 +32,12 @@ import { supabase } from "./supabase.js";
 // marker-override contract). The agnostic required-fields detector now honors
 // ground_truth.deliverable_required_fields; families 1-2 don't define that
 // key, so their fallback is the pre-v4 hardcoded list — inert by construction.
-export const DETECTOR_VERSION = "4";
+// v5 (verification slice V7): agnostic injection_present unit
+// (ai_orchestration) anchored on ai_injection.fired markers — the seeded
+// flawed-AI-suggestion judgment moment. INERT for every session without such
+// markers (i.e. all pre-V7 sessions and scenarios without ai_injection
+// curveballs): their unit sets are identical to v4 modulo this stamp.
+export const DETECTOR_VERSION = "5";
 
 // DISSOCIABILITY GUARD (7.2 + P3.2): the product-sense fork measures Product
 // Sense ONLY — in the shared competency model that construct lives on
@@ -261,6 +266,25 @@ function agnosticDetectors(events: EventRow[], groundTruth: Record<string, unkno
   units.push(unit("customer_engagement", "client_update_count", clientMsgs.length,
     clientMsgs.map((e) => e.seq)));
   units.push(unit("teamwork", "team_engaged_count", teamMsgs.length, teamMsgs.map((e) => e.seq)));
+
+  // ai_orchestration — judgment-moment injection (slice V7). Emitted ONLY when
+  // an ai_injection.fired marker exists, so every other session keeps its
+  // exact prior unit set. Anchors the injection seq plus the candidate's next
+  // AI turns; the judge reads the surrounding transcript to assess whether the
+  // flawed suggestion was adopted or challenged (that judgment is Stage B's —
+  // this unit just surfaces the moment and pins the citable seqs).
+  for (const fired of events.filter((e) => e.type === "ai_injection.fired")) {
+    const followups = aiTurns.filter((e) => e.seq > fired.seq).slice(0, 3);
+    units.push(unit(
+      "ai_orchestration",
+      "injection_present",
+      {
+        id: typeof fired.payload.id === "string" ? fired.payload.id : null,
+        candidate_responded: followups.length > 0,
+      },
+      [fired.seq, ...followups.map((e) => e.seq)],
+    ));
+  }
 
   return units;
 }
