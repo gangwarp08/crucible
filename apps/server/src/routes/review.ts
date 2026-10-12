@@ -57,6 +57,10 @@ import {
   verifyStoredChain,
   getSigningKeys,
 } from "../services/provenance.js";
+import {
+  getOrGenerateQuestions,
+  EvidenceQuestionsError,
+} from "../services/evidence-questions.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
   createReportShare,
@@ -538,6 +542,55 @@ export async function reviewRoutes(server: FastifyInstance) {
         public_key_spki_base64:
           keys && keys.keyId === stored.key_id ? keys.publicKeyBase64 : null,
       });
+    },
+  );
+
+  // ─── Evidence-conversation questions (slice V8) ─────────────────────────
+  // Compute-if-absent: cached per session (0031); a cache miss costs one LLM
+  // call, hence the tight rate limit. Recruiter-facing interview prompts,
+  // each citing clickable event seqs — reads telemetry, writes nothing to
+  // the scoring pipeline.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/evidence-questions",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, org_id, status")
+        .eq("id", id)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, id }, "[review] evidence-questions: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      const sessRow = sess as { org_id?: string | null; status?: string } | null;
+      if (!sessRow || !orgCanAccess(request.org, sessRow.org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (sessRow.status === "active") {
+        // Generate only after the work is done — mid-session questions would
+        // be stale by submit time (and burn a model call per view).
+        return reply.status(409).send({ error: "session_still_active" });
+      }
+
+      try {
+        const set = await getOrGenerateQuestions(id, sessRow.org_id as string);
+        if (!set) return reply.status(404).send({ error: "no_moments" });
+        return reply.send(set);
+      } catch (err) {
+        const msg = err instanceof EvidenceQuestionsError ? err.message : "generation_failed";
+        server.log.error({ err: msg, id }, "[review] evidence-questions failed");
+        return reply.status(502).send({ error: "evidence_questions_failed" });
+      }
     },
   );
 

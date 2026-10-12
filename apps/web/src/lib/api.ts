@@ -719,6 +719,47 @@ export async function getVerificationReport(
   }
 }
 
+// ── Evidence-conversation questions (slice V8 — recruiter-only) ─────────────
+
+export interface EvidenceQuestion {
+  question: string;
+  eventSeqs: number[];
+  rationale: string;
+}
+
+/** Fetch (compute-if-absent) the session's evidence-conversation questions.
+ *  Null on any failure — older servers, active sessions (409), thin sessions
+ *  (404) — so the panel can quietly not render. */
+export async function getEvidenceQuestions(
+  sessionId: string,
+): Promise<EvidenceQuestion[] | null> {
+  try {
+    const res = await fetch(
+      `${SERVER_URL}/api/review/sessions/${sessionId}/evidence-questions`,
+      { headers: orgKeyHeader() },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as { questions?: unknown };
+    if (!Array.isArray(body.questions)) return null;
+    const out: EvidenceQuestion[] = [];
+    for (const q of body.questions) {
+      if (typeof q !== "object" || q === null) continue;
+      const o = q as Record<string, unknown>;
+      if (typeof o["question"] !== "string") continue;
+      out.push({
+        question: o["question"],
+        eventSeqs: Array.isArray(o["event_seqs"])
+          ? o["event_seqs"].filter((s): s is number => typeof s === "number")
+          : [],
+        rationale: typeof o["rationale"] === "string" ? o["rationale"] : "",
+      });
+    }
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Recruiter review ────────────────────────────────────────────────────────
 
 export interface ReviewSession {
