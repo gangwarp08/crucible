@@ -46,6 +46,15 @@ export const INTEGRITY_EVENT_TYPES = [
   // start (lib/integrity.ts). Cross-checked server-side against the IP-derived
   // country (suspicion-score.ts geo_tz_mismatch). Informational, never scored.
   "integrity.client_env",
+  // Verification slice (detector v5) — environment-integrity signals.
+  // display_change: the screen configuration changed (an extra display was
+  // attached/present — a classic second-screen setup). Emitted once per state
+  // change. virtual_camera: a capture device whose label matches a known
+  // virtual-camera product class (OBS, ManyCam, …). Emitted at most once per
+  // session, carries the matched CLASS, never the raw device label. Both are
+  // best-effort heuristics; informational, never scored against competency.
+  "integrity.display_change",
+  "integrity.virtual_camera",
 ] as const;
 
 export type IntegrityEventType = (typeof INTEGRITY_EVENT_TYPES)[number];
@@ -91,6 +100,16 @@ export const IntegrityEventSchema = z.discriminatedUnion("type", [
     payload: z.object({
       chars: z.number().int().min(1).max(1_000_000),
       target: z.enum(["editor", "chat", "message", "other"]),
+      // Verification slice (detector v5) — paste provenance. Where the pasted
+      // text came from, judged client-side against a registry of text actually
+      // rendered inside the sandbox (lib/paste-provenance.ts):
+      //   internal — matches text the candidate saw in the workspace (docs,
+      //              assistant replies, their own files) — benign;
+      //   external — matches nothing rendered in the sandbox (the classic
+      //              second-window signal);
+      //   unknown  — partial/ambiguous match.
+      // OPTIONAL for backward compatibility: pre-v5 clients omit it.
+      provenance: z.enum(["internal", "external", "unknown"]).optional(),
     }),
   }),
   z.object({
@@ -138,6 +157,23 @@ export const IntegrityEventSchema = z.discriminatedUnion("type", [
         tz_name: z.string().min(1).max(64).nullable(),
       })
       .strict(),
+  }),
+  // Verification slice (detector v5) — environment integrity.
+  // display_change: screen.isExtended flipped (or was true at mount). One
+  // event per observed state change; `extended` is the NEW state.
+  z.object({
+    type: z.literal("integrity.display_change"),
+    ts: ClientTs,
+    payload: z.object({ extended: z.boolean() }).strict(),
+  }),
+  // virtual_camera: a videoinput device label matched a known virtual-camera
+  // product class. The CLASS is a short identifier from a fixed client-side
+  // list (e.g. "obs", "manycam") — never the raw device label (labels can
+  // embed arbitrary user/device strings).
+  z.object({
+    type: z.literal("integrity.virtual_camera"),
+    ts: ClientTs,
+    payload: z.object({ label_class: z.string().min(1).max(32) }).strict(),
   }),
 ]);
 

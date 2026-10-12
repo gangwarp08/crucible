@@ -6,6 +6,7 @@ import { color, font, radius } from "@/styles/tokens";
 import Bubble from "@/components/ui/Bubble";
 import Button from "@/components/ui/Button";
 import SectionLabel from "@/components/ui/SectionLabel";
+import { registerSandboxText } from "@/lib/paste-provenance";
 
 function isChatError(r: object): r is ChatError {
   return "error" in r;
@@ -25,6 +26,10 @@ export default function ChatHUD() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Paste provenance (detector v5): everything rendered in this panel is
+  // legitimate in-workspace copy material. Idempotent (hash-deduped).
+  useEffect(() => { for (const m of messages) registerSandboxText(m.text); }, [messages]);
 
   const canSend = status === "active" && !sending && input.trim().length > 0 && sessionId !== null;
 

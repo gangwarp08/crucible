@@ -6,6 +6,7 @@ import Bubble from "@/components/ui/Bubble";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 import { getMessageHistory, getSessionToken } from "@/lib/api";
+import { registerSandboxText } from "@/lib/paste-provenance";
 import { useSessionStore } from "@/stores/sessionStore";
 
 interface Props { sessionId: string; }
@@ -96,6 +97,11 @@ export default function Messages({ sessionId }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const chatBottom = useRef<HTMLDivElement>(null);
   const verifierBottom = useRef<HTMLDivElement>(null);
+
+  // Paste provenance (detector v5): persona/verifier turns rendered here are
+  // legitimate in-workspace copy material. Idempotent (hash-deduped).
+  useEffect(() => { for (const m of chat) registerSandboxText(m.text); }, [chat]);
+  useEffect(() => { for (const m of verifierThread) registerSandboxText(m.text); }, [verifierThread]);
 
   useEffect(() => {
     (active === "chat" ? chatBottom : verifierBottom).current?.scrollIntoView({ behavior: "smooth" });

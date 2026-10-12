@@ -5,7 +5,15 @@ import { FitAddon } from "@xterm/addon-fit";
 import { AttachAddon } from "@xterm/addon-attach";
 import "@xterm/xterm/css/xterm.css";
 import { getSessionToken } from "@/lib/api";
+import { registerSandboxText } from "@/lib/paste-provenance";
 import { color, font } from "@/styles/tokens";
+
+// Paste provenance (detector v5): strip ANSI escape sequences before
+// registering terminal output — the candidate's clipboard copy of terminal
+// text carries none of them.
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f]/g;
+const stripAnsi = (s: string): string => s.replace(ANSI_RE, "");
 
 interface Props {
   sessionId: string;
@@ -63,6 +71,21 @@ export default function Terminal({ sessionId, onSessionEnd }: Props) {
 
     const attachAddon = new AttachAddon(ws);
     term.loadAddon(attachAddon);
+
+    // Paste provenance (detector v5): terminal output is legitimate copy
+    // material (error messages, file dumps). Listener rides alongside the
+    // AttachAddon; registration is fire-and-forget and hash-deduped.
+    ws.addEventListener("message", (ev) => {
+      try {
+        const text =
+          typeof ev.data === "string"
+            ? ev.data
+            : ev.data instanceof ArrayBuffer
+              ? new TextDecoder().decode(ev.data)
+              : "";
+        if (text) registerSandboxText(stripAnsi(text));
+      } catch { /* never disturb the terminal */ }
+    });
 
     // Track whether the WS actually established. Without this guard,
     // (a) a transient connection failure during component-mount (sandbox

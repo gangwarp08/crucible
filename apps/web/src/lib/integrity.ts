@@ -9,6 +9,7 @@
 // POST /sessions/:id/integrity route the batches simply 404 into the void.
 import { useEffect, useRef } from "react";
 import { postIntegrityEvents, type IntegrityEventInput } from "@/lib/api";
+import { classifyPaste } from "@/lib/paste-provenance";
 
 // ── Thresholds (defaults per v-next spec; calibrate on cohort 1) ─────────────
 const PASTE_BURST_CHARS = 400;     // paste larger than this → integrity.paste_burst
@@ -165,13 +166,17 @@ export function useIntegrityMonitor(sessionId: string, enabled: boolean): void {
       if (gap > IDLE_GAP_MS) enqueue("integrity.idle_gap", { ms: gap });
     };
 
-    // ── Paste bursts ─────────────────────────────────────────────────────────
+    // ── Paste bursts (with provenance, detector v5) ──────────────────────────
+    // Classification is async (crypto.subtle) — the event is enqueued from the
+    // promise, which lands well inside the 5s flush cadence. Classification
+    // failure degrades to "unknown" inside classifyPaste, never blocks.
     const onPaste = (e: ClipboardEvent): void => {
       const text = e.clipboardData?.getData("text") ?? "";
       if (text.length > PASTE_BURST_CHARS) {
-        enqueue("integrity.paste_burst", {
-          chars: Math.min(text.length, 1_000_000), // schema ceiling
-          target: classifyPanel(e.target),
+        const chars = Math.min(text.length, 1_000_000); // schema ceiling
+        const target = classifyPanel(e.target);
+        void classifyPaste(text).then((provenance) => {
+          enqueue("integrity.paste_burst", { chars, target, provenance });
         });
       }
     };
@@ -207,6 +212,28 @@ export function useIntegrityMonitor(sessionId: string, enabled: boolean): void {
       wasFullscreen = now;
     };
 
+    // ── Extended-display detection (detector v5, best-effort) ───────────────
+    // screen.isExtended (Window Management API, Chromium) — true when more
+    // than one display is connected. Emitted once per observed state change
+    // (initial `true` counts as a change from the assumed single-display
+    // baseline). Browsers without the API never emit — same silent posture as
+    // every heuristic here.
+    let lastExtended: boolean | null = null;
+    const checkDisplays = (): void => {
+      try {
+        const ext = (window.screen as Screen & { isExtended?: boolean }).isExtended;
+        if (typeof ext !== "boolean") return;
+        if (lastExtended === null) {
+          lastExtended = ext;
+          if (ext) enqueue("integrity.display_change", { extended: true });
+        } else if (ext !== lastExtended) {
+          lastExtended = ext;
+          enqueue("integrity.display_change", { extended: ext });
+        }
+      } catch { /* ignore */ }
+    };
+    checkDisplays();
+
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("focus", onWindowFocus);
@@ -218,6 +245,7 @@ export function useIntegrityMonitor(sessionId: string, enabled: boolean): void {
 
     const flushTimer = window.setInterval(() => {
       checkDevtools();
+      checkDisplays(); // re-check: a display attached mid-session flips isExtended
       flush();
     }, FLUSH_INTERVAL_MS);
 

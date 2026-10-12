@@ -4,6 +4,7 @@ import {
   getDeliverable, saveDeliverable,
   type DeliverableData, type DeliverableStatus,
 } from "@/lib/api";
+import { registerSandboxText } from "@/lib/paste-provenance";
 import { color, font, radius } from "@/styles/tokens";
 import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
 import Button from "@/components/ui/Button";
@@ -47,6 +48,16 @@ export default function DeliverablePanel({ sessionId }: Props) {
     setData((prev) => ({ ...emptyData(fields), ...prev }));
     // fields derives solely from deliverableComponents — deliberately the only dep.
   }, [deliverableComponents]);
+  // Paste provenance (detector v5): the candidate's own draft is legitimate
+  // copy material (they commonly copy a section out and paste it back in).
+  // Debounced — not per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      for (const v of Object.values(data)) if (v) registerSandboxText(v);
+    }, 1_000);
+    return () => clearTimeout(t);
+  }, [data]);
+
   const [status, setStatus] = useState<DeliverableStatus | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

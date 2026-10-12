@@ -46,6 +46,39 @@ interface FaceDetectorLike {
   detect(source: CanvasImageSource): Promise<unknown[]>;
 }
 
+// ── Virtual-camera heuristic (detector v5) ──────────────────────────────────
+// Device labels are only populated AFTER a granted getUserMedia call, so this
+// check lives here (consented v2 sessions are the only place a camera
+// permission exists). Matches a fixed product-class list and reports the
+// CLASS, never the raw label. A motivated fraudster renames their device —
+// this catches the default-config case and is one timestamp among many, never
+// a gate.
+const VIRTUAL_CAMERA_CLASSES: ReadonlyArray<{ cls: string; re: RegExp }> = [
+  { cls: "obs", re: /obs/i },
+  { cls: "manycam", re: /manycam/i },
+  { cls: "snap", re: /snap\s*camera/i },
+  { cls: "iriun", re: /iriun/i },
+  { cls: "epoccam", re: /epoccam/i },
+  { cls: "droidcam", re: /droidcam/i },
+  { cls: "generic_virtual", re: /virtual/i },
+];
+
+/** One-shot (per hook mount) scan of videoinput labels for known virtual-
+ *  camera products. Fire-and-forget; every failure is silent. */
+async function detectVirtualCamera(emit: (type: string, payload?: Record<string, unknown>) => void): Promise<void> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    for (const d of devices) {
+      if (d.kind !== "videoinput" || !d.label) continue;
+      const match = VIRTUAL_CAMERA_CLASSES.find((c) => c.re.test(d.label));
+      if (match) {
+        emit("integrity.virtual_camera", { label_class: match.cls });
+        return; // at most one emission
+      }
+    }
+  } catch { /* silent */ }
+}
+
 /** One sample's derived booleans (no pixels retained beyond the call). */
 function analyzeFrame(ctx: CanvasRenderingContext2D): { foreground: boolean } {
   const { data } = ctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H);
@@ -107,9 +140,11 @@ export function useWebcamPresence(sessionId: string, enabled: boolean): void {
     let multiStreak = 0;
     let multiEmitted = false;
 
-    const emit = (type: string): void => {
-      // Signal-only (no payload) — derived boolean, nothing else, ever.
-      void postIntegrityEvents(sessionId, [{ type, ts: Date.now() }]);
+    const emit = (type: string, payload?: Record<string, unknown>): void => {
+      // Derived signals only — booleans / fixed-class identifiers, never pixels.
+      void postIntegrityEvents(sessionId, [
+        { type, ts: Date.now(), ...(payload !== undefined ? { payload } : {}) },
+      ]);
     };
 
     const sample = async (): Promise<void> => {
@@ -166,6 +201,8 @@ export function useWebcamPresence(sessionId: string, enabled: boolean): void {
         stream = null;
         return;
       }
+      // Permission granted → labels are now populated; one-shot scan.
+      void detectVirtualCamera(emit);
       try {
         video = document.createElement("video"); // offscreen — never in the DOM
         video.muted = true;
