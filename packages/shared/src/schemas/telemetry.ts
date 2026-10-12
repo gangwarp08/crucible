@@ -46,6 +46,13 @@ export const INTEGRITY_EVENT_TYPES = [
   // start (lib/integrity.ts). Cross-checked server-side against the IP-derived
   // country (suspicion-score.ts geo_tz_mismatch). Informational, never scored.
   "integrity.client_env",
+  // Verification slice (detector v5) — typing-dynamics window features.
+  // Emitted ONLY by consented v2 sessions (lib/typing-dynamics.ts): aggregated
+  // per-minute rhythm statistics (inter-key intervals, backspace ratio). The
+  // raw keystroke stream — timings AND key identities — never leaves the
+  // browser; key identity is never even recorded. Server-side drift detection
+  // (services/typing-drift.ts) authors integrity.typing_drift from these.
+  "integrity.typing_window",
   // Verification slice (detector v5) — environment-integrity signals.
   // display_change: the screen configuration changed (an extra display was
   // attached/present — a classic second-screen setup). Emitted once per state
@@ -80,6 +87,11 @@ export const SERVER_INTEGRITY_EVENT_TYPES = [
   "integrity.geo",
   "integrity.ip_change",
   "integrity.rate_capped",
+  // Verification slice (detector v5) — typing-rhythm step change, derived
+  // server-side (services/typing-drift.ts) from the client's typing_window
+  // feature stream. Server-authored: a client posting one is spoofing.
+  //   integrity.typing_drift {baseline_mean_ms, window_mean_ms, windows}
+  "integrity.typing_drift",
 ] as const;
 
 export type ServerIntegrityEventType = (typeof SERVER_INTEGRITY_EVENT_TYPES)[number];
@@ -155,6 +167,25 @@ export const IntegrityEventSchema = z.discriminatedUnion("type", [
       .object({
         tz_offset_minutes: z.number().int().min(-1440).max(1440),
         tz_name: z.string().min(1).max(64).nullable(),
+      })
+      .strict(),
+  }),
+  // Verification slice (detector v5) — typing-dynamics window features.
+  // Aggregated rhythm statistics over a ~60s window; raw keystrokes (timing
+  // and identity) never leave the browser. n is the keydown count in the
+  // window (windows under the client's minimum are not posted).
+  z.object({
+    type: z.literal("integrity.typing_window"),
+    ts: ClientTs,
+    payload: z
+      .object({
+        n: z.number().int().min(1).max(10_000),
+        mean_iki_ms: z.number().min(0).max(60_000),
+        std_iki_ms: z.number().min(0).max(60_000),
+        median_iki_ms: z.number().min(0).max(60_000),
+        backspace_ratio: z.number().min(0).max(1),
+        bursts: z.number().int().min(0).max(10_000),
+        pauses: z.number().int().min(0).max(10_000),
       })
       .strict(),
   }),
