@@ -76,9 +76,9 @@ export default function Editor({ sessionId, path, content, onChange }: Props) {
   const provTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     registerSandboxText(content);
-    // path change = file open; content-only changes are covered by handleChange's
-    // debounced registration below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // path change = file open; content-only changes are covered by
+    // handleChange's debounced registration below (deliberately not a dep —
+    // re-registering the full file per keystroke would be wasteful).
   }, [path]);
 
   const handleChange = useCallback(
