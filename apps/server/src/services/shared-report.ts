@@ -37,6 +37,12 @@ import { z } from "zod";
 import { supabase } from "./supabase.js";
 import { computeSuspicionScore, type SuspicionEventInput } from "./suspicion-score.js";
 import {
+  computeVerificationConfidence,
+  type ConfidenceEventInput,
+} from "./verification-confidence.js";
+import { readIdentityStatus } from "./proctoring-v2.js";
+import { env } from "../env.js";
+import {
   AI_FLUENCY_COMPETENCY,
   aiFluencyPlacement,
 } from "./ai-fluency.js";
@@ -101,6 +107,19 @@ export const SharedReportSchema = z
     suspicion: z
       .object({
         score: z.number(),
+        version: z.string(),
+        informational: z.literal(true),
+      })
+      .strict(),
+    // Verification confidence (slice V5) — same posture as suspicion: the
+    // aggregate only. Component breakdown, evidence seqs, identity status,
+    // and continuity similarities are recruiter-only and must not leave.
+    // score null + assessed_max 0 = nothing was assessable (pre-pipeline
+    // session); assessed_max tells a reader how much capture backed the score.
+    verification_confidence: z
+      .object({
+        score: z.number().nullable(),
+        assessed_max: z.number(),
         version: z.string(),
         informational: z.literal(true),
       })
@@ -235,6 +254,14 @@ export async function buildSharedReport(
   const suspicion = computeSuspicionScore(
     (eventsRes.data ?? []) as unknown as SuspicionEventInput[],
   );
+  // Verification confidence (V5): aggregate only — the identity status feeds
+  // the computation here and is then DROPPED (recruiter-only; it must not
+  // appear in this payload, and the strict parse below enforces that).
+  const identity = await readIdentityStatus(sessionId).catch(() => null);
+  const verification = computeVerificationConfidence(
+    (eventsRes.data ?? []) as unknown as ConfidenceEventInput[],
+    { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv: null },
+  );
 
   // Final gate: strict parse = allowlist. A stray internal field anywhere in
   // this object throws here instead of leaving the building.
@@ -264,6 +291,12 @@ export async function buildSharedReport(
     suspicion: {
       score: suspicion.score,
       version: suspicion.version,
+      informational: true,
+    },
+    verification_confidence: {
+      score: verification.score,
+      assessed_max: verification.assessed_max,
+      version: verification.version,
       informational: true,
     },
     share: { expires_at: expiresAt },

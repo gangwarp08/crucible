@@ -656,6 +656,69 @@ export async function getSuspicionReport(sessionId: string): Promise<SuspicionRe
   }
 }
 
+// ── Verification confidence (slice V5 — recruiter-only, informational) ──────
+
+export interface VerificationComponent {
+  kind: string;
+  points: number;
+  max: number;
+  status: "assessed" | "not_assessed";
+  evidenceSeqs: number[];
+  note: string;
+}
+
+export interface VerificationReport {
+  /** 0–100 normalized over assessed components; null = nothing assessable. */
+  score: number | null;
+  assessedMax: number;
+  points: number;
+  components: VerificationComponent[];
+  version: string;
+}
+
+/** Fetch the server-computed verification confidence
+ *  (GET /api/review/sessions/:id/verification). Returns null on ANY failure —
+ *  including 404 from older deploys — so the panel can quietly not render. */
+export async function getVerificationReport(
+  sessionId: string,
+): Promise<VerificationReport | null> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/review/sessions/${sessionId}/verification`, {
+      headers: orgKeyHeader(),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { verification?: Record<string, unknown> };
+    const v = body.verification;
+    if (typeof v !== "object" || v === null) return null;
+    const rawComponents = Array.isArray(v["components"]) ? v["components"] : [];
+    const components: VerificationComponent[] = [];
+    for (const c of rawComponents) {
+      if (typeof c !== "object" || c === null) continue;
+      const o = c as Record<string, unknown>;
+      if (typeof o["kind"] !== "string") continue;
+      components.push({
+        kind: o["kind"],
+        points: typeof o["points"] === "number" ? o["points"] : 0,
+        max: typeof o["max"] === "number" ? o["max"] : 0,
+        status: o["status"] === "assessed" ? "assessed" : "not_assessed",
+        evidenceSeqs: Array.isArray(o["evidence_seqs"])
+          ? o["evidence_seqs"].filter((s): s is number => typeof s === "number")
+          : [],
+        note: typeof o["note"] === "string" ? o["note"] : "",
+      });
+    }
+    return {
+      score: typeof v["score"] === "number" ? v["score"] : null,
+      assessedMax: typeof v["assessed_max"] === "number" ? v["assessed_max"] : 0,
+      points: typeof v["points"] === "number" ? v["points"] : 0,
+      components,
+      version: typeof v["version"] === "string" ? v["version"] : "?",
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Recruiter review ────────────────────────────────────────────────────────
 
 export interface ReviewSession {

@@ -13,6 +13,7 @@
 // deny-all RLS posture is the DB backstop — see migration 0019).
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
+import { env } from "../env.js";
 import { supabase } from "../services/supabase.js";
 import {
   requireOrg,
@@ -46,6 +47,10 @@ import {
   computeNetworkSummary,
   type SuspicionEventInput,
 } from "../services/suspicion-score.js";
+import {
+  computeVerificationConfidence,
+  type ConfidenceEventInput,
+} from "../services/verification-confidence.js";
 import { readIdentityStatus } from "../services/proctoring-v2.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
@@ -424,6 +429,64 @@ export async function reviewRoutes(server: FastifyInstance) {
         // Must NEVER reach the public shared report (allowlist has no
         // network field; verify-geo-integrity.ts asserts it).
         network: computeNetworkSummary(events),
+      });
+    },
+  );
+
+  // ─── Verification confidence (slice V5 — informational) ─────────────────
+  // Recomputes the deterministic verification-confidence score on demand from
+  // the session's integrity.*/identity.* events + identity status. Same
+  // posture as /suspicion: INFORMATIONAL ONLY, recruiter-facing component
+  // breakdown, never touches evidence/evaluations, and only
+  // {score, assessed_max, version} may reach the public shared report.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/verification",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const [sessRes, eventsRes] = await Promise.all([
+        supabase.from("sessions").select("id, org_id").eq("id", id).maybeSingle(),
+        supabase
+          .from("events")
+          .select("seq, type, ts, payload")
+          .eq("session_id", id)
+          .or("type.like.integrity.*,type.like.identity.*")
+          .order("seq", { ascending: true })
+          .limit(1000),
+      ]);
+
+      if (sessRes.error) {
+        server.log.error({ err: sessRes.error, id }, "[review] verification: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (
+        !sessRes.data ||
+        !orgCanAccess(request.org, (sessRes.data as { org_id?: string | null }).org_id)
+      ) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (eventsRes.error) {
+        server.log.error({ err: eventsRes.error, id }, "[review] verification: events load failed");
+        return reply.status(500).send({ error: "Failed to load events" });
+      }
+
+      const events = (eventsRes.data ?? []) as unknown as ConfidenceEventInput[];
+      const identity = await readIdentityStatus(id);
+      return reply.send({
+        verification: computeVerificationConfidence(events, {
+          faceMatchThreshold: env.FACE_MATCH_THRESHOLD,
+          identity,
+          // BGV feeds in with slice V9 (bgv_checks lookup); null = not_assessed.
+          bgv: null,
+        }),
+        truncated: events.length === 1000,
       });
     },
   );

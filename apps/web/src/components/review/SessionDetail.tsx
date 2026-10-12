@@ -27,6 +27,7 @@ import FilesDiffPanel from "./FilesDiffPanel";
 import Timeline, { REVEAL_EVENT, scrollToHighlight } from "./Timeline";
 import CostPanel from "./CostPanel";
 import SuspicionPanel, { suspicionColor } from "./SuspicionPanel";
+import VerificationPanel from "./VerificationPanel";
 
 // xterm needs the browser — load client-side only.
 const TerminalReplay = dynamic(() => import("./TerminalReplay"), { ssr: false });
@@ -292,6 +293,10 @@ export default function SessionDetail({ detail, onRefetch }: Props) {
               events={events}
               sessionStart={viewDetail.session.created_at}
             />
+            {/* Verification confidence (slice V5) — informational aggregate of
+                identity/continuity/environment evidence, never scored. Renders
+                nothing on older servers without the verification route. */}
+            <VerificationPanel sessionId={viewDetail.session.id} />
             <Timeline events={events} sessionStart={viewDetail.session.created_at} />
             <CostPanel
               cost={viewDetail.cost}
