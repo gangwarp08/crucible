@@ -172,7 +172,12 @@ export async function startSessionClock(sessionId: string): Promise<StartClockRe
   }
 
   const now = Date.now();
-  const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
+  // V10: honor the per-session clock override (reverify micro-sessions),
+  // persisted into scenario_state at creation — survives rehydrate.
+  const overrideMin = entry.scenarioState["timeout_min_override"];
+  const timeoutMs =
+    (typeof overrideMin === "number" && overrideMin > 0 ? overrideMin : env.SESSION_TIMEOUT_MIN) *
+    60_000;
   const newDeadline = new Date(now + timeoutMs);
 
   // Re-anchor proactive beats: preserve each beat's offset-from-creation (which
@@ -244,8 +249,12 @@ export async function createSandbox(
   // via difficulty-routing.ts BEFORE this call). Stamped once on the sessions
   // insert; never updated afterwards (running sessions are never re-routed).
   difficultyBand?: string,
+  // V10: per-session work-clock override in minutes (reverify micro-sessions
+  // run REVERIFY_TIMEOUT_MIN instead of SESSION_TIMEOUT_MIN). Persisted into
+  // scenario_state so startSessionClock re-arms with the same length.
+  timeoutMinOverride?: number,
 ): Promise<string> {
-  const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
+  const timeoutMs = (timeoutMinOverride ?? env.SESSION_TIMEOUT_MIN) * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
   const createdAtMs = Date.now();
 
@@ -307,6 +316,14 @@ export async function createSandbox(
         `[sandbox] scenarioId=${scenarioId} did not resolve — proceeding with empty scenario_state`,
       );
     }
+  }
+
+  // V10: persist the clock override (reverify micro-sessions) so
+  // startSessionClock re-arms with the same short length after orientation
+  // and across rehydrates. Set AFTER the scenario branch (which rebuilds
+  // scenarioState wholesale).
+  if (timeoutMinOverride !== undefined && timeoutMinOverride > 0) {
+    scenarioState["timeout_min_override"] = timeoutMinOverride;
   }
 
   // H3 (6.8c): default-deny candidate egress. The assessment needs ZERO

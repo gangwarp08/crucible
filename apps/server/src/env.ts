@@ -65,6 +65,11 @@ const EnvSchema = z.object({
   // simply not written; nothing else changes). Server-only, never the browser.
   PROVENANCE_SIGNING_KEY: z.string().min(32).optional(),
 
+  // Verification pipeline (slice V10): work-clock minutes for a day-one
+  // reverify micro-session (kind='reverify' links) — short by design; the
+  // session exists to re-anchor identity, not to re-assess.
+  REVERIFY_TIMEOUT_MIN: z.coerce.number().int().positive().default(10),
+
   // Verification continuity (slice V4, dormant): cosine-similarity floor for
   // the periodic face re-match against the enrolment anchor. Samples below it
   // feed the integrity.face_mismatch streak rule (2 consecutive → one event).

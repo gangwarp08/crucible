@@ -88,6 +88,28 @@ export default function VerificationPanel({ sessionId }: Props) {
         evidence, not misconduct.
       </div>
 
+      {report.reverify && (
+        <div
+          style={{
+            fontSize: 12,
+            marginBottom: 12,
+            padding: "6px 10px",
+            borderRadius: radius.sm,
+            border: `1px solid ${color.border.default}`,
+            color:
+              report.reverify.anchorSimilarity !== null && report.reverify.anchorSimilarity >= 0.32
+                ? color.success.base
+                : color.warn.base,
+          }}
+        >
+          Day-one re-verification:{" "}
+          {report.reverify.anchorSimilarity !== null
+            ? `anchor similarity ${report.reverify.anchorSimilarity.toFixed(2)}`
+            : "comparison not available"}{" "}
+          · original session {report.reverify.originalSessionId.slice(0, 8)}…
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {report.components.map((c) => {
           const label = COMPONENT_LABELS[c.kind] ?? c.kind;

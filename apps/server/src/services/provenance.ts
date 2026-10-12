@@ -36,6 +36,7 @@ import {
 import { SUSPICION_DETECTOR_VERSION } from "./suspicion-score.js";
 import { readIdentityStatus } from "./proctoring-v2.js";
 import { readBgvForSession } from "./bgv/index.js";
+import { readReverifyInfoBySession } from "./reverify.js";
 
 export const PROVENANCE_RECORD_VERSION = 1;
 
@@ -338,6 +339,9 @@ export async function writeProvenanceForSession(sessionId: string): Promise<void
       (events ?? []) as unknown as ConfidenceEventInput[],
       { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv },
     );
+    // V10: a reverify micro-session's record references the ORIGINAL session
+    // (chain extension past the hire). Null for standard sessions.
+    const reverify = await readReverifyInfoBySession(sessionId).catch(() => null);
     await writeProvenanceRecord(sessionId, {
       verification: {
         score: verification.score,
@@ -348,6 +352,7 @@ export async function writeProvenanceForSession(sessionId: string): Promise<void
         suspicion_detector: SUSPICION_DETECTOR_VERSION,
         verification_confidence: VERIFICATION_CONFIDENCE_VERSION,
       },
+      reverifyOf: reverify?.originalSessionId ?? null,
     });
   } catch (err) {
     console.error(

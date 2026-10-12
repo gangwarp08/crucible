@@ -674,6 +674,8 @@ export interface VerificationReport {
   points: number;
   components: VerificationComponent[];
   version: string;
+  /** V10: "same person on day one" comparison; null when none recorded. */
+  reverify: { originalSessionId: string; anchorSimilarity: number | null } | null;
 }
 
 /** Fetch the server-computed verification confidence
@@ -687,9 +689,23 @@ export async function getVerificationReport(
       headers: orgKeyHeader(),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { verification?: Record<string, unknown> };
+    const body = (await res.json()) as {
+      verification?: Record<string, unknown>;
+      reverify?: unknown;
+    };
     const v = body.verification;
     if (typeof v !== "object" || v === null) return null;
+    let reverify: VerificationReport["reverify"] = null;
+    if (typeof body.reverify === "object" && body.reverify !== null) {
+      const r = body.reverify as Record<string, unknown>;
+      if (typeof r["original_session_id"] === "string") {
+        reverify = {
+          originalSessionId: r["original_session_id"],
+          anchorSimilarity:
+            typeof r["anchor_similarity"] === "number" ? r["anchor_similarity"] : null,
+        };
+      }
+    }
     const rawComponents = Array.isArray(v["components"]) ? v["components"] : [];
     const components: VerificationComponent[] = [];
     for (const c of rawComponents) {
@@ -713,6 +729,7 @@ export async function getVerificationReport(
       points: typeof v["points"] === "number" ? v["points"] : 0,
       components,
       version: typeof v["version"] === "string" ? v["version"] : "?",
+      reverify,
     };
   } catch {
     return null;

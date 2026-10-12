@@ -48,6 +48,10 @@ import {
   recordContinuitySample,
   MAX_EMBED_DIM,
 } from "../services/face-continuity.js";
+import {
+  readReverifyInfoBySession,
+  recordReverifyComparison,
+} from "../services/reverify.js";
 
 // Back-compat aliases (the config endpoint predates services/proctoring-v2.ts;
 // the constants now live there as the single source of truth).
@@ -326,6 +330,18 @@ export async function proctoringRoutes(server: FastifyInstance) {
             bodyParse.data.selfieEmbedding,
             bodyParse.data.embeddingModelVersion,
           );
+          // V10: in a reverify micro-session, the SAME fresh embedding is also
+          // compared against the ORIGINAL session's anchor ("same person on
+          // day one"). Fail-soft everywhere dormant; never blocks.
+          const reverify = await readReverifyInfoBySession(sessionId);
+          if (reverify) {
+            await recordReverifyComparison(
+              sessionId,
+              reverify.originalSessionId,
+              bodyParse.data.selfieEmbedding,
+              bodyParse.data.embeddingModelVersion,
+            );
+          }
         }
         return reply.send({
           verified: result.verified,

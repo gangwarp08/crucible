@@ -62,6 +62,8 @@ import {
   EvidenceQuestionsError,
 } from "../services/evidence-questions.js";
 import { readBgvForSession } from "../services/bgv/index.js";
+import { reverifyEnabledFromSettings, readReverifyStatus } from "../services/reverify.js";
+import { readAnchor } from "../services/face-continuity.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
   createReportShare,
@@ -499,6 +501,10 @@ export async function reviewRoutes(server: FastifyInstance) {
           bgv,
         }),
         truncated: events.length === 1000,
+        // V10: "same person on day one" — the reverify comparison involving
+        // this session (as micro-session or as original). Null everywhere
+        // dormant; the panel renders no row then.
+        reverify: await readReverifyStatus(id),
       });
     },
   );
@@ -593,6 +599,82 @@ export async function reviewRoutes(server: FastifyInstance) {
         const msg = err instanceof EvidenceQuestionsError ? err.message : "generation_failed";
         server.log.error({ err: msg, id }, "[review] evidence-questions failed");
         return reply.status(502).send({ error: "evidence_questions_failed" });
+      }
+    },
+  );
+
+  // ─── Day-one reverify link (slice V10) ───────────────────────────────────
+  // Mints a kind='reverify' session link tied to this (original) session:
+  // same scenario family routed easy, short REVERIFY_TIMEOUT_MIN clock at
+  // creation, identity step compares the fresh embedding to THIS session's
+  // anchor. Gated on settings.posthire_reverify_enabled + an anchor existing
+  // (no anchor → nothing to compare → 409, mint refused).
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/reverify-link",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) return reply.status(503).send({ error: "Supabase unavailable" });
+      const id = idParse.data.id;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, org_id, scenario_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, id }, "[review] reverify-link: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      const sessRow = sess as { org_id?: string | null; scenario_id?: string | null } | null;
+      if (!sessRow || !orgCanAccess(request.org, sessRow.org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+
+      // Org opt-in gate — fresh settings read, fail closed.
+      const { data: orgRow, error: orgErr } = await supabase
+        .from("orgs")
+        .select("settings")
+        .eq("id", sessRow.org_id as string)
+        .maybeSingle();
+      if (
+        orgErr ||
+        !reverifyEnabledFromSettings((orgRow as { settings?: unknown } | null)?.settings)
+      ) {
+        return reply.status(403).send({ error: "reverify_disabled" });
+      }
+
+      // The comparison target must exist, or the micro-session is pointless.
+      const anchor = await readAnchor(id);
+      if (!anchor) return reply.status(409).send({ error: "no_anchor" });
+
+      // Candidate label carries over from the original link when one exists.
+      const { data: origLink } = await supabase
+        .from("session_links")
+        .select("candidate_label")
+        .eq("session_id", id)
+        .maybeSingle();
+      const label =
+        (origLink as { candidate_label?: string } | null)?.candidate_label ?? "day-one-reverify";
+
+      try {
+        const { token, link } = await createSessionLink({
+          candidateLabel: label,
+          scenarioId: sessRow.scenario_id ?? null,
+          orgId: sessRow.org_id as string,
+          difficultyBand: "easy",
+          reverify: { originalSessionId: id },
+        });
+        return reply.status(201).send({ token, link });
+      } catch (err) {
+        if (err instanceof SessionLinkError) {
+          // Pre-0030 database surfaces here (insert rejected the kind column).
+          return reply.status(409).send({ error: "reverify_unavailable", message: err.message });
+        }
+        throw err;
       }
     },
   );
