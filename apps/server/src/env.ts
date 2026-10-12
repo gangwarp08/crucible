@@ -44,6 +44,13 @@ const EnvSchema = z.object({
   // burning LiteLLM + E2B budget.
   INVITE_CODE: z.string().min(1).optional(),
 
+  // Verification pipeline (slice V3): which IDV adapter performs the ID↔selfie
+  // compare (services/idv/). Default is our own gateway-vision compare (no
+  // vendor contract, budget-bounded by the session key). persona / hyperverge
+  // are documented stubs until a vendor contract exists — selecting one makes
+  // identity verification fail soft (informational; never blocks a session).
+  IDV_PROVIDER: z.enum(["gateway-vision", "persona", "hyperverge"]).default("gateway-vision"),
+
   // Shared secret for the partner outcome webhook (POST /api/outcomes, Slice
   // 5.5). Server-only. When unset, the webhook is DISABLED (returns 503) so an
   // unconfigured deploy can't accept unauthenticated outcome writes; the CSV
