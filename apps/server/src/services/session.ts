@@ -6,6 +6,7 @@ import { runAnalysisAgent } from "./analysis-agent.js";
 import { clearScenarioCache } from "./persona-agent.js";
 import { clearTypingDrift } from "./typing-drift.js";
 import { clearFaceContinuity } from "./face-continuity.js";
+import { writeProvenanceForSession } from "./provenance.js";
 
 // "orphaned" is the orphan-teardown reason — set by sandbox.ts's
 // orphanTeardown() when DELETE /sessions/:id runs against a session
@@ -80,6 +81,11 @@ export async function expireSession(
       }
     })(),
   ]);
+
+  // Fire-and-forget the signed provenance record (slice V6). Runs after the
+  // telemetry flush so the chain covers session.ended. Silent no-op when
+  // PROVENANCE_SIGNING_KEY is unset or migration 0029 is absent.
+  void writeProvenanceForSession(sessionId);
 
   // Fire-and-forget the Analysis Agent for scenario-bound sessions. Runs
   // after telemetry flush + finalizeSession so all events are queryable

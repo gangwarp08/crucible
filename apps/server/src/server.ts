@@ -14,6 +14,7 @@ import { proctoringRoutes } from "./routes/proctoring.js";
 import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
 import { reportRoutes } from "./routes/report.js";
+import { provenanceRoutes } from "./routes/provenance.js";
 import { queryRoutes } from "./routes/query.js";
 import { messageRoutes } from "./routes/messages.js";
 import { docsRoutes } from "./routes/docs.js";
@@ -118,6 +119,9 @@ export async function buildServer() {
   await server.register(reviewRoutes, { prefix: "/api/review" });
   // PUBLIC shared candidate report — token IS the auth (P4.3); no org key.
   await server.register(reportRoutes, { prefix: "/api/report" });
+  // PUBLIC provenance verification key (slice V6) — registers its own full
+  // /api/provenance/* path; 404s when PROVENANCE_SIGNING_KEY is unset.
+  await server.register(provenanceRoutes);
   await server.register(outcomesRoutes, { prefix: "/api" });
   await server.register(contactRoutes, { prefix: "/api" });
   // Admin-only, read-only validity instrumentation (registers full

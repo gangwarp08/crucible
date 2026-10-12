@@ -52,6 +52,11 @@ import {
   type ConfidenceEventInput,
 } from "../services/verification-confidence.js";
 import { readIdentityStatus } from "../services/proctoring-v2.js";
+import {
+  readProvenanceRecord,
+  verifyStoredChain,
+  getSigningKeys,
+} from "../services/provenance.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
   createReportShare,
@@ -487,6 +492,51 @@ export async function reviewRoutes(server: FastifyInstance) {
           bgv: null,
         }),
         truncated: events.length === 1000,
+      });
+    },
+  );
+
+  // ─── Provenance record (slice V6 — signed telemetry binding) ────────────
+  // Returns the stored signed record plus a live chain re-derivation
+  // (chain_intact) so a reviewer can see at a glance that today's event
+  // stream still reproduces the signed head. 404 when no record exists
+  // (pre-slice sessions, signing disabled, or migration 0029 absent).
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/provenance",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, org_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, id }, "[review] provenance: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (!sess || !orgCanAccess(request.org, (sess as { org_id?: string | null }).org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+
+      const stored = await readProvenanceRecord(id);
+      if (!stored) return reply.status(404).send({ error: "no_provenance_record" });
+      const keys = getSigningKeys();
+      return reply.send({
+        record: stored.record,
+        signature: stored.signature,
+        key_id: stored.key_id,
+        created_at: stored.created_at,
+        chain_intact: await verifyStoredChain(stored),
+        public_key_spki_base64:
+          keys && keys.keyId === stored.key_id ? keys.publicKeyBase64 : null,
       });
     },
   );
