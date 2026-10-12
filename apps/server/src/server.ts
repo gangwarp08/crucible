@@ -15,6 +15,7 @@ import { chatRoutes } from "./routes/chat.js";
 import { reviewRoutes } from "./routes/review.js";
 import { reportRoutes } from "./routes/report.js";
 import { provenanceRoutes } from "./routes/provenance.js";
+import { bgvRoutes } from "./routes/bgv.js";
 import { queryRoutes } from "./routes/query.js";
 import { messageRoutes } from "./routes/messages.js";
 import { docsRoutes } from "./routes/docs.js";
@@ -122,6 +123,9 @@ export async function buildServer() {
   // PUBLIC provenance verification key (slice V6) — registers its own full
   // /api/provenance/* path; 404s when PROVENANCE_SIGNING_KEY is unset.
   await server.register(provenanceRoutes);
+  // BGV claims verification (slice V9) — registers full /api/review/bgv-* and
+  // /api/bgv/webhook/* paths itself; org-flag-gated, stub provider by default.
+  await server.register(bgvRoutes);
   await server.register(outcomesRoutes, { prefix: "/api" });
   await server.register(contactRoutes, { prefix: "/api" });
   // Admin-only, read-only validity instrumentation (registers full

@@ -35,6 +35,7 @@ import {
 } from "./verification-confidence.js";
 import { SUSPICION_DETECTOR_VERSION } from "./suspicion-score.js";
 import { readIdentityStatus } from "./proctoring-v2.js";
+import { readBgvForSession } from "./bgv/index.js";
 
 export const PROVENANCE_RECORD_VERSION = 1;
 
@@ -322,7 +323,7 @@ export async function writeProvenanceRecord(
 export async function writeProvenanceForSession(sessionId: string): Promise<void> {
   try {
     if (!getSigningKeys() || !supabase) return; // disabled — skip the reads too
-    const [{ data: events }, identity] = await Promise.all([
+    const [{ data: events }, identity, bgv] = await Promise.all([
       supabase
         .from("events")
         .select("seq, type, ts, payload")
@@ -331,10 +332,11 @@ export async function writeProvenanceForSession(sessionId: string): Promise<void
         .order("seq", { ascending: true })
         .limit(1000),
       readIdentityStatus(sessionId).catch(() => null),
+      readBgvForSession(sessionId).catch(() => null),
     ]);
     const verification = computeVerificationConfidence(
       (events ?? []) as unknown as ConfidenceEventInput[],
-      { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv: null },
+      { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv },
     );
     await writeProvenanceRecord(sessionId, {
       verification: {

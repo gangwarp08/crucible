@@ -42,6 +42,7 @@ import {
 } from "./verification-confidence.js";
 import { readIdentityStatus } from "./proctoring-v2.js";
 import { readProvenanceRecord } from "./provenance.js";
+import { readBgvForSession } from "./bgv/index.js";
 import { env } from "../env.js";
 import {
   AI_FLUENCY_COMPETENCY,
@@ -276,9 +277,10 @@ export async function buildSharedReport(
   // appear in this payload, and the strict parse below enforces that).
   const identity = await readIdentityStatus(sessionId).catch(() => null);
   const provenance = await readProvenanceRecord(sessionId).catch(() => null);
+  const bgv = await readBgvForSession(sessionId).catch(() => null);
   const verification = computeVerificationConfidence(
     (eventsRes.data ?? []) as unknown as ConfidenceEventInput[],
-    { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv: null },
+    { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv },
   );
 
   // Final gate: strict parse = allowlist. A stray internal field anywhere in

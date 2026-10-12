@@ -61,6 +61,7 @@ import {
   getOrGenerateQuestions,
   EvidenceQuestionsError,
 } from "../services/evidence-questions.js";
+import { readBgvForSession } from "../services/bgv/index.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
   createReportShare,
@@ -487,13 +488,15 @@ export async function reviewRoutes(server: FastifyInstance) {
       }
 
       const events = (eventsRes.data ?? []) as unknown as ConfidenceEventInput[];
-      const identity = await readIdentityStatus(id);
+      const [identity, bgv] = await Promise.all([
+        readIdentityStatus(id),
+        readBgvForSession(id),
+      ]);
       return reply.send({
         verification: computeVerificationConfidence(events, {
           faceMatchThreshold: env.FACE_MATCH_THRESHOLD,
           identity,
-          // BGV feeds in with slice V9 (bgv_checks lookup); null = not_assessed.
-          bgv: null,
+          bgv,
         }),
         truncated: events.length === 1000,
       });

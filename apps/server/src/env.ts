@@ -51,6 +51,14 @@ const EnvSchema = z.object({
   // identity verification fail soft (informational; never blocks a session).
   IDV_PROVIDER: z.enum(["gateway-vision", "persona", "hyperverge"]).default("gateway-vision"),
 
+  // Verification pipeline (slice V9): which BGV adapter handles claims
+  // verification (services/bgv/). "stub" (default) resolves deterministically
+  // with no vendor contract; real vendors (truework, ongrid, …) plug in as
+  // adapter files. BGV_WEBHOOK_SECRET authorizes vendor result webhooks
+  // (POST /api/bgv/webhook/:provider) — unset = webhook disabled (503).
+  BGV_PROVIDER: z.enum(["stub"]).default("stub"),
+  BGV_WEBHOOK_SECRET: z.string().min(16).optional(),
+
   // Verification pipeline (slice V6): Ed25519 private key (base64 PKCS8 DER)
   // that signs session provenance records. Generate with
   // scripts/gen-provenance-key.ts. UNSET = provenance disabled (records are
