@@ -51,6 +51,13 @@ const EnvSchema = z.object({
   // identity verification fail soft (informational; never blocks a session).
   IDV_PROVIDER: z.enum(["gateway-vision", "persona", "hyperverge"]).default("gateway-vision"),
 
+  // Verification continuity (slice V4, dormant): cosine-similarity floor for
+  // the periodic face re-match against the enrolment anchor. Samples below it
+  // feed the integrity.face_mismatch streak rule (2 consecutive → one event).
+  // CALIBRATION-PENDING like the suspicion weights — and embedder-dependent
+  // (re-tune whenever EMBED_MODEL_VERSION changes client-side).
+  FACE_MATCH_THRESHOLD: z.coerce.number().min(-1).max(1).default(0.32),
+
   // Shared secret for the partner outcome webhook (POST /api/outcomes, Slice
   // 5.5). Server-only. When unset, the webhook is DISABLED (returns 503) so an
   // unconfigured deploy can't accept unauthenticated outcome writes; the CSV

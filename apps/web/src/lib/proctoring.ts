@@ -87,16 +87,22 @@ export interface IdentityVerifyResult {
   verified: boolean;
   /** 0–1 match confidence when the server provides one. */
   matchConfidence: number | null;
+  /** Continuity slice: the server stored the enrolment anchor embedding. */
+  anchorStored?: boolean;
 }
 
 /** Submit the two identity images the candidate explicitly captured
  *  (POST /sessions/:id/identity-verify). These are the ONLY frames that ever
  *  leave the browser; the server processes them ephemerally and stores only
- *  the derived result. Returns null on any failure — identity verification is
+ *  the derived result. The optional selfieEmbedding (continuity slice) is a
+ *  browser-computed vector — the enrolment anchor; when present and the org's
+ *  continuity path is live the server stores it (anchorStored: true in the
+ *  response). Returns null on any failure — identity verification is
  *  informational and never blocks the session. Never throws. */
 export async function postIdentityVerify(
   sessionId: string,
   images: { idImage: string; selfieImage: string }, // JPEG data URLs
+  selfieEmbedding?: { embedding: number[]; modelVersion: string } | null,
 ): Promise<IdentityVerifyResult | null> {
   try {
     const token = getSessionToken(sessionId);
@@ -106,17 +112,54 @@ export async function postIdentityVerify(
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify(images),
+      body: JSON.stringify({
+        ...images,
+        ...(selfieEmbedding
+          ? {
+              selfieEmbedding: selfieEmbedding.embedding,
+              embeddingModelVersion: selfieEmbedding.modelVersion,
+            }
+          : {}),
+      }),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { verified?: unknown; matchConfidence?: unknown };
+    const body = (await res.json()) as {
+      verified?: unknown; matchConfidence?: unknown; anchorStored?: unknown;
+    };
     if (typeof body.verified !== "boolean") return null;
     return {
       verified: body.verified,
       matchConfidence: typeof body.matchConfidence === "number" ? body.matchConfidence : null,
+      anchorStored: body.anchorStored === true,
     };
   } catch {
     return null;
+  }
+}
+
+// ── Continuity sampling (dormant — anchor-enrolled sessions only) ───────────
+
+/** Post one periodic continuity sample: the browser-computed embedding of the
+ *  current webcam frame (the frame itself never leaves the browser). The
+ *  server compares against the enrolment anchor and discards the vector.
+ *  Fire-and-forget; never throws. */
+export async function postContinuitySample(
+  sessionId: string,
+  embedding: number[],
+  modelVersion: string,
+): Promise<void> {
+  try {
+    const token = getSessionToken(sessionId);
+    await fetch(`${SERVER_URL}/sessions/${sessionId}/continuity`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ embedding, modelVersion }),
+    });
+  } catch {
+    /* silent — continuity is informational */
   }
 }
 

@@ -92,6 +92,14 @@ export const SERVER_INTEGRITY_EVENT_TYPES = [
   // feature stream. Server-authored: a client posting one is spoofing.
   //   integrity.typing_drift {baseline_mean_ms, window_mean_ms, windows}
   "integrity.typing_drift",
+  // Verification continuity (dormant, consented v2 + anchor only) — derived
+  // server-side (services/face-continuity.ts) by comparing the browser's
+  // periodic sample EMBEDDING against the session's enrolment anchor. The
+  // similarity is the only thing persisted; sample vectors are discarded.
+  //   integrity.face_match    {similarity}       (one per compared sample)
+  //   integrity.face_mismatch {similarity}       (streak below threshold)
+  "integrity.face_match",
+  "integrity.face_mismatch",
 ] as const;
 
 export type ServerIntegrityEventType = (typeof SERVER_INTEGRITY_EVENT_TYPES)[number];

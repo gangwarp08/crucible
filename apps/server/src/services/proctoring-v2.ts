@@ -37,8 +37,13 @@ export class ProctoringV2Error extends Error {
 
 /** Version stamp recorded alongside every consent decision (P6.1 "versioned
  *  consent recording"). Bump whenever CONSENT_TEXT changes so a recorded
- *  consent always identifies the exact text the candidate saw. */
-export const CONSENT_TEXT_VERSION = "1";
+ *  consent always identifies the exact text the candidate saw.
+ *  "1" → "2": verification continuity slice — the text now also covers (a)
+ *  the enrolment face embedding derived in-browser from the submitted selfie
+ *  plus the periodic embedding-based re-checks, and (b) typing-rhythm
+ *  statistics. Both are consent-gated captures, so a consent recorded against
+ *  v1 text must be distinguishable from one that covered them. */
+export const CONSENT_TEXT_VERSION = "2";
 
 /** Candidate-facing consent text — honest about exactly what is captured,
  *  what is derived, what is stored, and what declining means. DRAFT — counsel
@@ -52,10 +57,16 @@ export const CONSENT_TEXT =
   "session. Identity images are processed immediately and are not stored — " +
   "only the verification result (a match confidence and a verified yes/no) is " +
   "kept. Webcam frames never leave your browser; only derived presence " +
-  "signals (e.g. “no one visible”) are recorded. These signals are shown to " +
-  "reviewers as context and never change your competency score. If you " +
-  "decline, the session continues with standard passive checks only (tab " +
-  "focus, paste bursts, idle gaps) — no webcam, no ID capture.";
+  "signals (e.g. “no one visible”) are recorded. To confirm the same person " +
+  "stays in the session, your browser also derives a numeric signature (an " +
+  "embedding) from your selfie and from periodic webcam checks — the images " +
+  "stay on your device; only the signature and per-check match scores are " +
+  "kept, and you can request their deletion. Your typing rhythm (timing only " +
+  "— never what you type) is summarized into per-minute statistics for the " +
+  "same purpose. All of these signals are shown to reviewers as context and " +
+  "never change your competency score. If you decline, the session continues " +
+  "with standard passive checks only (tab focus, paste bursts, idle gaps) — " +
+  "no webcam, no ID capture, no typing-rhythm capture.";
 
 // ── Org flag ─────────────────────────────────────────────────────────────────
 

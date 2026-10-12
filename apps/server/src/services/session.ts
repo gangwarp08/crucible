@@ -5,6 +5,7 @@ import { logEvent, flushTelemetry } from "./telemetry.js";
 import { runAnalysisAgent } from "./analysis-agent.js";
 import { clearScenarioCache } from "./persona-agent.js";
 import { clearTypingDrift } from "./typing-drift.js";
+import { clearFaceContinuity } from "./face-continuity.js";
 
 // "orphaned" is the orphan-teardown reason — set by sandbox.ts's
 // orphanTeardown() when DELETE /sessions/:id runs against a session
@@ -35,6 +36,7 @@ export async function expireSession(
   entry.status = "completed";
   clearScenarioCache(sessionId);
   clearTypingDrift(sessionId); // drop the in-memory typing-drift tracker
+  clearFaceContinuity(sessionId); // drop the cached anchor + mismatch streak
 
   // Emit the session.ended event and flush the full buffer to Supabase BEFORE
   // we start destroying infra — ensures telemetry arrives even if kill() throws.
