@@ -44,6 +44,39 @@ const EnvSchema = z.object({
   // burning LiteLLM + E2B budget.
   INVITE_CODE: z.string().min(1).optional(),
 
+  // Verification pipeline (slice V3): which IDV adapter performs the ID↔selfie
+  // compare (services/idv/). Default is our own gateway-vision compare (no
+  // vendor contract, budget-bounded by the session key). persona / hyperverge
+  // are documented stubs until a vendor contract exists — selecting one makes
+  // identity verification fail soft (informational; never blocks a session).
+  IDV_PROVIDER: z.enum(["gateway-vision", "persona", "hyperverge"]).default("gateway-vision"),
+
+  // Verification pipeline (slice V9): which BGV adapter handles claims
+  // verification (services/bgv/). "stub" (default) resolves deterministically
+  // with no vendor contract; real vendors (truework, ongrid, …) plug in as
+  // adapter files. BGV_WEBHOOK_SECRET authorizes vendor result webhooks
+  // (POST /api/bgv/webhook/:provider) — unset = webhook disabled (503).
+  BGV_PROVIDER: z.enum(["stub"]).default("stub"),
+  BGV_WEBHOOK_SECRET: z.string().min(16).optional(),
+
+  // Verification pipeline (slice V6): Ed25519 private key (base64 PKCS8 DER)
+  // that signs session provenance records. Generate with
+  // scripts/gen-provenance-key.ts. UNSET = provenance disabled (records are
+  // simply not written; nothing else changes). Server-only, never the browser.
+  PROVENANCE_SIGNING_KEY: z.string().min(32).optional(),
+
+  // Verification pipeline (slice V10): work-clock minutes for a day-one
+  // reverify micro-session (kind='reverify' links) — short by design; the
+  // session exists to re-anchor identity, not to re-assess.
+  REVERIFY_TIMEOUT_MIN: z.coerce.number().int().positive().default(10),
+
+  // Verification continuity (slice V4, dormant): cosine-similarity floor for
+  // the periodic face re-match against the enrolment anchor. Samples below it
+  // feed the integrity.face_mismatch streak rule (2 consecutive → one event).
+  // CALIBRATION-PENDING like the suspicion weights — and embedder-dependent
+  // (re-tune whenever EMBED_MODEL_VERSION changes client-side).
+  FACE_MATCH_THRESHOLD: z.coerce.number().min(-1).max(1).default(0.32),
+
   // Shared secret for the partner outcome webhook (POST /api/outcomes, Slice
   // 5.5). Server-only. When unset, the webhook is DISABLED (returns 503) so an
   // unconfigured deploy can't accept unauthenticated outcome writes; the CSV

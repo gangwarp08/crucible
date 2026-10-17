@@ -22,10 +22,9 @@
 //     logs. The dedicated call here surfaces the HTTP status ONLY.
 
 import { randomUUID } from "node:crypto";
-import { env } from "../env.js";
 import { supabase } from "./supabase.js";
 import { appendEvent } from "./events-direct.js";
-import { sessionRegistry } from "./registry.js";
+import { getIdvProvider } from "./idv/index.js";
 
 export class ProctoringV2Error extends Error {
   constructor(msg: string) {
@@ -38,8 +37,13 @@ export class ProctoringV2Error extends Error {
 
 /** Version stamp recorded alongside every consent decision (P6.1 "versioned
  *  consent recording"). Bump whenever CONSENT_TEXT changes so a recorded
- *  consent always identifies the exact text the candidate saw. */
-export const CONSENT_TEXT_VERSION = "1";
+ *  consent always identifies the exact text the candidate saw.
+ *  "1" → "2": verification continuity slice — the text now also covers (a)
+ *  the enrolment face embedding derived in-browser from the submitted selfie
+ *  plus the periodic embedding-based re-checks, and (b) typing-rhythm
+ *  statistics. Both are consent-gated captures, so a consent recorded against
+ *  v1 text must be distinguishable from one that covered them. */
+export const CONSENT_TEXT_VERSION = "2";
 
 /** Candidate-facing consent text — honest about exactly what is captured,
  *  what is derived, what is stored, and what declining means. DRAFT — counsel
@@ -53,10 +57,16 @@ export const CONSENT_TEXT =
   "session. Identity images are processed immediately and are not stored — " +
   "only the verification result (a match confidence and a verified yes/no) is " +
   "kept. Webcam frames never leave your browser; only derived presence " +
-  "signals (e.g. “no one visible”) are recorded. These signals are shown to " +
-  "reviewers as context and never change your competency score. If you " +
-  "decline, the session continues with standard passive checks only (tab " +
-  "focus, paste bursts, idle gaps) — no webcam, no ID capture.";
+  "signals (e.g. “no one visible”) are recorded. To confirm the same person " +
+  "stays in the session, your browser also derives a numeric signature (an " +
+  "embedding) from your selfie and from periodic webcam checks — the images " +
+  "stay on your device; only the signature and per-check match scores are " +
+  "kept, and you can request their deletion. Your typing rhythm (timing only " +
+  "— never what you type) is summarized into per-minute statistics for the " +
+  "same purpose. All of these signals are shown to reviewers as context and " +
+  "never change your competency score. If you decline, the session continues " +
+  "with standard passive checks only (tab focus, paste bursts, idle gaps) — " +
+  "no webcam, no ID capture, no typing-rhythm capture.";
 
 // ── Org flag ─────────────────────────────────────────────────────────────────
 
@@ -199,78 +209,20 @@ export type IdentityCompareFn = (
 ) => Promise<number>;
 
 /**
- * Default comparer: LiteLLM gateway vision call (Hard Rule 3 — models are
- * reached ONLY through LITELLM_BASE_URL; provider keys live on the gateway).
- * Authenticates with the session's own minted key so the call is bounded by
- * the session budget like every other model call in the session.
- *
- * The images exist only in this request body — never logged, never stored.
- * On a non-OK response we surface the STATUS ONLY (never the response body,
- * which can echo the request payload — see file header).
+ * Default comparer: the configured IDV provider (services/idv/ — slice V3
+ * adapter layer; env IDV_PROVIDER, default gateway-vision). The gateway
+ * provider preserves the original posture verbatim: Hard Rule 3 (models only
+ * through LITELLM_BASE_URL), session-key auth (budget-bounded), images in the
+ * request body only, STATUS-ONLY errors. Certified vendors (persona,
+ * hyperverge) plug in behind the same seam without touching this service.
  */
 export const gatewayVisionCompare: IdentityCompareFn = async (
   idImage,
   selfieImage,
   sessionId,
 ) => {
-  const entry = sessionRegistry.get(sessionId);
-  const sessionKey = entry?.litellmKey;
-  if (!sessionKey) {
-    throw new ProctoringV2Error("session not live — no session key for the vision call");
-  }
-
-  const res = await fetch(`${env.LITELLM_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${sessionKey}`, // session key — never the master key
-    },
-    body: JSON.stringify({
-      model: "gemini-flash",
-      response_format: { type: "json_object" },
-      max_tokens: 100,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text:
-                "You are verifying a test-taker's identity. The first image is a " +
-                "photo of a government ID; the second is a live selfie. Estimate " +
-                "the probability that the person on the ID and the person in the " +
-                "selfie are the SAME person. Consider face shape, features, and " +
-                "obvious mismatches; be conservative when either image is " +
-                "unreadable or contains no face (low confidence). Respond with " +
-                'ONLY this JSON: {"same_person_confidence": <number 0..1>}',
-            },
-            { type: "image_url", image_url: { url: idImage } },
-            { type: "image_url", image_url: { url: selfieImage } },
-          ],
-        },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    // STATUS ONLY — never the body (it can echo the images; see header).
-    throw new ProctoringV2Error(`gateway vision call failed: HTTP ${res.status}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const text = data.choices?.[0]?.message?.content ?? "";
-  let conf: unknown;
-  try {
-    conf = (JSON.parse(text) as Record<string, unknown>)["same_person_confidence"];
-  } catch {
-    throw new ProctoringV2Error("gateway vision call returned non-JSON content");
-  }
-  if (typeof conf !== "number" || !Number.isFinite(conf)) {
-    throw new ProctoringV2Error("gateway vision call returned no numeric confidence");
-  }
-  return Math.max(0, Math.min(1, conf));
+  const result = await getIdvProvider().verifyIdentity(idImage, selfieImage, sessionId);
+  return result.matchConfidence;
 };
 
 export interface IdentityVerifyResult {
@@ -307,7 +259,13 @@ export async function verifyIdentity(
 
   const { error } = await supabase
     .from("identity_checks")
-    .update({ match_confidence: matchConfidence, verified })
+    .update({
+      match_confidence: matchConfidence,
+      verified,
+      // Which adapter produced the result (V3 seam) — "gateway-vision" today,
+      // a certified vendor name once one is configured.
+      provider: getIdvProvider().name,
+    })
     .eq("id", row.id);
   if (error) {
     throw new ProctoringV2Error(`identity_checks update failed: ${error.message}`);

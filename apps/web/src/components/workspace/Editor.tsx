@@ -1,7 +1,8 @@
 "use client";
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import MonacoEditor, { loader } from "@monaco-editor/react";
 import { writeFile } from "@/lib/api";
+import { registerSandboxText } from "@/lib/paste-provenance";
 import { useSessionStore, isWorkspaceWritable } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
 
@@ -69,10 +70,23 @@ export default function Editor({ sessionId, path, content, onChange }: Props) {
   // read-only; writes would 409 server-side anyway.
   const writable = useSessionStore((s) => isWorkspaceWritable(s.status));
 
+  // Paste provenance (detector v5): the candidate's own files are legitimate
+  // copy material. Register on file open + debounced alongside the save path
+  // (NOT per keystroke — hashing a large file every keypress is wasteful).
+  const provTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    registerSandboxText(content);
+    // path change = file open; content-only changes are covered by
+    // handleChange's debounced registration below (deliberately not a dep —
+    // re-registering the full file per keystroke would be wasteful).
+  }, [path]);
+
   const handleChange = useCallback(
     (value: string | undefined) => {
       if (value === undefined) return;
       onChange(value);
+      if (provTimer.current) clearTimeout(provTimer.current);
+      provTimer.current = setTimeout(() => registerSandboxText(value), 1_000);
       if (!path || !writable) return;
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {

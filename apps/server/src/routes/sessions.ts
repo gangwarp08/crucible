@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createSandbox, destroySandbox, startSessionClock } from "../services/sandbox.js";
@@ -14,6 +14,7 @@ import {
 } from "../services/session-link.js";
 import { getDefaultOrg, orgsTableKnownToExist, sessionOrgIdFromLink } from "../services/orgs.js";
 import { resolveScenarioForBand, type DifficultyBand } from "../services/difficulty-routing.js";
+import { readReverifyInfoByTokenHash } from "../services/reverify.js";
 import { recordNetworkObservation } from "../services/geo-integrity.js";
 import { env } from "../env.js";
 
@@ -96,11 +97,17 @@ export async function sessionRoutes(server: FastifyInstance) {
     // P5.1: band the recruiter requested when minting the link (0022).
     // Null = no routing. Consumed once, below, BEFORE sandbox creation.
     let linkBand: DifficultyBand | null = null;
+    // V10: reverify micro-session marker (session_links.kind, 0030). Null for
+    // standard links and pre-0030 databases (fail-soft side read).
+    let reverifyInfo: Awaited<ReturnType<typeof readReverifyInfoByTokenHash>> = null;
     if (linkToken) {
       try {
         const link = await peekSessionLink(linkToken);
         linkOrgId = link.org_id;
         linkBand = link.difficulty_band;
+        reverifyInfo = await readReverifyInfoByTokenHash(
+          createHash("sha256").update(linkToken).digest("hex"),
+        );
       } catch (err) {
         if (err instanceof SessionLinkError) {
           return reply.status(err.code === "invalid" ? 401 : 409).send({
@@ -172,6 +179,8 @@ export async function sessionRoutes(server: FastifyInstance) {
         tokenBudgetOverride,
         sessionOrgId,
         effectiveBand,
+        // V10: reverify micro-sessions run a short clock.
+        reverifyInfo ? env.REVERIFY_TIMEOUT_MIN : undefined,
       );
     } catch (err) {
       if (err instanceof DatasetUnavailableError) {

@@ -37,6 +37,14 @@ import { z } from "zod";
 import { supabase } from "./supabase.js";
 import { computeSuspicionScore, type SuspicionEventInput } from "./suspicion-score.js";
 import {
+  computeVerificationConfidence,
+  type ConfidenceEventInput,
+} from "./verification-confidence.js";
+import { readIdentityStatus } from "./proctoring-v2.js";
+import { readProvenanceRecord } from "./provenance.js";
+import { readBgvForSession } from "./bgv/index.js";
+import { env } from "../env.js";
+import {
   AI_FLUENCY_COMPETENCY,
   aiFluencyPlacement,
 } from "./ai-fluency.js";
@@ -105,6 +113,35 @@ export const SharedReportSchema = z
         informational: z.literal(true),
       })
       .strict(),
+    // Verification confidence (slice V5) — same posture as suspicion: the
+    // aggregate only. Component breakdown, evidence seqs, identity status,
+    // and continuity similarities are recruiter-only and must not leave.
+    // score null + assessed_max 0 = nothing was assessable (pre-pipeline
+    // session); assessed_max tells a reader how much capture backed the score.
+    verification_confidence: z
+      .object({
+        score: z.number().nullable(),
+        assessed_max: z.number(),
+        version: z.string(),
+        informational: z.literal(true),
+      })
+      .strict(),
+    // Provenance (slice V6): the signed record binding this report's session
+    // telemetry, deliverable, and identity-check result — hashes and
+    // aggregates only, third-party verifiable offline against the public key
+    // (GET /api/provenance/public-key). Null for pre-slice sessions and
+    // deploys without a signing key. `record` is passed through as the exact
+    // signed object (re-canonicalized by the verifier), so it is NOT
+    // re-validated field-by-field here — it contains only hashes/aggregates
+    // by construction (services/provenance.ts buildProvenanceRecord).
+    provenance: z
+      .object({
+        record: z.record(z.string(), z.unknown()),
+        signature: z.string(),
+        key_id: z.string(),
+      })
+      .strict()
+      .nullable(),
     share: z.object({ expires_at: z.string() }).strict(),
   })
   .strict();
@@ -235,6 +272,16 @@ export async function buildSharedReport(
   const suspicion = computeSuspicionScore(
     (eventsRes.data ?? []) as unknown as SuspicionEventInput[],
   );
+  // Verification confidence (V5): aggregate only — the identity status feeds
+  // the computation here and is then DROPPED (recruiter-only; it must not
+  // appear in this payload, and the strict parse below enforces that).
+  const identity = await readIdentityStatus(sessionId).catch(() => null);
+  const provenance = await readProvenanceRecord(sessionId).catch(() => null);
+  const bgv = await readBgvForSession(sessionId).catch(() => null);
+  const verification = computeVerificationConfidence(
+    (eventsRes.data ?? []) as unknown as ConfidenceEventInput[],
+    { faceMatchThreshold: env.FACE_MATCH_THRESHOLD, identity, bgv },
+  );
 
   // Final gate: strict parse = allowlist. A stray internal field anywhere in
   // this object throws here instead of leaving the building.
@@ -266,6 +313,19 @@ export async function buildSharedReport(
       version: suspicion.version,
       informational: true,
     },
+    verification_confidence: {
+      score: verification.score,
+      assessed_max: verification.assessed_max,
+      version: verification.version,
+      informational: true,
+    },
+    provenance: provenance
+      ? {
+          record: provenance.record as unknown as Record<string, unknown>,
+          signature: provenance.signature,
+          key_id: provenance.key_id,
+        }
+      : null,
     share: { expires_at: expiresAt },
   });
 }

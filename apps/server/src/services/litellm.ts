@@ -207,6 +207,9 @@ export async function chatCompletion(
   sessionKey: string,
   prompt: string,
   priorTurns: AssistantPriorTurn[] = [],
+  // Slice V7: one-time hidden system addendum (the flawed-suggestion
+  // directive). Model-call only — never the transcript; see routes/chat.ts.
+  systemAddendum?: string,
 ): Promise<ChatCompletionResult> {
   // Recency guard appended AFTER the candidate's text within the user turn: the
   // last thing the model reads re-asserts the permanent rules. This survives
@@ -216,8 +219,9 @@ export async function chatCompletion(
   const priors: ChatMessage[] = priorTurns
     .slice(-MAX_PRIOR_TURNS)
     .map((t) => ({ role: t.role, content: t.text }));
+  const system = systemAddendum ? `${SYSTEM_PROMPT}\n\n${systemAddendum}` : SYSTEM_PROMPT;
   return _postChatCompletion(sessionKey, [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: system },
     ...priors,
     { role: "user", content: `${prompt}\n\n${ASSISTANT_GUARD}` },
   ]);

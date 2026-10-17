@@ -17,6 +17,7 @@ import { sessionRegistry } from "../services/registry.js";
 import { requireSessionToken } from "../services/session-token.js";
 import { logEvent } from "../services/telemetry.js";
 import { recordNetworkObservation } from "../services/geo-integrity.js";
+import { recordTypingWindow } from "../services/typing-drift.js";
 
 const ParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -201,6 +202,10 @@ export async function integrityRoutes(server: FastifyInstance) {
         const payload: Record<string, unknown> = { ...(e.payload ?? {}) };
         if (e.ts !== undefined) payload.client_ts = e.ts; // client clock, informational
         logEvent(sessionId, e.type, "candidate", payload);
+        // Verification slice (detector v5): accepted typing windows also feed
+        // the server-side drift tracker, which may author its own
+        // integrity.typing_drift event. Fire-and-forget, never throws.
+        if (e.type === "integrity.typing_window") recordTypingWindow(sessionId, payload);
       });
 
       return reply.send({ accepted, dropped: events.length - accepted });

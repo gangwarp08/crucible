@@ -46,6 +46,22 @@ export const INTEGRITY_EVENT_TYPES = [
   // start (lib/integrity.ts). Cross-checked server-side against the IP-derived
   // country (suspicion-score.ts geo_tz_mismatch). Informational, never scored.
   "integrity.client_env",
+  // Verification slice (detector v5) — typing-dynamics window features.
+  // Emitted ONLY by consented v2 sessions (lib/typing-dynamics.ts): aggregated
+  // per-minute rhythm statistics (inter-key intervals, backspace ratio). The
+  // raw keystroke stream — timings AND key identities — never leaves the
+  // browser; key identity is never even recorded. Server-side drift detection
+  // (services/typing-drift.ts) authors integrity.typing_drift from these.
+  "integrity.typing_window",
+  // Verification slice (detector v5) — environment-integrity signals.
+  // display_change: the screen configuration changed (an extra display was
+  // attached/present — a classic second-screen setup). Emitted once per state
+  // change. virtual_camera: a capture device whose label matches a known
+  // virtual-camera product class (OBS, ManyCam, …). Emitted at most once per
+  // session, carries the matched CLASS, never the raw device label. Both are
+  // best-effort heuristics; informational, never scored against competency.
+  "integrity.display_change",
+  "integrity.virtual_camera",
 ] as const;
 
 export type IntegrityEventType = (typeof INTEGRITY_EVENT_TYPES)[number];
@@ -71,6 +87,19 @@ export const SERVER_INTEGRITY_EVENT_TYPES = [
   "integrity.geo",
   "integrity.ip_change",
   "integrity.rate_capped",
+  // Verification slice (detector v5) — typing-rhythm step change, derived
+  // server-side (services/typing-drift.ts) from the client's typing_window
+  // feature stream. Server-authored: a client posting one is spoofing.
+  //   integrity.typing_drift {baseline_mean_ms, window_mean_ms, windows}
+  "integrity.typing_drift",
+  // Verification continuity (dormant, consented v2 + anchor only) — derived
+  // server-side (services/face-continuity.ts) by comparing the browser's
+  // periodic sample EMBEDDING against the session's enrolment anchor. The
+  // similarity is the only thing persisted; sample vectors are discarded.
+  //   integrity.face_match    {similarity}       (one per compared sample)
+  //   integrity.face_mismatch {similarity}       (streak below threshold)
+  "integrity.face_match",
+  "integrity.face_mismatch",
 ] as const;
 
 export type ServerIntegrityEventType = (typeof SERVER_INTEGRITY_EVENT_TYPES)[number];
@@ -91,6 +120,16 @@ export const IntegrityEventSchema = z.discriminatedUnion("type", [
     payload: z.object({
       chars: z.number().int().min(1).max(1_000_000),
       target: z.enum(["editor", "chat", "message", "other"]),
+      // Verification slice (detector v5) — paste provenance. Where the pasted
+      // text came from, judged client-side against a registry of text actually
+      // rendered inside the sandbox (lib/paste-provenance.ts):
+      //   internal — matches text the candidate saw in the workspace (docs,
+      //              assistant replies, their own files) — benign;
+      //   external — matches nothing rendered in the sandbox (the classic
+      //              second-window signal);
+      //   unknown  — partial/ambiguous match.
+      // OPTIONAL for backward compatibility: pre-v5 clients omit it.
+      provenance: z.enum(["internal", "external", "unknown"]).optional(),
     }),
   }),
   z.object({
@@ -138,6 +177,42 @@ export const IntegrityEventSchema = z.discriminatedUnion("type", [
         tz_name: z.string().min(1).max(64).nullable(),
       })
       .strict(),
+  }),
+  // Verification slice (detector v5) — typing-dynamics window features.
+  // Aggregated rhythm statistics over a ~60s window; raw keystrokes (timing
+  // and identity) never leave the browser. n is the keydown count in the
+  // window (windows under the client's minimum are not posted).
+  z.object({
+    type: z.literal("integrity.typing_window"),
+    ts: ClientTs,
+    payload: z
+      .object({
+        n: z.number().int().min(1).max(10_000),
+        mean_iki_ms: z.number().min(0).max(60_000),
+        std_iki_ms: z.number().min(0).max(60_000),
+        median_iki_ms: z.number().min(0).max(60_000),
+        backspace_ratio: z.number().min(0).max(1),
+        bursts: z.number().int().min(0).max(10_000),
+        pauses: z.number().int().min(0).max(10_000),
+      })
+      .strict(),
+  }),
+  // Verification slice (detector v5) — environment integrity.
+  // display_change: screen.isExtended flipped (or was true at mount). One
+  // event per observed state change; `extended` is the NEW state.
+  z.object({
+    type: z.literal("integrity.display_change"),
+    ts: ClientTs,
+    payload: z.object({ extended: z.boolean() }).strict(),
+  }),
+  // virtual_camera: a videoinput device label matched a known virtual-camera
+  // product class. The CLASS is a short identifier from a fixed client-side
+  // list (e.g. "obs", "manycam") — never the raw device label (labels can
+  // embed arbitrary user/device strings).
+  z.object({
+    type: z.literal("integrity.virtual_camera"),
+    ts: ClientTs,
+    payload: z.object({ label_class: z.string().min(1).max(32) }).strict(),
   }),
 ]);
 

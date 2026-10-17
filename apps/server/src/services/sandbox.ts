@@ -13,6 +13,11 @@ import { logEvent } from "./telemetry.js";
 import { appendEvent } from "./events-direct.js";
 import { supabase } from "./supabase.js";
 import { loadScenarioById, personaMeta, deliverableComponentMeta, type Scenario } from "./scenarios.js";
+import {
+  computeAiInjections,
+  rescheduleAiInjections,
+  type ScheduledAiInjection,
+} from "./ai-injections.js";
 import { seedScenarioDataset, scenarioDatasetKind } from "./dataset-seed.js";
 import { renderGuardedReadme, parseTableNames } from "./workspace-readme.js";
 import {
@@ -167,7 +172,12 @@ export async function startSessionClock(sessionId: string): Promise<StartClockRe
   }
 
   const now = Date.now();
-  const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
+  // V10: honor the per-session clock override (reverify micro-sessions),
+  // persisted into scenario_state at creation — survives rehydrate.
+  const overrideMin = entry.scenarioState["timeout_min_override"];
+  const timeoutMs =
+    (typeof overrideMin === "number" && overrideMin > 0 ? overrideMin : env.SESSION_TIMEOUT_MIN) *
+    60_000;
   const newDeadline = new Date(now + timeoutMs);
 
   // Re-anchor proactive beats: preserve each beat's offset-from-creation (which
@@ -189,6 +199,12 @@ export async function startSessionClock(sessionId: string): Promise<StartClockRe
   const clockStartedAt = new Date(now).toISOString();
   entry.scenarioState["scheduled_beats"] = rescheduled;
   entry.scenarioState["clock_started_at"] = clockStartedAt;
+  // Slice V7: slide time-triggered AI injections the same way.
+  const aiInjections = entry.scenarioState["ai_injections"];
+  const rescheduledInjections = Array.isArray(aiInjections)
+    ? rescheduleAiInjections(aiInjections as ScheduledAiInjection[], createdAtMs, now)
+    : [];
+  entry.scenarioState["ai_injections"] = rescheduledInjections;
   entry.deadline = newDeadline;
 
   // Re-arm the kill-switch for the NEW deadline (clears the creation-time
@@ -203,6 +219,7 @@ export async function startSessionClock(sessionId: string): Promise<StartClockRe
   void persistScenarioStatePatch(sessionId, {
     clock_started_at: clockStartedAt,
     scheduled_beats: rescheduled,
+    ai_injections: rescheduledInjections,
   });
 
   logEvent(sessionId, "session.clock_started", "system", {
@@ -232,8 +249,12 @@ export async function createSandbox(
   // via difficulty-routing.ts BEFORE this call). Stamped once on the sessions
   // insert; never updated afterwards (running sessions are never re-routed).
   difficultyBand?: string,
+  // V10: per-session work-clock override in minutes (reverify micro-sessions
+  // run REVERIFY_TIMEOUT_MIN instead of SESSION_TIMEOUT_MIN). Persisted into
+  // scenario_state so startSessionClock re-arms with the same length.
+  timeoutMinOverride?: number,
 ): Promise<string> {
-  const timeoutMs = env.SESSION_TIMEOUT_MIN * 60_000;
+  const timeoutMs = (timeoutMinOverride ?? env.SESSION_TIMEOUT_MIN) * 60_000;
   const deadline = new Date(Date.now() + timeoutMs);
   const createdAtMs = Date.now();
 
@@ -259,6 +280,10 @@ export async function createSandbox(
         personas: personaStateToJson(freshPersonaState()),
         verification: freshVerificationState(),
         scheduled_beats: scheduledBeats,
+        // Slice V7: scenario-authored flawed-AI-suggestion injections (kind
+        // "ai_injection" entries in scenario.curveballs; empty for scenarios
+        // without any). Consumed by routes/chat.ts via pendingAiInjection.
+        ai_injections: computeAiInjections(scenario, createdAtMs),
         // Deferred clock (orientation overlay): null until the candidate presses
         // "Start working" (POST /sessions/:id/start), which stamps ISO-now here
         // and re-arms the deadline + reschedules beats. GET /sessions/:id
@@ -291,6 +316,14 @@ export async function createSandbox(
         `[sandbox] scenarioId=${scenarioId} did not resolve — proceeding with empty scenario_state`,
       );
     }
+  }
+
+  // V10: persist the clock override (reverify micro-sessions) so
+  // startSessionClock re-arms with the same short length after orientation
+  // and across rehydrates. Set AFTER the scenario branch (which rebuilds
+  // scenarioState wholesale).
+  if (timeoutMinOverride !== undefined && timeoutMinOverride > 0) {
+    scenarioState["timeout_min_override"] = timeoutMinOverride;
   }
 
   // H3 (6.8c): default-deny candidate egress. The assessment needs ZERO

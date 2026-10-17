@@ -13,6 +13,7 @@
 // deny-all RLS posture is the DB backstop — see migration 0019).
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
+import { env } from "../env.js";
 import { supabase } from "../services/supabase.js";
 import {
   requireOrg,
@@ -46,7 +47,23 @@ import {
   computeNetworkSummary,
   type SuspicionEventInput,
 } from "../services/suspicion-score.js";
+import {
+  computeVerificationConfidence,
+  type ConfidenceEventInput,
+} from "../services/verification-confidence.js";
 import { readIdentityStatus } from "../services/proctoring-v2.js";
+import {
+  readProvenanceRecord,
+  verifyStoredChain,
+  getSigningKeys,
+} from "../services/provenance.js";
+import {
+  getOrGenerateQuestions,
+  EvidenceQuestionsError,
+} from "../services/evidence-questions.js";
+import { readBgvForSession } from "../services/bgv/index.js";
+import { reverifyEnabledFromSettings, readReverifyStatus } from "../services/reverify.js";
+import { readAnchor } from "../services/face-continuity.js";
 import { buildCohort, CohortError } from "../services/cohort.js";
 import {
   createReportShare,
@@ -425,6 +442,240 @@ export async function reviewRoutes(server: FastifyInstance) {
         // network field; verify-geo-integrity.ts asserts it).
         network: computeNetworkSummary(events),
       });
+    },
+  );
+
+  // ─── Verification confidence (slice V5 — informational) ─────────────────
+  // Recomputes the deterministic verification-confidence score on demand from
+  // the session's integrity.*/identity.* events + identity status. Same
+  // posture as /suspicion: INFORMATIONAL ONLY, recruiter-facing component
+  // breakdown, never touches evidence/evaluations, and only
+  // {score, assessed_max, version} may reach the public shared report.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/verification",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const [sessRes, eventsRes] = await Promise.all([
+        supabase.from("sessions").select("id, org_id").eq("id", id).maybeSingle(),
+        supabase
+          .from("events")
+          .select("seq, type, ts, payload")
+          .eq("session_id", id)
+          .or("type.like.integrity.*,type.like.identity.*")
+          .order("seq", { ascending: true })
+          .limit(1000),
+      ]);
+
+      if (sessRes.error) {
+        server.log.error({ err: sessRes.error, id }, "[review] verification: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (
+        !sessRes.data ||
+        !orgCanAccess(request.org, (sessRes.data as { org_id?: string | null }).org_id)
+      ) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (eventsRes.error) {
+        server.log.error({ err: eventsRes.error, id }, "[review] verification: events load failed");
+        return reply.status(500).send({ error: "Failed to load events" });
+      }
+
+      const events = (eventsRes.data ?? []) as unknown as ConfidenceEventInput[];
+      const [identity, bgv] = await Promise.all([
+        readIdentityStatus(id),
+        readBgvForSession(id),
+      ]);
+      return reply.send({
+        verification: computeVerificationConfidence(events, {
+          faceMatchThreshold: env.FACE_MATCH_THRESHOLD,
+          identity,
+          bgv,
+        }),
+        truncated: events.length === 1000,
+        // V10: "same person on day one" — the reverify comparison involving
+        // this session (as micro-session or as original). Null everywhere
+        // dormant; the panel renders no row then.
+        reverify: await readReverifyStatus(id),
+      });
+    },
+  );
+
+  // ─── Provenance record (slice V6 — signed telemetry binding) ────────────
+  // Returns the stored signed record plus a live chain re-derivation
+  // (chain_intact) so a reviewer can see at a glance that today's event
+  // stream still reproduces the signed head. 404 when no record exists
+  // (pre-slice sessions, signing disabled, or migration 0029 absent).
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/provenance",
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, org_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, id }, "[review] provenance: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      if (!sess || !orgCanAccess(request.org, (sess as { org_id?: string | null }).org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+
+      const stored = await readProvenanceRecord(id);
+      if (!stored) return reply.status(404).send({ error: "no_provenance_record" });
+      const keys = getSigningKeys();
+      return reply.send({
+        record: stored.record,
+        signature: stored.signature,
+        key_id: stored.key_id,
+        created_at: stored.created_at,
+        chain_intact: await verifyStoredChain(stored),
+        public_key_spki_base64:
+          keys && keys.keyId === stored.key_id ? keys.publicKeyBase64 : null,
+      });
+    },
+  );
+
+  // ─── Evidence-conversation questions (slice V8) ─────────────────────────
+  // Compute-if-absent: cached per session (0031); a cache miss costs one LLM
+  // call, hence the tight rate limit. Recruiter-facing interview prompts,
+  // each citing clickable event seqs — reads telemetry, writes nothing to
+  // the scoring pipeline.
+  server.get<{ Params: { id: string } }>(
+    "/sessions/:id/evidence-questions",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) {
+        return reply.status(503).send({ error: "Supabase unavailable" });
+      }
+      const id = idParse.data.id;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, org_id, status")
+        .eq("id", id)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, id }, "[review] evidence-questions: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      const sessRow = sess as { org_id?: string | null; status?: string } | null;
+      if (!sessRow || !orgCanAccess(request.org, sessRow.org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+      if (sessRow.status === "active") {
+        // Generate only after the work is done — mid-session questions would
+        // be stale by submit time (and burn a model call per view).
+        return reply.status(409).send({ error: "session_still_active" });
+      }
+
+      try {
+        const set = await getOrGenerateQuestions(id, sessRow.org_id as string);
+        if (!set) return reply.status(404).send({ error: "no_moments" });
+        return reply.send(set);
+      } catch (err) {
+        const msg = err instanceof EvidenceQuestionsError ? err.message : "generation_failed";
+        server.log.error({ err: msg, id }, "[review] evidence-questions failed");
+        return reply.status(502).send({ error: "evidence_questions_failed" });
+      }
+    },
+  );
+
+  // ─── Day-one reverify link (slice V10) ───────────────────────────────────
+  // Mints a kind='reverify' session link tied to this (original) session:
+  // same scenario family routed easy, short REVERIFY_TIMEOUT_MIN clock at
+  // creation, identity step compares the fresh embedding to THIS session's
+  // anchor. Gated on settings.posthire_reverify_enabled + an anchor existing
+  // (no anchor → nothing to compare → 409, mint refused).
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/reverify-link",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const idParse = ParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      if (!supabase) return reply.status(503).send({ error: "Supabase unavailable" });
+      const id = idParse.data.id;
+
+      const { data: sess, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, org_id, scenario_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (sessErr) {
+        server.log.error({ err: sessErr, id }, "[review] reverify-link: session lookup failed");
+        return reply.status(500).send({ error: "Failed to load session" });
+      }
+      const sessRow = sess as { org_id?: string | null; scenario_id?: string | null } | null;
+      if (!sessRow || !orgCanAccess(request.org, sessRow.org_id)) {
+        return reply.status(404).send({ error: "Session not found" });
+      }
+
+      // Org opt-in gate — fresh settings read, fail closed.
+      const { data: orgRow, error: orgErr } = await supabase
+        .from("orgs")
+        .select("settings")
+        .eq("id", sessRow.org_id as string)
+        .maybeSingle();
+      if (
+        orgErr ||
+        !reverifyEnabledFromSettings((orgRow as { settings?: unknown } | null)?.settings)
+      ) {
+        return reply.status(403).send({ error: "reverify_disabled" });
+      }
+
+      // The comparison target must exist, or the micro-session is pointless.
+      const anchor = await readAnchor(id);
+      if (!anchor) return reply.status(409).send({ error: "no_anchor" });
+
+      // Candidate label carries over from the original link when one exists.
+      const { data: origLink } = await supabase
+        .from("session_links")
+        .select("candidate_label")
+        .eq("session_id", id)
+        .maybeSingle();
+      const label =
+        (origLink as { candidate_label?: string } | null)?.candidate_label ?? "day-one-reverify";
+
+      try {
+        const { token, link } = await createSessionLink({
+          candidateLabel: label,
+          scenarioId: sessRow.scenario_id ?? null,
+          orgId: sessRow.org_id as string,
+          difficultyBand: "easy",
+          reverify: { originalSessionId: id },
+        });
+        return reply.status(201).send({ token, link });
+      } catch (err) {
+        if (err instanceof SessionLinkError) {
+          // Pre-0030 database surfaces here (insert rejected the kind column).
+          return reply.status(409).send({ error: "reverify_unavailable", message: err.message });
+        }
+        throw err;
+      }
     },
   );
 

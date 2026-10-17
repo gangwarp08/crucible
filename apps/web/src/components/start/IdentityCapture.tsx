@@ -14,6 +14,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { postIdentityVerify } from "@/lib/proctoring";
+import {
+  computeFaceEmbedding,
+  markAnchorEnrolled,
+  EMBED_MODEL_VERSION,
+} from "@/lib/face-embedding";
 import { color, radius } from "@/styles/tokens";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -37,6 +42,21 @@ type SubmitState =
   | { kind: "submitting" }
   | { kind: "done"; verified: boolean }
   | { kind: "failed" };
+
+/** Decode a data-URL image and compute its face embedding in-browser.
+ *  Null on any failure — continuity degrades silently. */
+function embeddingFromDataUrl(dataUrl: string): Promise<number[] | null> {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => resolve(computeFaceEmbedding(img));
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    } catch {
+      resolve(null);
+    }
+  });
+}
 
 function scaleToDataUrl(source: CanvasImageSource, w: number, h: number): string | null {
   const scale = Math.min(1, MAX_EDGE / Math.max(w, h));
@@ -116,10 +136,17 @@ export default function IdentityCapture({ sessionId, onContinue }: Props) {
   async function submitImages(): Promise<void> {
     if (!images.id || !images.selfie) return;
     setSubmit({ kind: "submitting" });
-    const result = await postIdentityVerify(sessionId, {
-      idImage: images.id,
-      selfieImage: images.selfie,
-    });
+    // Continuity slice (dormant): compute the enrolment embedding IN-BROWSER
+    // from the selfie the candidate is explicitly submitting anyway. The
+    // vector rides the same consented POST; null (any failure) simply means
+    // no anchor — continuity silently stays off for this session.
+    const embedding = await embeddingFromDataUrl(images.selfie);
+    const result = await postIdentityVerify(
+      sessionId,
+      { idImage: images.id, selfieImage: images.selfie },
+      embedding ? { embedding, modelVersion: EMBED_MODEL_VERSION } : null,
+    );
+    if (result?.anchorStored) markAnchorEnrolled(sessionId);
     // Stop the camera the moment the explicit submission is done — nothing
     // else here needs it (webcam presence, if consented, re-acquires inside
     // the workspace with its own lifecycle).

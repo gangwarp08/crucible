@@ -16,6 +16,11 @@ import {
   recordCost,
   logEvent,
 } from "../services/telemetry.js";
+import {
+  pendingAiInjection,
+  injectionAddendum,
+  markAiInjectionFired,
+} from "../services/ai-injections.js";
 import { env } from "../env.js";
 import { supabase } from "../services/supabase.js";
 import { ensureWritable } from "../services/guards.js";
@@ -111,9 +116,32 @@ export async function chatRoutes(server: FastifyInstance) {
     // stateless call.
     const priorTurns = entry.assistantHistory.slice(-4);
 
+    // Slice V7 — judgment-moment injection. If a scenario-authored flawed
+    // suggestion is due (by assistant-turn count or elapsed time), fold its
+    // directive into THIS call's system prompt (model call only — the
+    // transcript keeps the clean prompt/reply) and mark it fired with a
+    // candidate-invisible ai_injection.fired event. In-memory turn counter:
+    // resets on a server restart, which only delays a turn-triggered
+    // injection — fired flags are persisted, so nothing double-fires.
+    const nextTurn = ((entry.scenarioState["ai_turns"] as number | undefined) ?? 0) + 1;
+    const injection = pendingAiInjection(
+      entry.scenarioState["ai_injections"],
+      nextTurn,
+      Date.now(),
+    );
+
     try {
       const { text, responseCost, callId, finishReason, usage } =
-        await chatCompletion(entry.litellmKey, prompt, priorTurns);
+        await chatCompletion(
+          entry.litellmKey,
+          prompt,
+          priorTurns,
+          injection ? injectionAddendum(injection) : undefined,
+        );
+      entry.scenarioState["ai_turns"] = nextTurn;
+      // Mark fired only AFTER the model call actually succeeded — a failed
+      // call must leave the injection armed for the next turn.
+      if (injection) markAiInjectionFired(sessionId, entry.scenarioState, injection.id);
 
       const latencyMs = Date.now() - t0;
 

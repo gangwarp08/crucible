@@ -42,6 +42,16 @@ import {
   deleteIdentityData,
   ProctoringV2Error,
 } from "../services/proctoring-v2.js";
+import {
+  storeAnchor,
+  deleteAnchor,
+  recordContinuitySample,
+  MAX_EMBED_DIM,
+} from "../services/face-continuity.js";
+import {
+  readReverifyInfoBySession,
+  recordReverifyComparison,
+} from "../services/reverify.js";
 
 // Back-compat aliases (the config endpoint predates services/proctoring-v2.ts;
 // the constants now live there as the single source of truth).
@@ -115,6 +125,20 @@ const dataUrlImage = z
 const IdentityVerifyBodySchema = z.object({
   idImage: dataUrlImage,
   selfieImage: dataUrlImage,
+  // Continuity slice (V4, dormant): optional browser-computed embedding of
+  // the selfie — the enrolment anchor. DERIVED VECTOR ONLY, never a frame.
+  // Both fields or neither (refined below); absent on pre-V4 clients.
+  selfieEmbedding: z.array(z.number().finite()).min(8).max(MAX_EMBED_DIM).optional(),
+  embeddingModelVersion: z.string().min(1).max(64).optional(),
+}).refine(
+  (b) => (b.selfieEmbedding === undefined) === (b.embeddingModelVersion === undefined),
+  { message: "selfieEmbedding and embeddingModelVersion must be sent together" },
+);
+
+// ── Continuity sample body (V4, dormant) ────────────────────────────────────
+const ContinuityBodySchema = z.object({
+  embedding: z.array(z.number().finite()).min(8).max(MAX_EMBED_DIM),
+  modelVersion: z.string().min(1).max(64),
 });
 
 export async function proctoringRoutes(server: FastifyInstance) {
@@ -295,9 +319,34 @@ export async function proctoringRoutes(server: FastifyInstance) {
           bodyParse.data.idImage,
           bodyParse.data.selfieImage,
         );
+        // Continuity slice (V4, dormant): store the enrolment anchor when the
+        // client sent one. Fail-soft by construction (false pre-0027 / on any
+        // error) — anchorStored:false simply means continuity stays off.
+        let anchorStored = false;
+        if (bodyParse.data.selfieEmbedding && bodyParse.data.embeddingModelVersion) {
+          anchorStored = await storeAnchor(
+            sessionId,
+            org!.id,
+            bodyParse.data.selfieEmbedding,
+            bodyParse.data.embeddingModelVersion,
+          );
+          // V10: in a reverify micro-session, the SAME fresh embedding is also
+          // compared against the ORIGINAL session's anchor ("same person on
+          // day one"). Fail-soft everywhere dormant; never blocks.
+          const reverify = await readReverifyInfoBySession(sessionId);
+          if (reverify) {
+            await recordReverifyComparison(
+              sessionId,
+              reverify.originalSessionId,
+              bodyParse.data.selfieEmbedding,
+              bodyParse.data.embeddingModelVersion,
+            );
+          }
+        }
         return reply.send({
           verified: result.verified,
           matchConfidence: result.matchConfidence,
+          anchorStored,
         });
       } catch (err) {
         // Message only (ProctoringV2Error messages carry status codes, never
@@ -306,6 +355,57 @@ export async function proctoringRoutes(server: FastifyInstance) {
         request.log.error({ err: msg, sessionId }, "[proctoring] identity verify failed");
         return reply.status(502).send({ error: "identity_verify_failed" });
       }
+    },
+  );
+
+  // ── POST /sessions/:id/continuity (V4, dormant) ────────────────────────────
+  // Periodic continuity re-match: the browser posts the EMBEDDING of the
+  // current webcam frame (the frame never leaves the browser); the server
+  // compares it against the enrolment anchor and discards the vector. Same
+  // gates as identity-verify (org flag + accepted consent); without an anchor
+  // the post is acknowledged and dropped ({compared:false}) — silent dormancy.
+  server.post<{ Params: { id: string } }>(
+    "/sessions/:id/continuity",
+    {
+      // One sample/min by design (webcam-presence cadence) — 6/min is headroom
+      // without letting a hostile client spam similarity probes at the anchor.
+      config: { rateLimit: { max: 6, timeWindow: "1 minute" } },
+      preHandler: [requireToken],
+    },
+    async (request, reply) => {
+      const idParse = IdParamsSchema.safeParse(request.params);
+      if (!idParse.success) {
+        return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
+      }
+      const sessionId = idParse.data.id;
+
+      const org = await orgForSession(sessionId);
+      if (!isProctoringV2Enabled(org)) {
+        return reply.status(403).send({ error: "proctoring_v2_disabled" });
+      }
+      let accepted = false;
+      try {
+        accepted = await hasAcceptedConsent(sessionId);
+      } catch {
+        return reply.status(403).send({ error: "consent_required" });
+      }
+      if (!accepted) {
+        return reply.status(403).send({ error: "consent_required" });
+      }
+
+      const bodyParse = ContinuityBodySchema.safeParse(request.body);
+      if (!bodyParse.success) {
+        return reply.status(400).send({ error: "invalid_continuity_sample" });
+      }
+
+      const result = await recordContinuitySample(
+        sessionId,
+        bodyParse.data.embedding,
+        bodyParse.data.modelVersion,
+      );
+      // compared:false covers every dormant path (no anchor, version gate,
+      // pre-0027) — the client treats it as a no-op.
+      return reply.send({ compared: result.compared });
     },
   );
 
@@ -325,8 +425,11 @@ export async function proctoringRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: "Invalid session id (must be uuid)" });
       }
       try {
+        // identity_checks rows + the continuity anchor (V4) — the complete set
+        // of stored biometric-derived data for the session.
         const deleted = await deleteIdentityData(idParse.data.id, request.org);
-        return reply.send({ deleted });
+        const anchorsDeleted = await deleteAnchor(idParse.data.id, request.org);
+        return reply.send({ deleted: deleted + anchorsDeleted });
       } catch (err) {
         request.log.error({ err, id: idParse.data.id }, "[proctoring] identity delete failed");
         return reply.status(500).send({ error: "identity_delete_failed" });

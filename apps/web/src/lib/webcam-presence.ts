@@ -31,10 +31,19 @@
 
 import { useEffect } from "react";
 import { postIntegrityEvents } from "./api";
-import { isProctoringV2Accepted } from "./proctoring";
+import { isProctoringV2Accepted, postContinuitySample } from "./proctoring";
+import {
+  computeFaceEmbedding,
+  isAnchorEnrolled,
+  EMBED_MODEL_VERSION,
+} from "./face-embedding";
 
 // ── Cadence & thresholds ─────────────────────────────────────────────────────
 const SAMPLE_INTERVAL_MS = 20_000; // one frame every 20s
+// Continuity re-match (dormant): every Nth presence sample ALSO computes a
+// face embedding in-browser and posts the VECTOR (never the frame) for
+// server-side compare against the enrolment anchor. 3 × 20s = one per minute.
+const CONTINUITY_EVERY_N_SAMPLES = 3;
 const SAMPLE_W = 64;               // downsample grid — statistics, not imagery
 const SAMPLE_H = 48;
 const DARK_MEAN_MAX = 14;          // mean luma below this → lens covered / dark room
@@ -44,6 +53,39 @@ const CONSECUTIVE_FOR_SIGNAL = 2;  // samples in a row before any event is emitt
 /** Minimal structural type for the (non-standard) FaceDetector API. */
 interface FaceDetectorLike {
   detect(source: CanvasImageSource): Promise<unknown[]>;
+}
+
+// ── Virtual-camera heuristic (detector v5) ──────────────────────────────────
+// Device labels are only populated AFTER a granted getUserMedia call, so this
+// check lives here (consented v2 sessions are the only place a camera
+// permission exists). Matches a fixed product-class list and reports the
+// CLASS, never the raw label. A motivated fraudster renames their device —
+// this catches the default-config case and is one timestamp among many, never
+// a gate.
+const VIRTUAL_CAMERA_CLASSES: ReadonlyArray<{ cls: string; re: RegExp }> = [
+  { cls: "obs", re: /obs/i },
+  { cls: "manycam", re: /manycam/i },
+  { cls: "snap", re: /snap\s*camera/i },
+  { cls: "iriun", re: /iriun/i },
+  { cls: "epoccam", re: /epoccam/i },
+  { cls: "droidcam", re: /droidcam/i },
+  { cls: "generic_virtual", re: /virtual/i },
+];
+
+/** One-shot (per hook mount) scan of videoinput labels for known virtual-
+ *  camera products. Fire-and-forget; every failure is silent. */
+async function detectVirtualCamera(emit: (type: string, payload?: Record<string, unknown>) => void): Promise<void> {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    for (const d of devices) {
+      if (d.kind !== "videoinput" || !d.label) continue;
+      const match = VIRTUAL_CAMERA_CLASSES.find((c) => c.re.test(d.label));
+      if (match) {
+        emit("integrity.virtual_camera", { label_class: match.cls });
+        return; // at most one emission
+      }
+    }
+  } catch { /* silent */ }
 }
 
 /** One sample's derived booleans (no pixels retained beyond the call). */
@@ -106,10 +148,13 @@ export function useWebcamPresence(sessionId: string, enabled: boolean): void {
     let absentEmitted = false;
     let multiStreak = 0;
     let multiEmitted = false;
+    let sampleCount = 0; // continuity cadence counter
 
-    const emit = (type: string): void => {
-      // Signal-only (no payload) — derived boolean, nothing else, ever.
-      void postIntegrityEvents(sessionId, [{ type, ts: Date.now() }]);
+    const emit = (type: string, payload?: Record<string, unknown>): void => {
+      // Derived signals only — booleans / fixed-class identifiers, never pixels.
+      void postIntegrityEvents(sessionId, [
+        { type, ts: Date.now(), ...(payload !== undefined ? { payload } : {}) },
+      ]);
     };
 
     const sample = async (): Promise<void> => {
@@ -132,6 +177,22 @@ export function useWebcamPresence(sessionId: string, enabled: boolean): void {
             absentEmitted = true;
             emit("integrity.face_absent");
           }
+        }
+
+        // Continuity re-match (dormant): only for sessions whose enrolment
+        // anchor was confirmed stored (isAnchorEnrolled — set by
+        // IdentityCapture), only on foreground samples, once per
+        // CONTINUITY_EVERY_N_SAMPLES. The embedding is computed here in the
+        // browser and the VECTOR posted; the frame never leaves.
+        sampleCount++;
+        if (
+          foreground &&
+          sampleCount % CONTINUITY_EVERY_N_SAMPLES === 0 &&
+          isAnchorEnrolled(sessionId) &&
+          video
+        ) {
+          const embedding = computeFaceEmbedding(video);
+          if (embedding) void postContinuitySample(sessionId, embedding, EMBED_MODEL_VERSION);
         }
 
         if (faceDetector && foreground) {
@@ -166,6 +227,8 @@ export function useWebcamPresence(sessionId: string, enabled: boolean): void {
         stream = null;
         return;
       }
+      // Permission granted → labels are now populated; one-shot scan.
+      void detectVirtualCamera(emit);
       try {
         video = document.createElement("video"); // offscreen — never in the DOM
         video.muted = true;

@@ -14,6 +14,7 @@ import OrientationOverlay from "./OrientationOverlay";
 import { readFile, getSession, getAssistantHistory, startSession } from "@/lib/api";
 import { useIntegrityMonitor } from "@/lib/integrity";
 import { useWebcamPresence } from "@/lib/webcam-presence";
+import { useTypingDynamics } from "@/lib/typing-dynamics";
 import { useSessionStore } from "@/stores/sessionStore";
 import { color } from "@/styles/tokens";
 import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
@@ -106,6 +107,11 @@ export default function Workspace({ sessionId }: Props) {
   // session that never accepted the v2 consent (i.e. all of them while the
   // org flag is off), this line is a no-op — no permission prompt, ever.
   useWebcamPresence(sessionId, hydrated && (status === "active" || status === "token_exhausted"));
+
+  // Typing-dynamics windows (verification slice, detector v5) — same dormancy
+  // contract as the webcam hook: internal hard gate on recorded v2 consent,
+  // aggregated rhythm features only, raw keystrokes never leave the browser.
+  useTypingDynamics(sessionId, hydrated && (status === "active" || status === "token_exhausted"));
 
   // Hydrate panel layout once on mount so the PanelGroup mounts with the
   // persisted sizes, not the defaults.

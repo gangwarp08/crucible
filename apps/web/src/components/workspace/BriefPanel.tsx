@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useSessionStore } from "@/stores/sessionStore";
 import { listScenarioDocs } from "@/lib/api";
+import { registerSandboxText } from "@/lib/paste-provenance";
 import { color, font } from "@/styles/tokens";
 import SectionLabel from "@/components/ui/SectionLabel";
 import Stat from "@/components/ui/Stat";
@@ -23,6 +24,9 @@ export default function BriefPanel() {
   const scenario = useSessionStore((s) => s.scenario);
   const c = useSessionStore((s) => s.scenarioConstraints);
   const sessionId = useSessionStore((s) => s.sessionId);
+
+  // Paste provenance (detector v5): the brief is legitimate copy material.
+  useEffect(() => { if (scenario.brief) registerSandboxText(scenario.brief); }, [scenario.brief]);
 
   // Doc titles for the "What you have" inventory — best-effort; the section
   // simply omits the row until (or unless) the list resolves.

@@ -30,8 +30,17 @@
  *  noisy: heavy legitimate editor use fired them constantly). The
  *  integrity.paste_burst / integrity.copy events remain in the taxonomy,
  *  ingest, and review timeline unchanged, and the SuspicionPanel still shows
- *  their raw counts labeled "not scored" — they just contribute 0 points. */
-export const SUSPICION_DETECTOR_VERSION = "4";
+ *  their raw counts labeled "not scored" — they just contribute 0 points.
+ *  "4" → "5": verification slice. New environment factors display_change /
+ *  virtual_camera; paste scoring RETURNS but only for bursts whose client-side
+ *  provenance is "external" (text that matches nothing rendered inside the
+ *  sandbox — the second-window signal; internal/unknown/absent provenance
+ *  still contributes 0, so v4's noise problem does not come back). Reserved
+ *  factors face_mismatch (continuity re-match, consented v2 sessions) and
+ *  typing_drift (typing-rhythm step change) land with their event sources.
+ *  Inert for pre-v5 sessions (the events/payload field don't exist); scores
+ *  across the boundary are not comparable, hence the bump. */
+export const SUSPICION_DETECTOR_VERSION = "5";
 
 export interface SuspicionFactor {
   kind: string;
@@ -86,6 +95,15 @@ export const SUSPICION_WEIGHTS = {
   ip_change:       { weight: 10, cap: 30 }, // per integrity.ip_change event (session hopped addresses)
   country_change:  { weight: 15, cap: 30 }, // per ip_change with country_changed=true (crossed a border mid-session)
   geo_tz_mismatch: { weight: 8,  cap: 8  }, // browser timezone confidently contradicts the IP country (fires at most once)
+  // Verification slice (detector v5) — environment + provenance + continuity.
+  // paste_external is the v5 re-introduction of paste scoring, scoped to
+  // bursts the client classified as external (matches nothing rendered in the
+  // sandbox). internal/unknown/missing provenance contributes 0.
+  display_change:  { weight: 4,  cap: 8  }, // extra display attached / present (second-screen setup)
+  virtual_camera:  { weight: 20, cap: 20 }, // virtual-camera product detected (fires at most once)
+  paste_external:  { weight: 6,  cap: 24 }, // large paste with external provenance (second-window signal)
+  face_mismatch:   { weight: 12, cap: 36 }, // continuity re-match below threshold (consented v2 only)
+  typing_drift:    { weight: 8,  cap: 24 }, // typing-rhythm step change (consented v2 only)
 } as const;
 
 export const IDLE_MS_THRESHOLD = 120_000;
@@ -189,6 +207,12 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
   let multipleFacesCount = 0;
   let ipChangeCount = 0;
   let countryChangeCount = 0;
+  // Detector v5 — environment / provenance / continuity factor inputs.
+  let displayChangeCount = 0;
+  let virtualCameraCount = 0;
+  let pasteExternalCount = 0;
+  let faceMismatchCount = 0;
+  let typingDriftCount = 0;
   // geo_tz_mismatch inputs (detector v3): first recorded IP country + first
   // browser-reported IANA timezone. Both are needed; missing either → no factor.
   let geoCountry: string | null = null;
@@ -217,9 +241,30 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
           openBlurMs = null;
         }
         break;
-      // integrity.paste_burst / integrity.copy deliberately have NO case:
-      // detector v4 dropped them from scoring (informational only — the review
-      // panel surfaces their raw counts from the event stream, "not scored").
+      // integrity.copy deliberately has NO case: detector v4 dropped it from
+      // scoring (informational only — the review panel surfaces its raw count
+      // from the event stream, "not scored").
+      // Detector v5: paste_burst scores ONLY when the client classified its
+      // provenance as "external" (matched nothing rendered in the sandbox).
+      // internal / unknown / absent (pre-v5 clients) contribute 0 — v4's
+      // noise stays gone.
+      case "integrity.paste_burst":
+        if (p["provenance"] === "external") pasteExternalCount++;
+        break;
+      case "integrity.display_change":
+        // Count transitions INTO the extended state (extra display attached);
+        // collapsing back to one display is not a signal.
+        if (p["extended"] === true) displayChangeCount++;
+        break;
+      case "integrity.virtual_camera":
+        virtualCameraCount++;
+        break;
+      case "integrity.face_mismatch":
+        faceMismatchCount++;
+        break;
+      case "integrity.typing_drift":
+        typingDriftCount++;
+        break;
       case "integrity.idle_gap":
         if (typeof p["ms"] === "number" && p["ms"] > IDLE_MS_THRESHOLD) idleCount++;
         break;
@@ -277,6 +322,11 @@ export function computeSuspicionScore(events: SuspicionEventInput[]): SuspicionS
     factor("ip_change", ipChangeCount),
     factor("country_change", countryChangeCount),
     factor("geo_tz_mismatch", tzMismatch ? 1 : 0),
+    factor("display_change", displayChangeCount),
+    factor("virtual_camera", virtualCameraCount),
+    factor("paste_external", pasteExternalCount),
+    factor("face_mismatch", faceMismatchCount),
+    factor("typing_drift", typingDriftCount),
   ];
   const factors = all.filter((f) => f.count > 0);
   const score = Math.min(100, factors.reduce((s, f) => s + f.contribution, 0));

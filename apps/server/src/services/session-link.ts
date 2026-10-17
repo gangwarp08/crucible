@@ -151,6 +151,11 @@ export async function createSessionLink(opts: {
    *  the link and consumed at session creation by difficulty routing. Omit /
    *  null = no routing. Silently dropped (with a warn) pre-migration-0022. */
   difficultyBand?: DifficultyBand | null;
+  /** V10: day-one reverify link (migration 0030). UNLIKE the band column,
+   *  this does NOT fall back silently — a reverify link downgrading to a
+   *  standard assessment would be a correctness bug, so a pre-0030 database
+   *  fails the mint with an explicit error. */
+  reverify?: { originalSessionId: string } | null;
 }): Promise<{ token: string; link: SessionLinkSummary }> {
   if (!supabase) throw new SessionLinkError("server", "Supabase service-role client unavailable");
   const label = opts.candidateLabel?.trim();
@@ -173,6 +178,12 @@ export async function createSessionLink(opts: {
         // resolve one (pre-migration back-compat path).
         ...(opts.orgId ? { org_id: opts.orgId } : {}),
         ...(includeBand && band ? { difficulty_band: band } : {}),
+        // V10: reverify columns (0030). Included only when requested; a
+        // pre-0030 database then errors the insert (PGRST204), which we
+        // surface below instead of silently minting a standard link.
+        ...(opts.reverify
+          ? { kind: "reverify", original_session_id: opts.reverify.originalSessionId }
+          : {}),
       })
       .select(cols)
       .single();

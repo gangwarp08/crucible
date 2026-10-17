@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { listScenarioDocs, recordDocView, type ScenarioDoc } from "@/lib/api";
 import MarkdownView from "./MarkdownView";
+import { registerSandboxText } from "@/lib/paste-provenance";
 import { color } from "@/styles/tokens";
 import TabStrip, { type TabSpec } from "@/components/ui/TabStrip";
 import SectionLabel from "@/components/ui/SectionLabel";
@@ -45,6 +46,9 @@ export default function DocsViewer({ sessionId }: Props) {
   }
 
   const selected = docs.find((d) => d.id === selectedId);
+
+  // Paste provenance (detector v5): docs are prime legitimate copy material.
+  useEffect(() => { if (selected) registerSandboxText(selected.body); }, [selected]);
 
   // Truncate long titles so the tab strip stays one row.
   const tabs: TabSpec<string>[] = docs.map((d) => ({

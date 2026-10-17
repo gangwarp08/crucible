@@ -39,7 +39,7 @@ function ev(
 
 console.log("verify-suspicion-score — P1.2");
 console.log(`suspicion detector version: ${SUSPICION_DETECTOR_VERSION}\n`);
-check("detector version is 4 (copy/paste informational only)", SUSPICION_DETECTOR_VERSION === "4");
+check("detector version is 5 (verification slice)", SUSPICION_DETECTOR_VERSION === "5");
 check("copy/paste factors removed from the weight table",
   !("paste_burst" in SUSPICION_WEIGHTS) && !("copy_source" in SUSPICION_WEIGHTS));
 
